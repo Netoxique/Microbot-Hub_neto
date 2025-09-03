@@ -1,5 +1,6 @@
 package net.runelite.client.plugins.microbot.lunarbuckets;
 
+import net.runelite.api.Skill;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
@@ -7,6 +8,7 @@ import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
 import net.runelite.client.plugins.microbot.util.magic.Runes;
@@ -19,6 +21,11 @@ import java.util.concurrent.TimeUnit;
 
 public class LunarBucketsScript extends Script {
     private LunarBucketsState state = LunarBucketsState.STARTUP;
+
+    public static long startTime;
+    public static int startMagicXp;
+    public static int casts;
+    public static int profitPerCast;
 
     private static final Spell HUMIDIFY_SPELL = new Spell() {
         @Override public MagicAction getMagicAction() { return MagicAction.HUMIDIFY; }
@@ -35,6 +42,10 @@ public class LunarBucketsScript extends Script {
 
     public boolean run(LunarBucketsConfig config) {
         state = LunarBucketsState.STARTUP;
+        startTime = System.currentTimeMillis();
+        startMagicXp = Microbot.getClient().getSkillExperience(Skill.MAGIC);
+        casts = 0;
+        profitPerCast = calculateProfitPerCast();
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!Microbot.isLoggedIn() || !super.run()) return;
@@ -134,8 +145,16 @@ public class LunarBucketsScript extends Script {
 
         Rs2Magic.cast(HUMIDIFY_SPELL);
 
-		sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(ItemID.BUCKET_WATER));
+                sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(ItemID.BUCKET_WATER));
+        casts++;
 
         state = LunarBucketsState.BANKING;
+    }
+
+    private int calculateProfitPerCast() {
+        int filled = Rs2GrandExchange.getPrice(ItemID.BUCKET_WATER) * 27;
+        int empty = Rs2GrandExchange.getPrice(ItemID.BUCKET_EMPTY) * 27;
+        int astral = Rs2GrandExchange.getPrice(ItemID.ASTRALRUNE);
+        return (filled - (empty + astral)) / 27;
     }
 }
