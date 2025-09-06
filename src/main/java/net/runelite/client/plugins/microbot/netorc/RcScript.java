@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.frosty.frostyrc;
+package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;

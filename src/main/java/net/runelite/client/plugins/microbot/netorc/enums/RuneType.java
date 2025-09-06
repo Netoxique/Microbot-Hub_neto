@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.frosty.frostyrc.enums;
+package net.runelite.client.plugins.microbot.netorc.enums;
 
 import lombok.Getter;
 import net.runelite.api.gameval.ItemID;

@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.frosty.frostyrc;
+package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.client.config.*;
 import net.runelite.client.plugins.microbot.frosty.frostyrc.enums.RuneType;

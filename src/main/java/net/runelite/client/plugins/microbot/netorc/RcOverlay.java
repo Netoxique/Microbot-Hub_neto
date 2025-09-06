@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.frosty.frostyrc;
+package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.microbot.Microbot;

@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.frosty.frostyrc;
+package net.runelite.client.plugins.microbot.netorc;
 
 import com.google.inject.Provides;
 import lombok.Getter;
@@ -14,6 +14,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -26,7 +27,10 @@ import java.time.Instant;
         name = PluginDescriptor.Frosty + "Netoxic RC",
         description = "A plugin to automate Rune crafting",
         tags = {"blood", "rc", "rune", "frosty", "wrath"},
-        enabledByDefault = false
+        authors = {"Neoxic"},
+        minClientVersion = "1.9.9.2",
+        enabledByDefault = false,
+        isExternal = PluginConstants.IS_EXTERNAL
 )
 
 public class RcPlugin extends Plugin {
