@@ -24,7 +24,7 @@ import java.awt.*;
 import java.time.Instant;
 
 @PluginDescriptor(
-        name = PluginDescriptor.Frosty + "Netoxic RC",
+        name ="Netoxic RC",
         description = "A plugin to automate Rune crafting",
         tags = {"blood", "rc", "rune", "frosty", "wrath"},
         authors = {"Neoxic"},
