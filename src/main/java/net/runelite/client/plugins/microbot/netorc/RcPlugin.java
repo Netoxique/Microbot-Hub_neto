@@ -26,8 +26,9 @@ import java.time.Instant;
 @PluginDescriptor(
         name ="Netoxic RC",
         description = "A plugin to automate Rune crafting",
-        tags = {"blood", "rc", "rune", "frosty", "wrath"},
+        tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
+        version = RcPlugin.version,
         minClientVersion = "1.9.9.2",
         enabledByDefault = false,
         isExternal = PluginConstants.IS_EXTERNAL
@@ -61,7 +62,7 @@ public class RcPlugin extends Plugin {
     @Getter
     private WorldPoint myWorldPoint;
     @Getter
-    public static String version = "v1.1.2";
+    public static final String version = "1.1.2";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {
