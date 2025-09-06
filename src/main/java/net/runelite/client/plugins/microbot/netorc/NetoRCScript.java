@@ -32,8 +32,8 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
-public class RcScript extends Script {
-    private final RcPlugin plugin;
+public class NetoRCScript extends Script {
+    private final NetoRCPlugin plugin;
     public static State state;
 
     private int lumbyElite = -1;
@@ -76,12 +76,12 @@ public class RcScript extends Script {
     public static final int dragonShield = ItemID.ANTIDRAGONBREATHSHIELD;
 
     @Inject
-    public RcScript(RcPlugin plugin) {
+    public NetoRCScript(NetoRCPlugin plugin) {
         this.plugin = plugin;
     }
 
     @Inject
-    private RcConfig config;
+    private NetoRCConfig config;
     @Inject
     private Client client;
     @Inject

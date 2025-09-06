@@ -15,12 +15,12 @@ import java.awt.Color;
 import java.awt.Dimension;
 import java.awt.Graphics2D;
 
-public class RcOverlay extends OverlayPanel {
-    private final RcPlugin plugin;
+public class NetoRCOverlay extends OverlayPanel {
+    private final NetoRCPlugin plugin;
     private final DateTimeFormatter dtf = DateTimeFormatter.ofPattern("HH:mm:ss");
 
     @Inject
-    RcOverlay(RcPlugin plugin) {
+    NetoRCOverlay(NetoRCPlugin plugin) {
         super(plugin);
         this.plugin = plugin;
         setPosition(OverlayPosition.TOP_LEFT);
@@ -40,7 +40,7 @@ public class RcOverlay extends OverlayPanel {
             //panelComponent.getChildren().add(new ImageComponent(bloodRuneImage));
 
             panelComponent.getChildren().add(TitleComponent.builder()
-                    .text("Netoxic RC " + RcPlugin.getVersion()).color((Color.cyan)).build());
+                    .text("NetoRC " + NetoRCPlugin.getVersion()).color((Color.cyan)).build());
 
             panelComponent.getChildren().add(LineComponent.builder().left("Xp gained:")
                     .right(String.valueOf(plugin.getTotalXpGained())).build());

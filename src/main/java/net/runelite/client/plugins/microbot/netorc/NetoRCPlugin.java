@@ -24,31 +24,31 @@ import java.awt.*;
 import java.time.Instant;
 
 @PluginDescriptor(
-        name ="Netoxic RC",
+        name ="NetoRC",
         description = "A plugin to automate Rune crafting",
         tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
-        version = RcPlugin.version,
+        version = NetoRCPlugin.version,
         minClientVersion = "1.9.9.2",
         enabledByDefault = false,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 
-public class RcPlugin extends Plugin {
+public class NetoRCPlugin extends Plugin {
     @Inject
-    private RcConfig config;
+    private NetoRCConfig config;
     @Inject
     private Client client;
     @Provides
-    RcConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(RcConfig.class);
+    NetoRCConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(NetoRCConfig.class);
     }
     @Inject
     private OverlayManager overlayManager;
     @Inject
-    private RcOverlay rcOverlay;
+    private NetoRCOverlay netoRCOverlay;
     @Inject
-    private RcScript rcScript;
+    private NetoRCScript netoRCScript;
     @Getter
     private GameObject pool;
     @Getter
@@ -105,16 +105,16 @@ public class RcPlugin extends Plugin {
     protected void startUp() throws AWTException {
         startTime = Instant.now();
         if (overlayManager != null) {
-            overlayManager.add(rcOverlay);
+            overlayManager.add(netoRCOverlay);
         }
         startXp = client.getSkillExperience(Skill.RUNECRAFT);
-        rcScript.run();
+        netoRCScript.run();
     }
 
     @Override
     protected void shutDown() throws Exception {
-        overlayManager.remove(rcOverlay);
-        rcScript.shutdown();
+        overlayManager.remove(netoRCOverlay);
+        netoRCScript.shutdown();
     }
 
     public void updateXpGained() {
