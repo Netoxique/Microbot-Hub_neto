@@ -10,7 +10,7 @@ import java.awt.*;
 
 public class KarambwansOverlay extends OverlayPanel {
     @Inject
-    KarambwansOverlay(KarambwansPlugin plugin)
+    KarambwansOverlay(NetoKaramPlugin plugin)
     {
         super(plugin);
         setPosition(OverlayPosition.TOP_LEFT);

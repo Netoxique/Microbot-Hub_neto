@@ -23,7 +23,7 @@ import java.awt.*;
 //        isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class KarambwansPlugin extends Plugin {
+public class NetoKaramPlugin extends Plugin {
     @Inject
     private KarambwansConfig config;
     @Provides
