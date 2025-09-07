@@ -34,9 +34,10 @@ public class KarambwansScript extends Script {
     public boolean run(KarambwansConfig config) {
         Microbot.enableAutoRunOn = true;
 
-        Rs2Camera.setPitch(512);
         Rs2Camera.setZoom(230);
+        Rs2Camera.setPitch(512);
         Rs2Camera.setYaw(0);
+
         sleepGaussian(600, 200);
 
         Rs2Antiban.setActivity(Activity.CATCHING_RAW_KARAMBWAN);
