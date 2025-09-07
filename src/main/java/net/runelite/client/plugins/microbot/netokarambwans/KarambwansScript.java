@@ -117,7 +117,7 @@ public class KarambwansScript extends Script {
         if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
             Rs2Bank.emptyFishBarrel();
         }
-        Rs2Bank.closeBank();
+//        Rs2Bank.closeBank();
     }
 
     private void interactWithFishingSpot() {
