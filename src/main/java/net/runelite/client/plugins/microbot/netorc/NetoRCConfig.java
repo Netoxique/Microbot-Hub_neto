@@ -18,7 +18,7 @@ import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
         "• Start at Crafting guild or Ferox Enclave lobby <br />"
 
 )
-public interface RcConfig extends Config {
+public interface NetoRCConfig extends Config {
     @ConfigSection(
             name = "Settings",
             description = "Settings",
