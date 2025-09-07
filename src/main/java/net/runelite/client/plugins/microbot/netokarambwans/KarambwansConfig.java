@@ -10,21 +10,33 @@ import net.runelite.client.config.*;
                 "<li>Start the script next to the karambwan fishing spot</li>" +
                 "</ol>"
 )
-public interface KarambwansConfig extends Config {
 
+public interface KarambwansConfig extends Config {
     @ConfigSection(
-            name = "Starting State",
-            description = "Starting State",
+            name = "General",
+            description = "General",
             position = 0,
-            closedByDefault = true
+            closedByDefault = false
     )
-    String startingStateSection = "startingStateSection";
+    String generalSection = "generalSection";
+
+    @ConfigItem(
+            keyName = "karambwanjiToFish",
+            name = "Amount of karambwanji to fish",
+            description = "The amount of karambwanji to fish when you run out of bait.",
+            position = 0,
+            section = generalSection
+    )
+    default int karambwanjiToFish() {
+        return 3000;
+    }
+
     @ConfigItem(
             keyName = "startingState",
-            name = "(Debug) Starting State",
-            description = "Starting State. Only used for development.",
-            position = 0,
-            section = startingStateSection
+            name = "Starting State",
+            description = "Choose the initial state of the bot.",
+            position = 1,
+            section = generalSection
     )
     default KarambwanInfo.states STARTING_STATE() {
         return KarambwanInfo.states.FISHING;

@@ -6,21 +6,21 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
-import net.runelite.client.plugins.microbot.PluginConstants;
+//import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.*;
 
 @PluginDescriptor(
-        name = "Netoxic Karambwans",
+        name = "Neto Karambwans",
         description = "A plugin to fish karambwans",
         tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
         version = "1.0.0",
         minClientVersion = "2.0.0",
-        enabledByDefault = false,
-        isExternal = PluginConstants.IS_EXTERNAL
+        enabledByDefault = false
+//        isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class KarambwansPlugin extends Plugin {

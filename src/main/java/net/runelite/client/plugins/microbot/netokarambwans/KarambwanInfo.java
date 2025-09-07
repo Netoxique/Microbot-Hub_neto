@@ -6,10 +6,11 @@ public class KarambwanInfo {
 
     public enum states {
         FISHING,
-        WALKING_TO_RING_TO_BANK,
         WALKING_TO_BANK,
         BANKING,
         WALKING_TO_FISH,
-        }
+        GETTING_BAIT,
+        FISHING_BAIT
+    }
 
 }
