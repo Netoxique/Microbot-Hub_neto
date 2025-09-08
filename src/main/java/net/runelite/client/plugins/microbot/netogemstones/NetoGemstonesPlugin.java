@@ -6,7 +6,6 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
-import net.runelite.client.plugins.microbot.netorc.NetoRCPlugin;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -21,10 +20,9 @@ import net.runelite.client.plugins.microbot.util.misc.TimeUtils;
         tags = {"mining", "gemstone", "neto"},
         enabledByDefault = false,
         authors = {"Neoxic"},
-        version = NetoRCPlugin.version,
-        minClientVersion = "2.0.0",
-        isExternal = PluginConstants.IS_EXTERNAL
+        minClientVersion = "2.0.0"
 )
+
 @Slf4j
 public class NetoGemstonesPlugin extends Plugin {
     @Inject
