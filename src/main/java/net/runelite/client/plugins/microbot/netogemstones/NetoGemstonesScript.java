@@ -10,8 +10,10 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
+import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.http.api.worlds.WorldRegion;
@@ -24,6 +26,8 @@ public class NetoGemstonesScript extends Script {
     private static final int GEM_ROCK = 11380;
     private static final int GEM_ROCK_2 = 11381;
     private static final int BANK_DEPOSIT_CHEST = 10530;
+
+    private static final String[] SPEC_PICKAXES = {"dragon pickaxe", "crystal pickaxe", "infernal pickaxe"};
 
     private NetoGemstonesState state = NetoGemstonesState.MINING;
 
@@ -66,6 +70,7 @@ public class NetoGemstonesScript extends Script {
         }
         GameObject gemRock = Rs2GameObject.getGameObject("Gem rocks");
         if (gemRock != null) {
+            handlePickaxeSpec();
             if (Rs2GameObject.interact(gemRock, "Mine")) {
                 Rs2Player.waitForXpDrop(Skill.MINING);
                 if (config.hopOnPlayerDetect()) {
@@ -108,6 +113,12 @@ public class NetoGemstonesScript extends Script {
     @Override
     public void shutdown() {
         super.shutdown();
+    }
+
+    private void handlePickaxeSpec() {
+        if (Rs2Combat.getSpecEnergy() >= 100 && Rs2Equipment.isWearing(SPEC_PICKAXES)) {
+            Rs2Combat.setSpecState(true, 1000);
+        }
     }
 
     private enum NetoGemstonesState {
