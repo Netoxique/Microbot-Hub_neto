@@ -69,7 +69,15 @@ public class NetoGemstonesScript extends Script {
             if (Rs2GameObject.interact(gemRock, "Mine")) {
                 Rs2Player.waitForXpDrop(Skill.MINING);
                 if (config.hopOnPlayerDetect()) {
-                    Rs2Player.hopIfPlayerDetected(1, 0, config.distanceToHop(), config.worldRegion() == WorldRegion.UNITED_STATES_OF_AMERICA ? null : config.worldRegion());
+                    boolean isPlayerNearby = Rs2Player.getPlayers(p ->
+                            p != null &&
+                                    !p.equals(Microbot.getClient().getLocalPlayer()) &&
+                                    p.getWorldLocation().distanceTo(Microbot.getClient().getLocalPlayer().getWorldLocation()) <= config.distanceToHop()
+                    ).findAny().isPresent();
+
+                    if (isPlayerNearby) {
+                        Microbot.hopToWorld(net.runelite.client.plugins.microbot.util.security.Login.getRandomWorld(true, config.worldRegion() == WorldRegion.UNITED_STATES_OF_AMERICA ? null : config.worldRegion()));
+                    }
                 }
             }
         }
