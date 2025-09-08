@@ -22,7 +22,7 @@ import java.util.concurrent.TimeUnit;
 
 public class NetoGemstonesScript extends Script {
 
-    public static String VERSION = "1.0.0";
+    public static String VERSION = "1.0.2";
     private static final int GEM_ROCK = 11380;
     private static final int GEM_ROCK_2 = 11381;
     private static final int BANK_DEPOSIT_CHEST = 10530;
@@ -68,11 +68,19 @@ public class NetoGemstonesScript extends Script {
             state = NetoGemstonesState.BANKING;
             return;
         }
-        GameObject gemRock = Rs2GameObject.getGameObject("Gem rocks");
-        if (gemRock != null) {
+
+        while (!Rs2Inventory.isFull() && isRunning()) {
+            GameObject gemRock = Rs2GameObject.getGameObject("Gem rocks");
+            if (gemRock == null) {
+                break;
+            }
+
             handlePickaxeSpec();
             if (Rs2GameObject.interact(gemRock, "Mine")) {
-                Rs2Player.waitForXpDrop(Skill.MINING);
+                Rs2Player.waitForXpDrop(Skill.MINING, 6000);
+                if (!isRunning()) {
+                    break;
+                }
                 if (config.hopOnPlayerDetect()) {
                     boolean isPlayerNearby = Rs2Player.getPlayers(p ->
                             p != null &&
@@ -81,10 +89,18 @@ public class NetoGemstonesScript extends Script {
                     ).findAny().isPresent();
 
                     if (isPlayerNearby) {
-                        Microbot.hopToWorld(net.runelite.client.plugins.microbot.util.security.Login.getRandomWorld(true, config.worldRegion() == WorldRegion.UNITED_STATES_OF_AMERICA ? null : config.worldRegion()));
+                        Microbot.hopToWorld(net.runelite.client.plugins.microbot.util.security.Login.getRandomWorld(true,
+                                config.worldRegion() == WorldRegion.UNITED_STATES_OF_AMERICA ? null : config.worldRegion()));
+                        return;
                     }
                 }
+            } else {
+                break;
             }
+        }
+
+        if (Rs2Inventory.isFull()) {
+            state = NetoGemstonesState.BANKING;
         }
     }
 
