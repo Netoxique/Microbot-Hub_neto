@@ -77,7 +77,7 @@ public class NetoGemstonesScript extends Script {
 
             handlePickaxeSpec();
             if (Rs2GameObject.interact(gemRock, "Mine")) {
-                Rs2Player.waitForXpDrop(Skill.MINING, 6000);
+                Rs2Player.waitForXpDrop(Skill.MINING, 8000);
                 if (!isRunning()) {
                     break;
                 }
