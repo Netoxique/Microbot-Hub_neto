@@ -174,10 +174,9 @@ public class NetoChaosAltarScript extends Script {
             return;
         }
 
+        handleCamera("close");
         final Rs2ItemModel lastBones = getLastBone();
         if (lastBones != null && isRunning()) {
-            handleCamera("close");
-
             Rs2Inventory.interact(lastBones, "use");
             sleep(300, 500);
             Rs2GameObject.interact(CHAOS_ALTAR);
@@ -205,15 +204,13 @@ public class NetoChaosAltarScript extends Script {
             }
         }
 
+        handleCamera("close");
         Rs2ItemModel lastBones;
         while ((lastBones = getLastBone()) != null
                 && isRunning()
                 && !Rs2Player.isInCombat()
                 && Rs2GameObject.exists(CHAOS_ALTAR)
                 && !didWeDie) {
-
-            handleCamera("close");
-
             Rs2Inventory.interact(lastBones, "use");
             sleep(100, 300);
             Rs2GameObject.interact(CHAOS_ALTAR);
