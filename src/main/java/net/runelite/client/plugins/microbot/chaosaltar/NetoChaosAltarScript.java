@@ -219,6 +219,14 @@ public class NetoChaosAltarScript extends Script {
             Rs2Inventory.wear("Burning amulet");
         }
 
+        // If we already have bones and a burning amulet, there's no need to bank again
+        if (hasBurningAmulet() && Rs2Inventory.contains(DRAGON_BONES)) {
+            if (Rs2Bank.isOpen()) {
+                Rs2Bank.closeBank();
+            }
+            return;
+        }
+
         if (!Rs2Bank.isOpen()) {
             log.info("Opening bank");
             if (!Rs2Bank.walkToBankAndUseBank()) {
