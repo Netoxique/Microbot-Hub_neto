@@ -13,6 +13,7 @@ import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -22,6 +23,7 @@ import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.Comparator;
+import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
 import static net.runelite.api.ItemID.DRAGON_BONES;
@@ -118,6 +120,7 @@ public class NetoChaosAltarScript extends Script {
 
     private void dieToNpc() {
         Microbot.log("Walking to dangerous NPC to die");
+        handleCamera("far");
         Rs2Walker.walkTo(2979, 3845,0);
         sleepUntil(() -> Rs2Npc.getNpc(CHAOS_FANATIC) != null, 60000);
         // Attack chaos fanatic to die
@@ -153,6 +156,7 @@ public class NetoChaosAltarScript extends Script {
 
         // If we died while offering bones, return to banking logic
         if (didWeDie || !Rs2Pvp.isInWilderness()) {
+            handleCamera("far");
             Microbot.log("Detected death during offering. Banking...");
             didWeDie = false;
             handleBanking();
@@ -172,6 +176,8 @@ public class NetoChaosAltarScript extends Script {
 
         final Rs2ItemModel lastBones = getLastBone();
         if (lastBones != null && isRunning()) {
+            handleCamera("close");
+
             Rs2Inventory.interact(lastBones, "use");
             sleep(300, 500);
             Rs2GameObject.interact(CHAOS_ALTAR);
@@ -186,6 +192,7 @@ public class NetoChaosAltarScript extends Script {
 
         // If the player has died, immediately switch to banking
         if (didWeDie || !Rs2Pvp.isInWilderness()) {
+            handleCamera("far");
             Microbot.log("Detected death during offering. Banking...");
             didWeDie = false;
             handleBanking();
@@ -204,6 +211,9 @@ public class NetoChaosAltarScript extends Script {
                 && !Rs2Player.isInCombat()
                 && Rs2GameObject.exists(CHAOS_ALTAR)
                 && !didWeDie) {
+
+            handleCamera("close");
+
             Rs2Inventory.interact(lastBones, "use");
             sleep(100, 300);
             Rs2GameObject.interact(CHAOS_ALTAR);
@@ -214,7 +224,24 @@ public class NetoChaosAltarScript extends Script {
         }
     }
 
+    private void handleCamera(String camera_setting) {
+        // Set camera to optimal position before offering bones
+        if (Objects.equals(camera_setting, "close")) {
+            Rs2Camera.setYaw(1024);
+            Rs2Camera.setZoom(1400);
+            Rs2Camera.setPitch(512);
+        }
+        else {
+            Rs2Camera.setYaw(0);
+            Rs2Camera.setZoom(230);
+            Rs2Camera.setPitch(350);
+        }
+    }
+
     private void handleBanking() {
+
+        handleCamera("far");
+
         if(Rs2Inventory.contains(Rs2ItemModel.matches(false, "Burning amulet"))){
             Rs2Inventory.wear("Burning amulet");
         }
