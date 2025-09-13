@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.PluginConstants;
 
 import javax.inject.Inject;
 import java.awt.AWTException;
@@ -12,7 +13,10 @@ import java.awt.AWTException;
         name = "Neto WildyEscape",
         description = "Escapes the wilderness when a Phoenix necklace breaks",
         tags = {"microbot", "wildy", "escape"},
-        enabledByDefault = false
+        enabledByDefault = false,
+        authors = {"Neoxic"},
+        minClientVersion = "2.0.0",
+        isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class NetoWildyEscapePlugin extends Plugin {

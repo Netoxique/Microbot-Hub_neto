@@ -21,7 +21,6 @@ public class NetoWildyEscapeScript extends Script {
     WorldPoint secondGate = new WorldPoint(2948, 3094, 0);
 
     int gate1 = 23552;
-    int gate2 = 1727;
 
     WorldPoint southWestCorner = new WorldPoint(2991, 3936, 0);
     WorldPoint northEastCorner = new WorldPoint(3001, 3945, 0);
@@ -31,20 +30,11 @@ public class NetoWildyEscapeScript extends Script {
 
     WorldArea rockArea = new WorldArea(southWestCorner, width, height);
 
-    boolean path_calculated = false;
-    public void precalculatePath() {
-        if (!path_calculated){
-            Rs2Walker.walkTo(safeArea);
-            path_calculated = true;
-        }
-    }
-
     public boolean run() {
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!super.run()) return;
                 if (!Microbot.isLoggedIn()) return;
-                precalculatePath();
                 if (!Rs2Equipment.isWearing("Phoenix necklace")) {
                     escape();
                 }
@@ -78,11 +68,9 @@ public class NetoWildyEscapeScript extends Script {
             Rs2Walker.walkTo(gateArea, 4); // walk to gate
         }
         // open gate
-        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(23552) != null); // Wait for Gate
+        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(gate1) != null); // Wait for Gate
         Rs2GameObject.interact(gate1, "Open");
-        // walk to safe location
-        sleep(1200);
-        sleepUntil(() -> !Rs2Player.isMoving());
+        // calculate path and walk to safe location
         Rs2Walker.walkTo(safeArea, 20);
         // logout until successful
         while (Microbot.isLoggedIn()) {
