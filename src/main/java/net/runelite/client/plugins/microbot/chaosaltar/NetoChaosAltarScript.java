@@ -176,7 +176,7 @@ public class NetoChaosAltarScript extends Script {
 
         handleCamera("close");
         final Rs2ItemModel lastBones = getLastBone();
-        if (lastBones != null && isRunning()) {
+        if (lastBones != null && isRunning() && Rs2Inventory.contains(DRAGON_BONES)) {
             Rs2Inventory.interact(lastBones, "use");
             sleep(300, 500);
             Rs2GameObject.interact(CHAOS_ALTAR);
@@ -210,7 +210,9 @@ public class NetoChaosAltarScript extends Script {
                 && isRunning()
                 && !Rs2Player.isInCombat()
                 && Rs2GameObject.exists(CHAOS_ALTAR)
-                && !didWeDie) {
+                && !didWeDie
+                && Rs2Inventory.contains(DRAGON_BONES))
+                {
             Rs2Inventory.interact(lastBones, "use");
             sleep(100, 300);
             Rs2GameObject.interact(CHAOS_ALTAR);
