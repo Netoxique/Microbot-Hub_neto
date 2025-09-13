@@ -10,6 +10,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.microbot.pluginscheduler.api.SchedulablePlugin;
 import net.runelite.client.plugins.microbot.pluginscheduler.condition.logical.AndCondition;
 import net.runelite.client.plugins.microbot.pluginscheduler.condition.logical.LockCondition;
@@ -20,10 +21,14 @@ import net.runelite.client.ui.overlay.OverlayManager;
 import javax.inject.Inject;
 
 @PluginDescriptor(
-        name = PluginDescriptor.Bee + "Chaos Altar",
+        name = "Neto Chaos Altar",
         description = "Automates bone offering at the Chaos Altar",
         tags = {"prayer", "bones", "altar"},
-        enabledByDefault = false
+        enabledByDefault = false,
+        authors = {"Neoxic"},
+        version = "1.0.0",
+        minClientVersion = "2.0.0",
+        isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class ChaosAltarPlugin extends Plugin implements SchedulablePlugin {
