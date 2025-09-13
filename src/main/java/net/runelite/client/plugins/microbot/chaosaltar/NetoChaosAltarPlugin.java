@@ -3,7 +3,10 @@ package net.runelite.client.plugins.microbot.chaosaltar;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.MenuAction;
 import net.runelite.api.events.ChatMessage;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 import net.runelite.client.config.ConfigDescriptor;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -16,9 +19,12 @@ import net.runelite.client.plugins.microbot.pluginscheduler.condition.logical.An
 import net.runelite.client.plugins.microbot.pluginscheduler.condition.logical.LockCondition;
 import net.runelite.client.plugins.microbot.pluginscheduler.condition.logical.LogicalCondition;
 import net.runelite.client.plugins.microbot.pluginscheduler.event.PluginScheduleEntryPostScheduleTaskEvent;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
+import java.awt.Rectangle;
 
 @PluginDescriptor(
         name = "Neto Chaos Altar",
@@ -98,9 +104,25 @@ public class NetoChaosAltarPlugin extends Plugin implements SchedulablePlugin {
 
         if (msg.contains("Oh dear, you are dead!")) {
             NetoChaosAltarScript.didWeDie = true;
+            clearChatHistory();
         }
 
 
+    }
+
+    private void clearChatHistory() {
+        Widget allTab = Rs2Widget.getWidget(WidgetInfo.CHATBOX_TAB_ALL.getPackedId());
+        Rectangle bounds = allTab != null ? allTab.getBounds() : new Rectangle(10, 792, 30, 20);
+
+        Microbot.doInvoke(new NewMenuEntry(
+                "Clear history",
+                -1,
+                WidgetInfo.CHATBOX_TAB_ALL.getPackedId(),
+                MenuAction.CC_OP.getId(),
+                9,
+                -1,
+                ""
+        ), bounds);
     }
 
     @Override
