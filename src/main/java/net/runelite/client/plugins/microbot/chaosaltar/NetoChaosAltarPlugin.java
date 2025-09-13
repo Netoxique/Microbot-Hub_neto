@@ -31,20 +31,20 @@ import javax.inject.Inject;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
-public class ChaosAltarPlugin extends Plugin implements SchedulablePlugin {
+public class NetoChaosAltarPlugin extends Plugin implements SchedulablePlugin {
     @Inject
-    private ChaosAltarScript chaosAltarScript;
+    private NetoChaosAltarScript netoChaosAltarScript;
     @Inject
-    private ChaosAltarConfig config;
+    private NetoChaosAltarConfig config;
     @Provides
-    ChaosAltarConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(ChaosAltarConfig.class);
+    NetoChaosAltarConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(NetoChaosAltarConfig.class);
     }
 
     @Inject
     private OverlayManager overlayManager;
     @Inject
-    ChaosAltarOverlay chaosAltarOverlay;
+    NetoChaosAltarOverlay netoChaosAltarOverlay;
 
     LogicalCondition stopCondition = new AndCondition();
     LockCondition lockCondition = new LockCondition("ChaosAlterPlugin",false, true);
@@ -53,17 +53,17 @@ public class ChaosAltarPlugin extends Plugin implements SchedulablePlugin {
     @Override
     protected void startUp() {
         if (overlayManager != null) {
-            overlayManager.add(chaosAltarOverlay);
+            overlayManager.add(netoChaosAltarOverlay);
         }
-        chaosAltarScript.run(config, this);
+        netoChaosAltarScript.run(config, this);
     }
 
     protected void shutDown() {
-        chaosAltarScript.shutdown();
+        netoChaosAltarScript.shutdown();
         if (lockCondition != null && lockCondition.isLocked()) {
             lockCondition.unlock();
         }
-        overlayManager.remove(chaosAltarOverlay);
+        overlayManager.remove(netoChaosAltarOverlay);
     }
 
     @Subscribe
@@ -97,7 +97,7 @@ public class ChaosAltarPlugin extends Plugin implements SchedulablePlugin {
         //need to add the chat message we get when we try to attack an NPC with an empty staff.
 
         if (msg.contains("Oh dear, you are dead!")) {
-            ChaosAltarScript.didWeDie = true;
+            NetoChaosAltarScript.didWeDie = true;
         }
 
 
@@ -108,7 +108,7 @@ public class ChaosAltarPlugin extends Plugin implements SchedulablePlugin {
         if (Microbot.getConfigManager() == null) {
             return null;
         }
-        ChaosAltarConfig conf = Microbot.getConfigManager().getConfig(ChaosAltarConfig.class);
+        NetoChaosAltarConfig conf = Microbot.getConfigManager().getConfig(NetoChaosAltarConfig.class);
         return Microbot.getConfigManager().getConfigDescriptor(conf);
     }
 

@@ -7,7 +7,7 @@ import net.runelite.client.ui.overlay.components.PanelComponent;
 
 import java.awt.*;
 
-public class ChaosAltarOverlay extends OverlayPanel {
+public class NetoChaosAltarOverlay extends OverlayPanel {
 
     private final PanelComponent panelComponent = new PanelComponent();
 

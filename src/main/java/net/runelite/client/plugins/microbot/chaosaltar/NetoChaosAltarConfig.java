@@ -5,7 +5,7 @@ import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 
 @ConfigGroup("chaosaltar")
-public interface ChaosAltarConfig extends Config {
+public interface NetoChaosAltarConfig extends Config {
 
     @ConfigItem(
             keyName = "pluginDescription",

@@ -23,14 +23,13 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.Comparator;
 import java.util.concurrent.TimeUnit;
-import java.util.function.Predicate;
 
 import static net.runelite.api.ItemID.DRAGON_BONES;
 import static net.runelite.api.NpcID.CHAOS_FANATIC;
 import static net.runelite.client.plugins.microbot.util.walker.Rs2Walker.walkTo;
 
 @Slf4j
-public class ChaosAltarScript extends Script {
+public class NetoChaosAltarScript extends Script {
 
     public static final WorldArea CHAOS_ALTAR_AREA = new WorldArea(2947, 3818, 11, 6, 0);
     public static final WorldPoint CHAOS_ALTAR_POINT = new WorldPoint(2949, 3820,0);
@@ -38,14 +37,14 @@ public class ChaosAltarScript extends Script {
 
     private static final int CHAOS_ALTAR = 411;
 
-    private ChaosAltarConfig config;
+    private NetoChaosAltarConfig config;
     private boolean autoRetaliate = false;
 
     private State currentState = State.UNKNOWN;
 
     public static boolean didWeDie = false;
 
-    public boolean run(ChaosAltarConfig config, ChaosAltarPlugin plugin) {
+    public boolean run(NetoChaosAltarConfig config, NetoChaosAltarPlugin plugin) {
         Microbot.enableAutoRunOn = false;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
