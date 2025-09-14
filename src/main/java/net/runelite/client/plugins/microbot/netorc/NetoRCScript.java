@@ -757,7 +757,15 @@ public class NetoRCScript extends Script {
         while (!Rs2Inventory.allPouchesEmpty() && isRunning()) {
             Microbot.log("Pouches are not empty. Crafting more");
             Rs2Inventory.emptyPouches();
-//            Rs2GameObject.hoverOverObject(wrathAltar);
+
+            // Determine the altar to interact with and hover the mouse over it
+            GameObject altar = config.runeType() == RuneType.BLOOD
+                    ? Rs2GameObject.getGameObject(bloodAltar)
+                    : Rs2GameObject.getGameObject(wrathAltar);
+            if (altar != null) {
+                Rs2GameObject.hoverOverObject(altar);
+            }
+
             sleepUntil(() -> Rs2Inventory.contains(pureEss));
             if (config.runeType() == RuneType.BLOOD) {
                 Rs2GameObject.interact(bloodAltar, "Craft-rune");
