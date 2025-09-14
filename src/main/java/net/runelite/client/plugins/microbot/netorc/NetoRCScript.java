@@ -333,15 +333,14 @@ public class NetoRCScript extends Script {
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
                     Rs2Bank.depositAll(bloodRune);
-                    sleepGaussian(300, 200);
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
                     Rs2Bank.depositAll(wrathRune);
-                    sleepGaussian(300, 200);
                 }
                 Rs2Bank.withdrawAll(pureEss);
+                sleepUntil(Rs2Inventory::isFull);
                 Rs2Inventory.fillPouches();
-                sleepGaussian(450, 200);
+                sleepUntilOnClientThread(() -> !Rs2Inventory.isFull());
             }
             if (!Rs2Inventory.isFull()) {
                 Rs2Bank.withdrawAll(pureEss);
@@ -758,8 +757,8 @@ public class NetoRCScript extends Script {
         while (!Rs2Inventory.allPouchesEmpty() && isRunning()) {
             Microbot.log("Pouches are not empty. Crafting more");
             Rs2Inventory.emptyPouches();
-            Rs2Inventory.waitForInventoryChanges(600);
-            sleepGaussian(700, 200);
+//            Rs2GameObject.hoverOverObject(wrathAltar);
+            sleepUntil(() -> Rs2Inventory.contains(pureEss));
             if (config.runeType() == RuneType.BLOOD) {
                 Rs2GameObject.interact(bloodAltar, "Craft-rune");
             }
