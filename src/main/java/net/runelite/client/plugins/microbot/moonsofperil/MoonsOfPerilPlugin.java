@@ -28,8 +28,8 @@ import java.time.Instant;
         authors = "The Funk",
         version = MoonsOfPerilPlugin.version,
         minClientVersion = "2.0.0",
-        iconUrl = "https://chsami.github.io/Microbot-Hub/MoonsOfPeril/assets/icon.png",
-        cardUrl = "https://chsami.github.io/Microbot-Hub/MoonsOfPeril/assets/card.png",
+        iconUrl = "https://chsami.github.io/Microbot-Hub/MoonsOfPerilPlugin/assets/icon.png",
+        cardUrl = "https://chsami.github.io/Microbot-Hub/MoonsOfPerilPlugin/assets/card.png",
         enabledByDefault = PluginConstants.DEFAULT_ENABLED,
         isExternal = PluginConstants.IS_EXTERNAL
 )
