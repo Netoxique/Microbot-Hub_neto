@@ -220,7 +220,7 @@ public class NetoRCScript extends Script {
             handleFeroxRunEnergy();
         }
 
-        while (!Rs2Bank.isOpen() && isRunning() &&
+        while (!Rs2Bank.isOpen() && isRunning() && !Rs2Bank.isNearBank(26) &&
                 (!Rs2Inventory.allPouchesFull()
                         || !Rs2Inventory.contains(colossalPouch)
                         || !Rs2Inventory.contains(pureEss))) {
