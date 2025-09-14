@@ -98,26 +98,19 @@ public class KarambwansScript extends Script {
     }
 
     private void walkToBank() {
-        Rs2Walker.walkTo(chasmBank,3);
-//        if (Rs2Bank.walkToBank()) {
-//            sleepUntil(() -> Rs2Bank.isNearBank(10));
-//        }
+        WorldPoint nearestBank = Rs2Bank.getNearestBank().getWorldPoint();
+        Rs2Walker.walkTo(nearestBank, 10);
     }
 
     private void useBank() {
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
-        sleepGaussian(600,200);
-        Rs2Bank.depositAll(ItemID.TBWT_RAW_KARAMBWAN);
-        sleepGaussian(600,200);
-        Rs2Bank.depositAll(ItemID.NET);
-        sleepGaussian(600,200);
-        Rs2Bank.depositAll("scroll"); // Handles all tiers of clue scrolls
-        sleepGaussian(600,200);
+
+        Rs2Bank.depositAllExcept(ItemID.FISH_BARREL_OPEN, ItemID.FISH_BARREL_CLOSED);
+
         if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
             Rs2Bank.emptyFishBarrel();
         }
-//        Rs2Bank.closeBank();
     }
 
     private void interactWithFishingSpot() {
@@ -125,15 +118,10 @@ public class KarambwansScript extends Script {
     }
 
     private void setupBaitFishing() {
-        Rs2Walker.walkTo(chasmBank,3);
-//        if (!Rs2Bank.isNearBank(10)) {
-//            Rs2Bank.walkToBank();
-//            sleepUntil(() -> Rs2Bank.isNearBank(10));
-//        }
+        walkToBank();
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
-        Rs2Bank.depositAll(ItemID.TBWT_RAW_KARAMBWAN);
-        sleepGaussian(600,200);
+        Rs2Bank.depositAllExcept(ItemID.FISH_BARREL_OPEN, ItemID.FISH_BARREL_CLOSED);
         Rs2Bank.withdrawItem(ItemID.NET);
         Rs2Walker.walkTo(baitPoint);
     }
@@ -158,6 +146,5 @@ public class KarambwansScript extends Script {
 
     private void walkToFish() {
         Rs2Walker.walkTo(fishingPoint, 10);
-        Rs2Player.waitForWalking();
     }
 }
