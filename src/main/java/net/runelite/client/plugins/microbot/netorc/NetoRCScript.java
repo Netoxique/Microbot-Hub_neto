@@ -181,7 +181,7 @@ public class NetoRCScript extends Script {
 
     private void checkPouches() {
         Rs2Inventory.interact(colossalPouch, "Check");
-        sleepGaussian(900, 200);
+        sleepGaussian(600, 200);
     }
 
     private void handleBanking() {
@@ -203,7 +203,7 @@ public class NetoRCScript extends Script {
 
 		if (Rs2Inventory.hasDegradedPouch()) {
 			Rs2Magic.repairPouchesWithLunar();
-			sleepGaussian(900, 200);
+			sleepGaussian(600, 200);
 			return;
 		}
 
@@ -232,7 +232,7 @@ public class NetoRCScript extends Script {
 
         if (config.runeType() == RuneType.WRATH) {
             handleWrathReqEquip();
-            sleepGaussian(900, 200);
+            sleepGaussian(600, 200);
         }
 
         if (config.runeType() == RuneType.BLOOD) {
