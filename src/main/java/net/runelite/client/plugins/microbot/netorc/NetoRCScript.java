@@ -265,9 +265,17 @@ public class NetoRCScript extends Script {
             }
         }
 
-        if (!Rs2Inventory.hasRunePouch()) {
-            Rs2Bank.withdrawRunePouch();
-            sleepGaussian(700, 200);
+        int runecraftLevel = Microbot.getClient().getRealSkillLevel(Skill.RUNECRAFT);
+        if (runecraftLevel <= 98) {
+            if (!Rs2Inventory.hasRunePouch()) {
+                Rs2Bank.withdrawRunePouch();
+                sleepGaussian(700, 200);
+            }
+        } else {
+            if (!Rs2Equipment.isWearing("runecraft cape")) {
+                Rs2Bank.withdrawAndEquip("runecraft cape");
+                sleepGaussian(700, 200);
+            }
         }
 
         if (config.usePoh()) {
