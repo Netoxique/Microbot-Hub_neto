@@ -22,6 +22,7 @@ import java.awt.event.KeyEvent;
 import java.util.Arrays;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class NetoCookingScript extends Script {
 
@@ -92,10 +93,29 @@ public class NetoCookingScript extends Script {
 
         Microbot.status = "Cooking karambwans";
 
-        Rs2Keyboard.keyHold(KeyEvent.VK_SPACE);
+        AtomicBoolean keepPressing = new AtomicBoolean(true);
+        Thread spacePresser = new Thread(() -> {
+            try {
+                while (keepPressing.get()) {
+                    Rs2Keyboard.keyHold(KeyEvent.VK_SPACE);
+                    Thread.sleep(45);
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        }, "karambwan-space-presser");
+        spacePresser.start();
+
         while (Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN)) {
-            Rs2Inventory.interact(ItemID.RAW_KARAMBWAN,"Use");
+            Rs2Inventory.interact(ItemID.RAW_KARAMBWAN, "Use");
             Rs2GameObject.interact(range, "Use");
+        }
+
+        keepPressing.set(false);
+        try {
+            spacePresser.join();
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
         }
         Rs2Keyboard.keyRelease(KeyEvent.VK_SPACE);
     }
