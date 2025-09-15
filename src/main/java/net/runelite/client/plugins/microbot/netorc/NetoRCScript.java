@@ -787,10 +787,23 @@ public class NetoRCScript extends Script {
     }
 
     private void handleBankTeleport() {
+        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= 15 || Rs2Player.getHealthPercentage() <= 20);
+
+        if (!needRefill) {
+            for (int craftingCapeId : Teleports.CRAFTING_CAPE.getItemIds()) {
+                if (Rs2Inventory.contains(craftingCapeId)) {
+                    Microbot.log("Using: " + Teleports.CRAFTING_CAPE.getName());
+                    Rs2Inventory.interact(craftingCapeId, Teleports.CRAFTING_CAPE.getInteraction());
+                    sleepUntil(() -> Teleports.CRAFTING_CAPE.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
+                    sleepGaussian(600, 200);
+                    return;
+                }
+            }
+        }
+
         Rs2Tab.switchToEquipmentTab();
         sleepGaussian(1300, 200);
 
-        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= 15 || Rs2Player.getHealthPercentage() <= 20);
         List<Teleports> bankTeleport = needRefill
                 ? Arrays.asList(
                 Teleports.FEROX_ENCLAVE,
@@ -810,10 +823,10 @@ public class NetoRCScript extends Script {
                     Rs2Equipment.interact(bankTeleportsId, teleport.getInteraction());
                     sleepUntil(() -> teleport.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
                     sleepGaussian(600, 200);
-					if (teleport == Teleports.FEROX_ENCLAVE) {
-						forceDrinkAtFerox = true;
-						handleFeroxRunEnergy();
-					}
+                    if (teleport == Teleports.FEROX_ENCLAVE) {
+                        forceDrinkAtFerox = true;
+                        handleFeroxRunEnergy();
+                    }
                     teleportUsed = true;
                     break;
                 }
