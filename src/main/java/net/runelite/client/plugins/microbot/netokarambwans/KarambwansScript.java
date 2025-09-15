@@ -26,7 +26,7 @@ import static net.runelite.client.plugins.microbot.netokarambwans.KarambwanInfo.
 @Slf4j
 public class KarambwansScript extends Script {
     public static double version = 1.2;
-    private final WorldPoint fishingPoint = new WorldPoint(2900, 3111, 0);
+    private final WorldPoint fishingPoint = new WorldPoint(2899, 3118, 0);
     private final WorldPoint baitPoint = new WorldPoint(2804, 3006, 0);
 
 
@@ -234,5 +234,6 @@ public class KarambwansScript extends Script {
 
     private void walkToFish() {
         Rs2Walker.walkTo(fishingPoint, 15);
+        interactWithFishingSpot();
     }
 }
