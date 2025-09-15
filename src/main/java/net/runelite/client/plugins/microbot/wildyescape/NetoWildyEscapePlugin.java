@@ -1,6 +1,8 @@
 package net.runelite.client.plugins.microbot.wildyescape;
 
+import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -11,7 +13,7 @@ import java.awt.AWTException;
 
 @PluginDescriptor(
         name = "Neto WildyEscape",
-        description = "Escapes the wilderness when a Phoenix necklace breaks",
+        description = "Escapes the wilderness when someone attempts against the player",
         tags = {"microbot", "wildy", "escape"},
         enabledByDefault = false,
         authors = {"Neoxic"},
@@ -24,11 +26,20 @@ public class NetoWildyEscapePlugin extends Plugin {
     @Inject
     private NetoWildyEscapeScript script;
 
+    @Inject
+    private NetoWildyEscapeConfig config;
+
+    @Provides
+    NetoWildyEscapeConfig provideConfig(ConfigManager configManager)
+    {
+        return configManager.getConfig(NetoWildyEscapeConfig.class);
+    }
+
     @Override
     protected void startUp() throws AWTException {
         Microbot.pauseAllScripts.compareAndSet(true, false);
 //        script.precalculatePath();
-        script.run();
+        script.run(config);
     }
 
     @Override

@@ -35,13 +35,20 @@ public class NetoWildyEscapeScript extends Script {
 
     WorldArea rockArea = new WorldArea(southWestCorner, width, height);
 
-    public boolean run() {
+    public boolean run(NetoWildyEscapeConfig config) {
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!super.run()) return;
                 if (!Microbot.isLoggedIn()) return;
-                if (!Rs2Equipment.isWearing("Phoenix necklace")) {
-                    escape();
+
+                if (config.escapeOnHealth()) {
+                    if (Rs2Player.getHealthPercentage() <= config.healthPercent()) {
+                        escape();
+                    }
+                } else {
+                    if (!Rs2Equipment.isWearing("Phoenix necklace")) {
+                        escape();
+                    }
                 }
             } catch (Exception e) {
                 Microbot.logStackTrace(this.getClass().getSimpleName(), e);
