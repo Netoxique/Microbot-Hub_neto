@@ -341,9 +341,11 @@ public class NetoRCScript extends Script {
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
                     Rs2Bank.depositAll(bloodRune);
+                    sleepGaussian(300, 100);
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
                     Rs2Bank.depositAll(wrathRune);
+                    sleepGaussian(300, 100);
                 }
                 Rs2Bank.withdrawAll(pureEss);
                 sleepUntil(Rs2Inventory::isFull);
