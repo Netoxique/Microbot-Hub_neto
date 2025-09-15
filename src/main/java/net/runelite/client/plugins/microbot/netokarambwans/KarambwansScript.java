@@ -178,10 +178,14 @@ public class KarambwansScript extends Script {
 
     private void walkToBank() {
         WorldPoint nearestBank = Rs2Bank.getNearestBank().getWorldPoint();
-        Rs2Walker.walkTo(nearestBank, 10);
+        Rs2Walker.walkTo(nearestBank, 20);
     }
 
     private void useBank() {
+        deposit_inv();
+    }
+
+    private void deposit_inv() {
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
 
@@ -205,19 +209,7 @@ public class KarambwansScript extends Script {
 
     private void setupBaitFishing() {
         walkToBank();
-        Rs2Bank.openBank();
-        sleepUntil(Rs2Bank::isOpen);
-        Rs2Bank.depositAllExcept(
-                ItemID.FISH_BARREL_OPEN,
-                ItemID.FISH_BARREL_CLOSED,
-                ItemID.TBWT_KARAMBWAN_VESSEL,
-                ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI,
-                ItemID.TBWT_RAW_KARAMBWANJI
-
-        );
-        if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
-            Rs2Bank.emptyFishBarrel();
-        }
+        deposit_inv();
         Rs2Bank.withdrawItem(ItemID.NET);
         Rs2Walker.walkTo(baitPoint);
     }
