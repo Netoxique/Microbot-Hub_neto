@@ -48,7 +48,7 @@ public class NetoKaramPlugin extends Plugin {
             overlayManager.add(karambwansOverlay);
         }
         karambwansScript.run(config);
-        KarambwanInfo.botStatus = config.STARTING_STATE();
+        KarambwanInfo.botStatus = KarambwanInfo.states.PREP;
     }
 
     protected void shutDown() {

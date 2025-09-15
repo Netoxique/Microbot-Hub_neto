@@ -5,6 +5,7 @@ public class KarambwanInfo {
 
 
     public enum states {
+        PREP,
         FISHING,
         WALKING_TO_BANK,
         BANKING,

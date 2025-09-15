@@ -11,6 +11,7 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
@@ -25,14 +26,16 @@ import static net.runelite.client.plugins.microbot.netokarambwans.KarambwanInfo.
 @Slf4j
 public class KarambwansScript extends Script {
     public static double version = 1.2;
-    private final WorldPoint fishingPoint = new WorldPoint(2899, 3118, 0);
-    private final WorldPoint chasmBank = new WorldPoint(1481, 3649, 0);
+    private final WorldPoint fishingPoint = new WorldPoint(2900, 3111, 0);
     private final WorldPoint baitPoint = new WorldPoint(2804, 3006, 0);
-    // Using a more generic bank location that Microbot can find easily.
-    // This can be any bank, Rs2Bank.walkToBank() will find the nearest one.
+
 
     public boolean run(KarambwansConfig config) {
         Microbot.enableAutoRunOn = true;
+
+        Rs2Antiban.resetAntibanSettings();
+        Rs2Antiban.antibanSetupTemplates.applyRunecraftingSetup();
+        Rs2Antiban.setActivity(Activity.GENERAL_FISHING);
 
         Rs2Camera.setZoom(230);
         Rs2Camera.setPitch(512);
@@ -47,6 +50,9 @@ public class KarambwansScript extends Script {
                 if (!super.run()) return;
 
                 switch (botStatus) {
+                    case PREP:
+                        prep();
+                        break;
                     case FISHING:
                         fishingLoop();
                         break;
@@ -82,6 +88,79 @@ public class KarambwansScript extends Script {
         super.shutdown();
     }
 
+    private void prep() {
+        boolean hasStaffEquipped = Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF) ||
+                Rs2Equipment.isWearing(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
+        boolean hasStaffInInv = Rs2Inventory.contains(ItemID.DRAMEN_STAFF) ||
+                Rs2Inventory.contains(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
+        boolean hasVessel = Rs2Inventory.contains(ItemID.TBWT_KARAMBWAN_VESSEL)
+                || Rs2Inventory.contains(ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI);
+        boolean hasBait = Rs2Inventory.contains(ItemID.TBWT_RAW_KARAMBWANJI);
+
+        if ((hasStaffEquipped || hasStaffInInv) && hasVessel && hasBait) {
+            if (!hasStaffEquipped) {
+                if (Rs2Inventory.contains(ItemID.DRAMEN_STAFF)) {
+                    Rs2Inventory.interact(ItemID.DRAMEN_STAFF, "Wield");
+                    sleepUntil(() -> Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF));
+                } else if (Rs2Inventory.contains(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)) {
+                    Rs2Inventory.interact(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF, "Wield");
+                    sleepUntil(() -> Rs2Equipment.isWearing(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF));
+                }
+            }
+            botStatus = states.WALKING_TO_FISH;
+            return;
+        }
+
+        walkToBank();
+        Rs2Bank.openBank();
+        sleepUntil(Rs2Bank::isOpen);
+
+        Rs2Bank.depositAllExcept(ItemID.FISH_BARREL_OPEN, ItemID.FISH_BARREL_CLOSED);
+
+        if (!Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) && !Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
+            if (Rs2Bank.hasItem(ItemID.FISH_BARREL_OPEN)) {
+                Rs2Bank.withdrawItem(ItemID.FISH_BARREL_OPEN);
+            } else if (Rs2Bank.hasItem(ItemID.FISH_BARREL_CLOSED)) {
+                Rs2Bank.withdrawItem(ItemID.FISH_BARREL_CLOSED);
+            }
+        }
+
+        if (!hasStaffEquipped && !hasStaffInInv) {
+            if (Rs2Bank.hasItem(ItemID.DRAMEN_STAFF)) {
+                Rs2Bank.withdrawAndEquip(ItemID.DRAMEN_STAFF);
+            } else if (Rs2Bank.hasItem(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)) {
+                Rs2Bank.withdrawAndEquip(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF);
+            }
+        } else if (!hasStaffEquipped) {
+            if (Rs2Inventory.contains(ItemID.DRAMEN_STAFF)) {
+                Rs2Inventory.interact(ItemID.DRAMEN_STAFF, "Wield");
+                sleepUntil(() -> Rs2Equipment.isWearing(ItemID.DRAMEN_STAFF));
+            } else if (Rs2Inventory.contains(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF)) {
+                Rs2Inventory.interact(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF, "Wield");
+                sleepUntil(() -> Rs2Equipment.isWearing(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF));
+            }
+        }
+
+        if (!hasVessel) {
+            if (Rs2Bank.hasItem(ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI)) {
+                Rs2Bank.withdrawItem(ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI);
+            } else if (Rs2Bank.hasItem(ItemID.TBWT_KARAMBWAN_VESSEL)) {
+                Rs2Bank.withdrawItem(ItemID.TBWT_KARAMBWAN_VESSEL);
+            }
+        }
+
+        if (!hasBait && Rs2Bank.hasItem(ItemID.TBWT_RAW_KARAMBWANJI)) {
+            Rs2Bank.withdrawAll(ItemID.TBWT_RAW_KARAMBWANJI);
+        }
+
+        Rs2Bank.closeBank();
+
+        if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
+            Rs2Inventory.interact(ItemID.FISH_BARREL_CLOSED,"Open");
+        }
+        botStatus = states.WALKING_TO_FISH;
+    }
+
     private void fishingLoop() {
         if (Rs2Inventory.isFull()) {
             botStatus = states.WALKING_TO_BANK;
@@ -106,7 +185,14 @@ public class KarambwansScript extends Script {
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
 
-        Rs2Bank.depositAllExcept(ItemID.FISH_BARREL_OPEN, ItemID.FISH_BARREL_CLOSED);
+        Rs2Bank.depositAllExcept(
+                ItemID.FISH_BARREL_OPEN,
+                ItemID.FISH_BARREL_CLOSED,
+                ItemID.TBWT_KARAMBWAN_VESSEL,
+                ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI,
+                ItemID.TBWT_RAW_KARAMBWANJI
+
+        );
 
         if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
             Rs2Bank.emptyFishBarrel();
@@ -121,7 +207,17 @@ public class KarambwansScript extends Script {
         walkToBank();
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
-        Rs2Bank.depositAllExcept(ItemID.FISH_BARREL_OPEN, ItemID.FISH_BARREL_CLOSED);
+        Rs2Bank.depositAllExcept(
+                ItemID.FISH_BARREL_OPEN,
+                ItemID.FISH_BARREL_CLOSED,
+                ItemID.TBWT_KARAMBWAN_VESSEL,
+                ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI,
+                ItemID.TBWT_RAW_KARAMBWANJI
+
+        );
+        if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
+            Rs2Bank.emptyFishBarrel();
+        }
         Rs2Bank.withdrawItem(ItemID.NET);
         Rs2Walker.walkTo(baitPoint);
     }
@@ -145,6 +241,6 @@ public class KarambwansScript extends Script {
     }
 
     private void walkToFish() {
-        Rs2Walker.walkTo(fishingPoint, 10);
+        Rs2Walker.walkTo(fishingPoint, 15);
     }
 }
