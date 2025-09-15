@@ -6,6 +6,9 @@ import net.runelite.api.ObjectID;
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
@@ -24,6 +27,12 @@ public class NetoCookingScript extends Script {
 
     public boolean run() {
         Microbot.enableAutoRunOn = false;
+
+        Rs2Antiban.resetAntibanSettings();
+        Rs2Antiban.antibanSetupTemplates.applyCookingSetup();
+        Rs2Antiban.setActivity(Activity.COOKING_RAW_KARAMBWAN);
+        Rs2AntibanSettings.simulateMistakes = false;
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!super.run() || !Microbot.isLoggedIn()) return;
@@ -82,11 +91,11 @@ public class NetoCookingScript extends Script {
         }
 
         Microbot.status = "Cooking karambwans";
+
         Rs2Keyboard.keyHold(KeyEvent.VK_SPACE);
         while (Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN)) {
             Rs2Inventory.interact(ItemID.RAW_KARAMBWAN,"Use");
-            Rs2GameObject.interact(range, "Cook");
-            sleepUntil(() -> !Rs2Player.waitForXpDrop(Skill.COOKING));
+            Rs2GameObject.interact(range, "Use");
         }
         Rs2Keyboard.keyRelease(KeyEvent.VK_SPACE);
     }
