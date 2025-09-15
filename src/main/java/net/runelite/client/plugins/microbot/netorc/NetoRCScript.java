@@ -809,7 +809,7 @@ public class NetoRCScript extends Script {
                     Microbot.log("Using: " + teleport.getName());
                     Rs2Equipment.interact(bankTeleportsId, teleport.getInteraction());
                     sleepUntil(() -> teleport.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
-                    sleepGaussian(1100, 200);
+                    sleepGaussian(600, 200);
 					if (teleport == Teleports.FEROX_ENCLAVE) {
 						forceDrinkAtFerox = true;
 						handleFeroxRunEnergy();
