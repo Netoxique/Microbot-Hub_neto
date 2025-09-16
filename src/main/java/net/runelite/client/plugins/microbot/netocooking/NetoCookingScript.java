@@ -56,7 +56,8 @@ public class NetoCookingScript extends Script {
             return;
         }
         Rs2Bank.depositAll();
-        Rs2Inventory.waitForInventoryChanges(1800);
+
+        sleepGaussian(300,100);
 
         if (!Rs2Equipment.isWearing(ItemID.COOKING_GAUNTLETS)) {
             if (Rs2Inventory.hasItem(ItemID.COOKING_GAUNTLETS)) {
@@ -74,14 +75,12 @@ public class NetoCookingScript extends Script {
 
         if (Rs2Bank.hasItem(ItemID.RAW_KARAMBWAN)) {
             Rs2Bank.withdrawAll(ItemID.RAW_KARAMBWAN);
-            Rs2Inventory.waitForInventoryChanges(1800);
         } else {
             Microbot.showMessage("Out of raw karambwans");
             shutdown();
         }
 
         Rs2Bank.closeBank();
-        sleepUntil(() -> !Rs2Bank.isOpen());
     }
 
     private void cook() {
@@ -90,9 +89,8 @@ public class NetoCookingScript extends Script {
             return;
         }
 
-        if (!Rs2GameObject.interact(range, "Cook")) {
-            return;
-        }
+        sleepUntil(() -> Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN));
+        sleepGaussian(300,150);
 
         Microbot.status = "Cooking karambwans";
 
@@ -113,6 +111,7 @@ public class NetoCookingScript extends Script {
         while ((lastKarambwan = Rs2Inventory.getLast(ItemID.RAW_KARAMBWAN)) != null) {
             Rs2Inventory.interact(lastKarambwan, "Use");
             Rs2GameObject.interact(range, "Use");
+            sleepGaussian(700,100);
         }
 
         keepPressing.set(false);
