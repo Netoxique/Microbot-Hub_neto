@@ -37,6 +37,8 @@ public class NetoCookingScript extends Script {
         Rs2Antiban.setActivity(Activity.COOKING_RAW_KARAMBWAN);
         Rs2AntibanSettings.simulateMistakes = false;
 
+        Rs2Camera.setZoom(1070);
+
         // Find range at startup
         GameObject range = findRange();
 
