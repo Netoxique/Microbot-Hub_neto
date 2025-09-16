@@ -37,12 +37,20 @@ public class NetoCookingScript extends Script {
         Rs2Antiban.setActivity(Activity.COOKING_RAW_KARAMBWAN);
         Rs2AntibanSettings.simulateMistakes = false;
 
+        // Find range at startup
+        GameObject range = findRange();
+
+        if (range == null) {
+            Microbot.showMessage("No range found, shutting down.");
+            shutdown();
+        }
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!super.run() || !Microbot.isLoggedIn()) return;
 
                 if (Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN)) {
-                    cook();
+                    cook(range);
                 } else {
                     bank();
                 }
@@ -85,11 +93,7 @@ public class NetoCookingScript extends Script {
         Rs2Bank.closeBank();
     }
 
-    private void cook() {
-        GameObject range = findRange();
-        if (range == null) {
-            return;
-        }
+    private void cook(GameObject range) {
 
         sleepUntil(() -> Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN));
         sleepGaussian(300,150);
@@ -129,17 +133,10 @@ public class NetoCookingScript extends Script {
 
     private GameObject findRange() {
         int[] rangeIds = new int[]{
-                ObjectID.STOVE, ObjectID.STOVE_9086, ObjectID.STOVE_9087, ObjectID.STOVE_12269,
-                ObjectID.GOBLIN_STOVE, ObjectID.GOBLIN_STOVE_25441, ObjectID.SIMPLE_STOVE,
-                ObjectID.COOKING_STOVE, ObjectID.STOVE_51540, ObjectID.COOKING_RANGE,
-                ObjectID.RANGE, ObjectID.COOKING_RANGE_4172, ObjectID.RANGE_7183,
-                ObjectID.RANGE_7184, ObjectID.COOKING_RANGE_8750, ObjectID.RANGE_9682,
-                ObjectID.RANGE_9736, ObjectID.RANGE_12102, ObjectID.RANGE_12611,
-                ObjectID.STEEL_RANGE, ObjectID.STEEL_RANGE_13540, ObjectID.STEEL_RANGE_13541,
-                ObjectID.FANCY_RANGE, ObjectID.FANCY_RANGE_13543, ObjectID.FANCY_RANGE_13544,
-                ObjectID.COOKING_RANGE_16641, ObjectID.COOKING_RANGE_16893, ObjectID.RANGE_21792,
-                ObjectID.COOKING_RANGE_22154, ObjectID.RANGE_22713, ObjectID.RANGE_22714,
-                31631
+                ObjectID.CLAY_OVEN_21302, // Hosidius / Generic
+                ObjectID.FIRE_43475, // Rogue's Den
+                ObjectID.RANGE_7183, // Cook's Guild / Generic
+                31631, // Myth's Guild
         };
 
         List<GameObject> objects = Rs2GameObject.getGameObjects();
