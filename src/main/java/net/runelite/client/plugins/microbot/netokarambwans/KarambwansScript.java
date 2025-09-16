@@ -96,6 +96,7 @@ public class KarambwansScript extends Script {
         boolean hasVessel = Rs2Inventory.contains(ItemID.TBWT_KARAMBWAN_VESSEL)
                 || Rs2Inventory.contains(ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI);
         boolean hasBait = Rs2Inventory.contains(ItemID.TBWT_RAW_KARAMBWANJI);
+        boolean hasBlessing = Rs2Equipment.isWearing("Rada's blessing");
 
         if ((hasStaffEquipped || hasStaffInInv) && hasVessel && hasBait) {
             if (!hasStaffEquipped) {
@@ -139,6 +140,10 @@ public class KarambwansScript extends Script {
                 Rs2Inventory.interact(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF, "Wield");
                 sleepUntil(() -> Rs2Equipment.isWearing(ItemID.LUNAR_MOONCLAN_LIMINAL_STAFF));
             }
+        }
+
+        if (!hasBlessing && Rs2Bank.hasItem("Rada's blessing")) {
+            Rs2Bank.withdrawAndEquip("Rada's blessing");
         }
 
         if (!hasVessel) {
