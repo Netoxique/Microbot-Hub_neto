@@ -9,6 +9,7 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
@@ -56,8 +57,8 @@ public class NetoCookingScript extends Script {
         if (!Rs2Bank.openBank()) {
             return;
         }
-        Rs2Bank.depositAll();
 
+        Rs2Bank.depositAll();
         sleepGaussian(300,100);
 
         if (!Rs2Equipment.isWearing(ItemID.COOKING_GAUNTLETS)) {
@@ -108,12 +109,14 @@ public class NetoCookingScript extends Script {
         }, "karambwan-space-presser");
         spacePresser.start();
 
+        Rs2Antiban.setActivityIntensity(ActivityIntensity.EXTREME);
         Rs2ItemModel lastKarambwan;
         while ((lastKarambwan = Rs2Inventory.getLast(ItemID.RAW_KARAMBWAN)) != null) {
             Rs2Inventory.interact(lastKarambwan, "Use");
             Rs2GameObject.interact(range, "Use");
             sleepGaussian(400,100);
         }
+        Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
 
         keepPressing.set(false);
         try {
