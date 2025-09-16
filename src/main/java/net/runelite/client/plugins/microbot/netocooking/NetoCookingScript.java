@@ -19,6 +19,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 
+import java.awt.*;
 import java.awt.event.KeyEvent;
 import java.util.Arrays;
 import java.util.List;
@@ -111,7 +112,7 @@ public class NetoCookingScript extends Script {
         while ((lastKarambwan = Rs2Inventory.getLast(ItemID.RAW_KARAMBWAN)) != null) {
             Rs2Inventory.interact(lastKarambwan, "Use");
             Rs2GameObject.interact(range, "Use");
-            sleepGaussian(700,100);
+            sleepGaussian(400,100);
         }
 
         keepPressing.set(false);
