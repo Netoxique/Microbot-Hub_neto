@@ -6,6 +6,7 @@ import net.runelite.api.ObjectID;
 import net.runelite.api.Skill;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
@@ -29,6 +30,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class NetoCookingScript extends Script {
 
+    private GameObject currentRange;
+
     public boolean run() {
         Microbot.enableAutoRunOn = false;
 
@@ -40,9 +43,9 @@ public class NetoCookingScript extends Script {
         Rs2Camera.setZoom(1070);
 
         // Find range at startup
-        GameObject range = findRange();
+        currentRange = findRange();
 
-        if (range == null) {
+        if (currentRange == null) {
             Microbot.showMessage("No range found, shutting down.");
             shutdown();
         }
@@ -52,7 +55,7 @@ public class NetoCookingScript extends Script {
                 if (!super.run() || !Microbot.isLoggedIn()) return;
 
                 if (Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN)) {
-                    cook(range);
+                    cook();
                 } else {
                     bank();
                 }
@@ -68,7 +71,9 @@ public class NetoCookingScript extends Script {
             return;
         }
 
-        Rs2Bank.depositAll();
+        if (!Rs2Inventory.isEmpty()) {
+            Rs2Bank.depositAll();
+        }
         sleepGaussian(300,100);
 
         if (!Rs2Equipment.isWearing(ItemID.COOKING_GAUNTLETS)) {
@@ -95,10 +100,21 @@ public class NetoCookingScript extends Script {
         Rs2Bank.closeBank();
     }
 
-    private void cook(GameObject range) {
+    private void cook() {
 
-        sleepUntil(() -> Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN));
+        sleepUntil(() -> Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN), 3000);
         sleepGaussian(300,150);
+
+        GameObject range = currentRange;
+        if (!isRangeValid(range)) {
+            range = findRange();
+            if (range == null) {
+                Microbot.showMessage("No range found, shutting down.");
+                shutdown();
+                return;
+            }
+            currentRange = range;
+        }
 
         Microbot.status = "Cooking karambwans";
 
@@ -148,5 +164,20 @@ public class NetoCookingScript extends Script {
             }
         }
         return null;
+    }
+
+    private boolean isRangeValid(GameObject range) {
+        if (range == null || range.getWorldLocation() == null) {
+            return false;
+        }
+
+        for (GameObject obj : Rs2GameObject.getGameObjects()) {
+            if (obj != null
+                    && obj.getId() == range.getId()
+                    && obj.getWorldLocation().equals(range.getWorldLocation())) {
+                return true;
+            }
+        }
+        return false;
     }
 }
