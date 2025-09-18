@@ -24,12 +24,12 @@ import java.awt.*;
 import java.time.Instant;
 
 @PluginDescriptor(
-        name ="NetoRC",
+        name ="Neto RC",
         description = "A plugin to automate Rune crafting",
         tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
-        version = NetoRCPlugin.version,
-        minClientVersion = "1.9.9.2",
+        version = "1.4.0",
+        minClientVersion = "2.0.0",
         enabledByDefault = false,
         isExternal = PluginConstants.IS_EXTERNAL
 )
@@ -61,8 +61,6 @@ public class NetoRCPlugin extends Plugin {
     private int startXp = 0;
     @Getter
     private WorldPoint myWorldPoint;
-    @Getter
-    public static final String version = "1.2.0";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {
