@@ -220,21 +220,25 @@ public class BanksBankStanderPanel extends PluginPanel
 
     private void addFormRow(JPanel panel, int row, String labelText, JComponent component)
     {
+        int baseRow = row * 2;
+
         GridBagConstraints labelConstraints = new GridBagConstraints();
         labelConstraints.gridx = 0;
-        labelConstraints.gridy = row;
+        labelConstraints.gridy = baseRow;
+        labelConstraints.gridwidth = 2;
         labelConstraints.anchor = GridBagConstraints.WEST;
-        labelConstraints.insets = new Insets(5, 10, 5, 5);
+        labelConstraints.insets = new Insets(5, 10, 0, 10);
         JLabel label = new JLabel(labelText);
         label.setForeground(Color.WHITE);
         panel.add(label, labelConstraints);
 
         GridBagConstraints componentConstraints = new GridBagConstraints();
-        componentConstraints.gridx = 1;
-        componentConstraints.gridy = row;
+        componentConstraints.gridx = 0;
+        componentConstraints.gridy = baseRow + 1;
+        componentConstraints.gridwidth = 2;
         componentConstraints.weightx = 1;
         componentConstraints.fill = GridBagConstraints.HORIZONTAL;
-        componentConstraints.insets = new Insets(5, 5, 5, 10);
+        componentConstraints.insets = new Insets(0, 10, 5, 10);
         panel.add(component, componentConstraints);
     }
 
