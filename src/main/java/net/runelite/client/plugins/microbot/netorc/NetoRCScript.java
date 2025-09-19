@@ -490,7 +490,8 @@ public class NetoRCScript extends Script {
         if (Rs2Inventory.contains(mythCape)) {
 
             Rs2Inventory.interact(mythCape, "Teleport");
-            sleepGaussian(500, 200); // Sleep here to let cape animate
+            sleep(600);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
 
             sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
             GameObject statue = Rs2GameObject.getGameObject(31626);
