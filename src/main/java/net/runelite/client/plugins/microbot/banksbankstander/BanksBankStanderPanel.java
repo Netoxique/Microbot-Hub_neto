@@ -1,6 +1,5 @@
 package net.runelite.client.plugins.microbot.banksbankstander;
 
-import net.runelite.client.plugins.microbot.util.inventory.InteractOrder;
 import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
@@ -41,7 +40,7 @@ public class BanksBankStanderPanel extends PluginPanel
     private final JButton saveButton;
     private final JButton deleteButton;
 
-    private final JComboBox<InteractOrder> interactOrderCombo;
+    private final JComboBox<BanksInteractOrder> interactOrderCombo;
     private final JTextField firstItemField;
     private final JSpinner firstItemQuantitySpinner;
     private final JTextField secondItemField;
@@ -84,7 +83,7 @@ public class BanksBankStanderPanel extends PluginPanel
         deleteButton = new JButton("Delete");
         configureDangerButton(deleteButton);
 
-        interactOrderCombo = new JComboBox<>(InteractOrder.values());
+        interactOrderCombo = new JComboBox<>(BanksInteractOrder.values());
         firstItemField = new JTextField();
         firstItemField.setColumns(12);
         firstItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(1, 0, 28, 1));
@@ -368,7 +367,7 @@ public class BanksBankStanderPanel extends PluginPanel
     {
         BanksBankStanderState state = new BanksBankStanderState();
         state.setName(name);
-        state.setInteractOrder((InteractOrder) Objects.requireNonNullElse(interactOrderCombo.getSelectedItem(), InteractOrder.STANDARD));
+        state.setInteractOrder((BanksInteractOrder) Objects.requireNonNullElse(interactOrderCombo.getSelectedItem(), BanksInteractOrder.STANDARD));
         state.setFirstItemIdentifier(firstItemField.getText().trim());
         state.setFirstItemQuantity(((Number) firstItemQuantitySpinner.getValue()).intValue());
         state.setSecondItemIdentifier(secondItemField.getText().trim());
@@ -396,7 +395,7 @@ public class BanksBankStanderPanel extends PluginPanel
             return;
         }
 
-        interactOrderCombo.setSelectedItem(state.getInteractOrder() != null ? state.getInteractOrder() : InteractOrder.STANDARD);
+        interactOrderCombo.setSelectedItem(state.getInteractOrder() != null ? state.getInteractOrder() : BanksInteractOrder.STANDARD);
         firstItemField.setText(nonNull(state.getFirstItemIdentifier()));
         firstItemQuantitySpinner.setValue(state.getFirstItemQuantity());
         secondItemField.setText(nonNull(state.getSecondItemIdentifier()));

@@ -2,7 +2,6 @@ package net.runelite.client.plugins.microbot.banksbankstander;
 
 import lombok.Data;
 import net.runelite.client.config.ConfigManager;
-import net.runelite.client.plugins.microbot.util.inventory.InteractOrder;
 
 import java.util.Objects;
 
@@ -10,7 +9,7 @@ import java.util.Objects;
 public class BanksBankStanderState
 {
     private String name;
-    private InteractOrder interactOrder;
+    private BanksInteractOrder interactOrder;
     private String firstItemIdentifier;
     private int firstItemQuantity;
     private String secondItemIdentifier;
@@ -55,7 +54,7 @@ public class BanksBankStanderState
 
     public void apply(ConfigManager configManager)
     {
-        InteractOrder order = interactOrder != null ? interactOrder : InteractOrder.STANDARD;
+        BanksInteractOrder order = interactOrder != null ? interactOrder : BanksInteractOrder.STANDARD;
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "interactOrder", order);
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "First Item", sanitize(firstItemIdentifier));
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "First Item Quantity", firstItemQuantity);

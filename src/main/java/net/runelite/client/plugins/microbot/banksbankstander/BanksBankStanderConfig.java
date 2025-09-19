@@ -1,7 +1,6 @@
 package net.runelite.client.plugins.microbot.banksbankstander;
 
 import net.runelite.client.config.*;
-import net.runelite.client.plugins.microbot.util.inventory.InteractOrder;
 
 @ConfigGroup("BankStander")
 @ConfigInformation("This Script will perform bank standing activities. <br /> "
@@ -49,8 +48,8 @@ public interface BanksBankStanderConfig extends Config {
             position = 0,
             section = itemSection
     )
-    default InteractOrder interactOrder() {
-        return InteractOrder.STANDARD;
+    default BanksInteractOrder interactOrder() {
+        return BanksInteractOrder.STANDARD;
     }
 
     @ConfigItem(

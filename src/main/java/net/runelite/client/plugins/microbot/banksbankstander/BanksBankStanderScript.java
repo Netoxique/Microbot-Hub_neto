@@ -49,6 +49,7 @@ public class BanksBankStanderScript extends Script {
     private long timeValue;
     private int randomNum;
     List<Rs2ItemModel> inventorySlots;
+    private BanksInteractOrder interactOrderSetting;
 
     public boolean run(BanksBankStanderConfig config) {
         this.config = config; // Initialize the config object before accessing its parameters
@@ -70,7 +71,8 @@ public class BanksBankStanderScript extends Script {
         thirdItemId = TryParseInt(config.thirdItemIdentifier());
         fourthItemId = TryParseInt(config.fourthItemIdentifier());
 
-        inventorySlots = calculateInteractOrder(new ArrayList<>(Rs2Inventory.items().collect(Collectors.toList())), config.interactOrder());
+        interactOrderSetting = config.interactOrder();
+        inventorySlots = buildInventorySlots(interactOrderSetting);
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             if (!Microbot.isLoggedIn()) return;
@@ -204,6 +206,12 @@ public class BanksBankStanderScript extends Script {
             }// temp change from 2400 to 3000 as chiseling diamond takes longer time
         }
 
+        BanksInteractOrder currentOrder = config.interactOrder();
+        if (currentOrder != interactOrderSetting) {
+            interactOrderSetting = currentOrder;
+            inventorySlots = buildInventorySlots(interactOrderSetting);
+        }
+
         if (currentStatus != CurrentStatus.COMBINE_ITEMS) {
             currentStatus = CurrentStatus.COMBINE_ITEMS;
         }
@@ -267,6 +275,24 @@ public class BanksBankStanderScript extends Script {
     }
 
     public void interactOrder(Integer itemId) {
+        BanksInteractOrder selectedOrder = interactOrderSetting != null ? interactOrderSetting : BanksInteractOrder.STANDARD;
+
+        if (selectedOrder == BanksInteractOrder.LAST_AND_FIRST && config.secondItemQuantity() > 0) {
+            if (Objects.equals(itemId, firstItemId)) {
+                Rs2ItemModel lastFirstItem = findLastItem(firstItemId, config.firstItemIdentifier());
+                if (lastFirstItem != null) {
+                    Rs2Inventory.interact(lastFirstItem, config.menu());
+                    return;
+                }
+            } else if (Objects.equals(itemId, secondItemId)) {
+                Rs2ItemModel firstSecondItem = findFirstItem(secondItemId, config.secondItemIdentifier());
+                if (firstSecondItem != null) {
+                    Rs2Inventory.interact(firstSecondItem, config.menu());
+                    return;
+                }
+            }
+        }
+
         if (itemId == null) return;
         if (secondItemId == null && thirdItemId == null && fourthItemId == null && Rs2Inventory.hasItemAmount(itemId, config.firstItemQuantity())) {
             //Process inventory quickly (cleaning herbs)
@@ -279,6 +305,54 @@ public class BanksBankStanderScript extends Script {
         } else {
             Rs2Inventory.interact(itemId, config.menu());
         }
+    }
+
+    private List<Rs2ItemModel> buildInventorySlots(BanksInteractOrder order) {
+        BanksInteractOrder effectiveOrder = order != null ? order : BanksInteractOrder.STANDARD;
+        List<Rs2ItemModel> items = new ArrayList<>(Rs2Inventory.items().collect(Collectors.toList()));
+        return effectiveOrder.getInteractOrder()
+                .map(value -> calculateInteractOrder(new ArrayList<>(items), value))
+                .orElse(items);
+    }
+
+    private Rs2ItemModel findLastItem(Integer itemId, String fallbackIdentifier) {
+        if (itemId != null) {
+            Rs2ItemModel lastById = Rs2Inventory.getLast(itemId);
+            if (lastById != null) {
+                return lastById;
+            }
+        }
+
+        if (fallbackIdentifier == null || fallbackIdentifier.isBlank()) {
+            return null;
+        }
+
+        String search = fallbackIdentifier.trim();
+        return Rs2Inventory.items()
+                .filter(Objects::nonNull)
+                .filter(item -> search.equalsIgnoreCase(item.getName()))
+                .reduce((first, second) -> second)
+                .orElse(null);
+    }
+
+    private Rs2ItemModel findFirstItem(Integer itemId, String fallbackIdentifier) {
+        if (itemId != null) {
+            Rs2ItemModel firstById = Rs2Inventory.get(itemId);
+            if (firstById != null) {
+                return firstById;
+            }
+        }
+
+        if (fallbackIdentifier == null || fallbackIdentifier.isBlank()) {
+            return null;
+        }
+
+        String search = fallbackIdentifier.trim();
+        return Rs2Inventory.items()
+                .filter(Objects::nonNull)
+                .filter(item -> search.equalsIgnoreCase(item.getName()))
+                .findFirst()
+                .orElse(null);
     }
 
     private int calculateSleepDuration(double multiplier) {
