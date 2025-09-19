@@ -1,5 +1,8 @@
 package net.runelite.client.plugins.microbot.banksbankstander;
 
+import com.google.common.base.Strings;
+import com.google.gson.Gson;
+import com.google.gson.reflect.TypeToken;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.events.ItemContainerChanged;
@@ -12,11 +15,21 @@ import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.NavigationButton;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.util.ImageUtil;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.awt.image.BufferedImage;
+import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collection;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.Objects;
 
 @PluginDescriptor(
         name = PluginDescriptor.Bank + "Bank's BankStander",
@@ -32,9 +45,25 @@ import java.util.Arrays;
 )
 @Slf4j
 public class BanksBankStanderPlugin extends Plugin {
-    public final static String version = "2.1.0";
+    public static final String version = "2.1.0";
+    static final String CONFIG_GROUP = "BankStander";
+    private static final String SAVED_STATES_KEY = "savedStates";
+    private static final String LAST_STATE_KEY = "lastState";
+    private static final Type SAVED_STATES_TYPE = new TypeToken<LinkedHashMap<String, BanksBankStanderState>>() {
+    }.getType();
+
+    private final Gson gson = new Gson();
+    private final Map<String, BanksBankStanderState> savedStates = new LinkedHashMap<>();
+
+    private BanksBankStanderPanel panel;
+    private NavigationButton navButton;
+    private String lastSelectedState;
+
     @Inject
     private BanksBankStanderConfig config;
+
+    @Inject
+    private ConfigManager configManager;
 
     @Provides
     BanksBankStanderConfig provideConfig(ConfigManager configManager) {
@@ -47,6 +76,9 @@ public class BanksBankStanderPlugin extends Plugin {
     private BanksBankStanderOverlay banksBankStanderOverlay;
 
     @Inject
+    private ClientToolbar clientToolbar;
+
+    @Inject
     BanksBankStanderScript banksBankStanderScript;
 
 
@@ -55,6 +87,17 @@ public class BanksBankStanderPlugin extends Plugin {
         if (overlayManager != null) {
             overlayManager.add(banksBankStanderOverlay);
         }
+        loadSavedStates();
+
+        BanksBankStanderState initialState = !Strings.isNullOrEmpty(lastSelectedState)
+                ? savedStates.get(lastSelectedState)
+                : null;
+
+        if (initialState != null) {
+            applyState(initialState, false);
+        }
+
+        addPanel();
         banksBankStanderScript.run(config);
     }
     ///* Added by Storm
@@ -97,5 +140,156 @@ public class BanksBankStanderPlugin extends Plugin {
     protected void shutDown() {
         banksBankStanderScript.shutdown();
         overlayManager.remove(banksBankStanderOverlay);
+        removePanel();
+        savedStates.clear();
+        lastSelectedState = null;
+    }
+
+    private void addPanel() {
+        if (clientToolbar == null || panel != null) {
+            return;
+        }
+
+        panel = new BanksBankStanderPanel(this);
+
+        final BufferedImage icon = ImageUtil.loadImageResource(BanksBankStanderPlugin.class, "icon.png");
+        navButton = NavigationButton.builder()
+                .tooltip("Bank's BankStander")
+                .icon(icon)
+                .priority(5)
+                .panel(panel)
+                .build();
+
+        clientToolbar.addNavigation(navButton);
+    }
+
+    private void removePanel() {
+        if (clientToolbar != null && navButton != null) {
+            clientToolbar.removeNavigation(navButton);
+            navButton = null;
+        }
+        panel = null;
+    }
+
+    private void loadSavedStates() {
+        savedStates.clear();
+
+        if (configManager == null) {
+            return;
+        }
+
+        try {
+            String raw = configManager.getConfiguration(CONFIG_GROUP, SAVED_STATES_KEY);
+            if (!Strings.isNullOrEmpty(raw)) {
+                Map<String, BanksBankStanderState> loaded = gson.fromJson(raw, SAVED_STATES_TYPE);
+                if (loaded != null) {
+                    loaded.forEach((name, state) -> {
+                        if (state != null) {
+                            state.setName(name);
+                            savedStates.put(name, state);
+                        }
+                    });
+                }
+            }
+        } catch (Exception ex) {
+            log.warn("Failed to load saved BankStander states", ex);
+        }
+
+        String storedState = configManager.getConfiguration(CONFIG_GROUP, LAST_STATE_KEY);
+        if (!Strings.isNullOrEmpty(storedState) && savedStates.containsKey(storedState)) {
+            lastSelectedState = storedState;
+        } else {
+            lastSelectedState = null;
+        }
+    }
+
+    private void persistSavedStates() {
+        if (configManager == null) {
+            return;
+        }
+
+        if (savedStates.isEmpty()) {
+            configManager.unsetConfiguration(CONFIG_GROUP, SAVED_STATES_KEY);
+            return;
+        }
+
+        String json = gson.toJson(savedStates, SAVED_STATES_TYPE);
+        configManager.setConfiguration(CONFIG_GROUP, SAVED_STATES_KEY, json);
+    }
+
+    public void saveState(String name, BanksBankStanderState state) {
+        if (Strings.isNullOrEmpty(name) || state == null) {
+            return;
+        }
+
+        state.setName(name);
+        savedStates.put(name, state);
+        persistSavedStates();
+        setLastSelectedState(name);
+        applyState(state, true);
+    }
+
+    public void deleteState(String name) {
+        if (Strings.isNullOrEmpty(name)) {
+            return;
+        }
+
+        BanksBankStanderState removed = savedStates.remove(name);
+        if (removed != null) {
+            persistSavedStates();
+            if (Objects.equals(lastSelectedState, name)) {
+                setLastSelectedState(null);
+            }
+        }
+    }
+
+    public void applyState(BanksBankStanderState state, boolean restartScript) {
+        if (state == null || configManager == null) {
+            return;
+        }
+
+        state.apply(configManager);
+
+        if (restartScript) {
+            restartScript();
+        }
+    }
+
+    private void restartScript() {
+        if (banksBankStanderScript.isRunning()) {
+            banksBankStanderScript.shutdown();
+        }
+        banksBankStanderScript.run(config);
+    }
+
+    public Collection<String> getSavedStateNames() {
+        return new ArrayList<>(savedStates.keySet());
+    }
+
+    public BanksBankStanderState getSavedState(String name) {
+        return savedStates.get(name);
+    }
+
+    public BanksBankStanderState getCurrentConfigState() {
+        return BanksBankStanderState.fromConfig(config);
+    }
+
+    public String getLastSelectedState() {
+        return lastSelectedState;
+    }
+
+    public void setLastSelectedState(String name) {
+        if (configManager == null) {
+            lastSelectedState = name;
+            return;
+        }
+
+        if (Strings.isNullOrEmpty(name)) {
+            lastSelectedState = null;
+            configManager.unsetConfiguration(CONFIG_GROUP, LAST_STATE_KEY);
+        } else {
+            lastSelectedState = name;
+            configManager.setConfiguration(CONFIG_GROUP, LAST_STATE_KEY, name);
+        }
     }
 }
