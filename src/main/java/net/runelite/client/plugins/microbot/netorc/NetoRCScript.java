@@ -181,7 +181,7 @@ public class NetoRCScript extends Script {
 
     private void checkPouches() {
         Rs2Inventory.interact(colossalPouch, "Check");
-        sleepGaussian(900, 200);
+        sleepGaussian(600, 200);
     }
 
     private void handleBanking() {
@@ -203,7 +203,7 @@ public class NetoRCScript extends Script {
 
 		if (Rs2Inventory.hasDegradedPouch()) {
 			Rs2Magic.repairPouchesWithLunar();
-			sleepGaussian(900, 200);
+			sleepGaussian(600, 200);
 			return;
 		}
 
@@ -220,7 +220,7 @@ public class NetoRCScript extends Script {
             handleFeroxRunEnergy();
         }
 
-        while (!Rs2Bank.isOpen() && isRunning() &&
+        while (!Rs2Bank.isOpen() && isRunning() && Rs2Bank.isNearBank(26) &&
                 (!Rs2Inventory.allPouchesFull()
                         || !Rs2Inventory.contains(colossalPouch)
                         || !Rs2Inventory.contains(pureEss))) {
@@ -232,7 +232,7 @@ public class NetoRCScript extends Script {
 
         if (config.runeType() == RuneType.WRATH) {
             handleWrathReqEquip();
-            sleepGaussian(900, 200);
+            sleepGaussian(600, 200);
         }
 
         if (config.runeType() == RuneType.BLOOD) {
@@ -340,15 +340,16 @@ public class NetoRCScript extends Script {
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
                     Rs2Bank.depositAll(bloodRune);
-                    sleepGaussian(500, 200);
+                    sleepGaussian(300, 100);
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
                     Rs2Bank.depositAll(wrathRune);
-                    sleepGaussian(500, 200);
+                    sleepGaussian(300, 100);
                 }
                 Rs2Bank.withdrawAll(pureEss);
+                sleepUntil(Rs2Inventory::isFull);
                 Rs2Inventory.fillPouches();
-                sleepGaussian(900, 200);
+                sleepUntilOnClientThread(() -> !Rs2Inventory.isFull());
             }
             if (!Rs2Inventory.isFull()) {
                 Rs2Bank.withdrawAll(pureEss);
@@ -488,33 +489,47 @@ public class NetoRCScript extends Script {
         if (Rs2Inventory.contains(mythCape)) {
 
             Rs2Inventory.interact(mythCape, "Teleport");
+            sleep(600);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
 
             sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
-            sleepGaussian(600, 200);
             GameObject statue = Rs2GameObject.getGameObject(31626);
 			if (statue != null && !Rs2Player.isAnimating()) {
+                sleepGaussian(600, 200);
 				Rs2GameObject.interact(statue, "Teleport");
 			}
+            else {
+                return;
+            }
 
             sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
-            sleepGaussian(600, 200);
             GameObject cave = Rs2GameObject.getGameObject(31807);
             if (cave != null && !Rs2Player.isAnimating()) {
+                sleepGaussian(600, 200);
                 Rs2GameObject.interact(cave, "Enter");
+            }
+            else {
+                return;
             }
 
             sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
-            sleepGaussian(600, 200);
             GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
             if (ruins != null && !Rs2Player.isAnimating()) {
+                sleepGaussian(600, 200);
                 Rs2GameObject.interact(ruins, "Enter");
+            }
+            else {
+                return;
             }
 
             sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
-            sleepGaussian(600, 200);
             GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
             if (altar != null && !Rs2Player.isAnimating()) {
+                sleepGaussian(600, 200);
                 Rs2GameObject.interact(altar, "Craft-rune");
+            }
+            else {
+                return;
             }
 
             state = State.CRAFTING;
@@ -765,8 +780,17 @@ public class NetoRCScript extends Script {
         while (!Rs2Inventory.allPouchesEmpty() && isRunning()) {
             Microbot.log("Pouches are not empty. Crafting more");
             Rs2Inventory.emptyPouches();
-            Rs2Inventory.waitForInventoryChanges(600);
-            sleepGaussian(700, 200);
+
+//            // Determine the altar to interact with and hover the mouse over it
+//            GameObject altar = config.runeType() == RuneType.BLOOD
+//                    ? Rs2GameObject.getGameObject(bloodAltar)
+//                    : Rs2GameObject.getGameObject(wrathAltar);
+//            if (altar != null) {
+//                Rs2GameObject.hoverOverObject(altar);
+//            }
+
+            sleepUntil(() -> Rs2Inventory.contains(pureEss));
+
             if (config.runeType() == RuneType.BLOOD) {
                 Rs2GameObject.interact(bloodAltar, "Craft-rune");
             }
@@ -779,10 +803,22 @@ public class NetoRCScript extends Script {
     }
 
     private void handleBankTeleport() {
+        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= 15 || Rs2Player.getHealthPercentage() <= 20);
+
+        if (!needRefill) {
+            for (int craftingCapeId : Teleports.CRAFTING_CAPE.getItemIds()) {
+                if (Rs2Inventory.contains(craftingCapeId)) {
+                    Microbot.log("Using: " + Teleports.CRAFTING_CAPE.getName());
+                    Rs2Inventory.interact(craftingCapeId, Teleports.CRAFTING_CAPE.getInteraction());
+                    sleepUntil(() -> Teleports.CRAFTING_CAPE.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
+                    sleepGaussian(600, 200);
+                    return;
+                }
+            }
+        }
+
         Rs2Tab.switchToEquipmentTab();
         sleepGaussian(1300, 200);
-
-        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= 15 || Rs2Player.getHealthPercentage() <= 20);
         List<Teleports> bankTeleport = needRefill
                 ? Arrays.asList(
                 Teleports.FEROX_ENCLAVE,
@@ -801,11 +837,11 @@ public class NetoRCScript extends Script {
                     Microbot.log("Using: " + teleport.getName());
                     Rs2Equipment.interact(bankTeleportsId, teleport.getInteraction());
                     sleepUntil(() -> teleport.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
-                    sleepGaussian(1100, 200);
-					if (teleport == Teleports.FEROX_ENCLAVE) {
-						forceDrinkAtFerox = true;
-						handleFeroxRunEnergy();
-					}
+                    sleepGaussian(600, 200);
+                    if (teleport == Teleports.FEROX_ENCLAVE) {
+                        forceDrinkAtFerox = true;
+                        handleFeroxRunEnergy();
+                    }
                     teleportUsed = true;
                     break;
                 }
