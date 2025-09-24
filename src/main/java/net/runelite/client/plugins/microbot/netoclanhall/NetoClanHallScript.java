@@ -44,6 +44,7 @@ public class NetoClanHallScript extends Script
                 return;
             }
 
+
             TileObject clanHallPortal = Rs2GameObject.getGameObject(CLAN_HALL_PORTAL_ID);
             if (clanHallPortal == null)
             {
