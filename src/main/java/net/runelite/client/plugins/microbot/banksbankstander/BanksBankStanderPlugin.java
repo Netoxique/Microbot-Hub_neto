@@ -58,6 +58,8 @@ public class BanksBankStanderPlugin extends Plugin {
     private BanksBankStanderPanel panel;
     private NavigationButton navButton;
     private String lastSelectedState;
+    private volatile boolean overlayActive;
+    private volatile long overlayHideAt;
 
     @Inject
     private BanksBankStanderConfig config;
@@ -138,6 +140,8 @@ public class BanksBankStanderPlugin extends Plugin {
     //*/ Added by Storm
     protected void shutDown() {
         stopScript();
+        overlayActive = false;
+        overlayHideAt = 0;
         overlayManager.remove(banksBankStanderOverlay);
         removePanel();
         savedStates.clear();
@@ -294,6 +298,33 @@ public class BanksBankStanderPlugin extends Plugin {
         }
     }
 
+    public boolean shouldDisplayOverlay()
+    {
+        if (!overlayActive)
+        {
+            return false;
+        }
+
+        if (isScriptRunning())
+        {
+            return true;
+        }
+
+        if (overlayHideAt == 0L)
+        {
+            overlayHideAt = System.currentTimeMillis() + 5000L;
+        }
+
+        if (System.currentTimeMillis() < overlayHideAt)
+        {
+            return true;
+        }
+
+        overlayActive = false;
+        overlayHideAt = 0L;
+        return false;
+    }
+
     public void startScript()
     {
         if (banksBankStanderScript == null || banksBankStanderScript.isRunning())
@@ -302,6 +333,8 @@ public class BanksBankStanderPlugin extends Plugin {
         }
 
         banksBankStanderScript.run(config);
+        overlayActive = true;
+        overlayHideAt = 0L;
         if (panel != null)
         {
             panel.updateStartStopButton();
@@ -316,6 +349,8 @@ public class BanksBankStanderPlugin extends Plugin {
         }
 
         banksBankStanderScript.shutdown();
+        overlayActive = true;
+        overlayHideAt = System.currentTimeMillis() + 5000L;
         if (panel != null)
         {
             panel.updateStartStopButton();

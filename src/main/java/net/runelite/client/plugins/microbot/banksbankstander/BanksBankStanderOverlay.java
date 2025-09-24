@@ -11,11 +11,13 @@ import javax.inject.Inject;
 import java.awt.*;
 
 public class BanksBankStanderOverlay extends OverlayPanel {
+    private final BanksBankStanderPlugin plugin;
     private final BanksBankStanderConfig config;
 
     @Inject
     BanksBankStanderOverlay(BanksBankStanderPlugin plugin, BanksBankStanderConfig config) {
         super(plugin);
+        this.plugin = plugin;
         this.config = config;
         setPosition(OverlayPosition.TOP_LEFT);
         setNaughty();
@@ -23,7 +25,13 @@ public class BanksBankStanderOverlay extends OverlayPanel {
 
     @Override
     public Dimension render(Graphics2D graphics) {
+        if (!plugin.shouldDisplayOverlay())
+        {
+            return null;
+        }
+
         try {
+            panelComponent.getChildren().clear();
             panelComponent.setPreferredSize(new Dimension(400, 300));
             panelComponent.getChildren().add(TitleComponent.builder()
                     .text("Bank's BankStander V" + BanksBankStanderPlugin.version)
