@@ -264,7 +264,6 @@ public class NetoRCScript extends Script {
                 }
             }
         }
-
         int runecraftLevel = client.getRealSkillLevel(Skill.RUNECRAFT);
         if (runecraftLevel >= 99) {
             if (!Rs2Equipment.isWearing("Runecraft cape")) {
