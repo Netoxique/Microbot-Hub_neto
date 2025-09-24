@@ -100,8 +100,8 @@ public class BanksBankStanderPanel extends PluginPanel
         fourthItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 27, 1));
 
         pauseCheckbox = createCheckbox("Pause between states");
-        promptCheckbox = createCheckbox("Needs prompt entry");
-        waitForProcessCheckbox = createCheckbox("Wait for process");
+        promptCheckbox = createCheckbox("Prompt?");
+        waitForProcessCheckbox = createCheckbox("Wait for process?");
         depositAllCheckbox = createCheckbox("Deposit all");
         amuletCheckbox = createCheckbox("Wear amulet of chemistry");
 
