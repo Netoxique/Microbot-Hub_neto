@@ -15,10 +15,11 @@ import net.runelite.client.plugins.microbot.util.mouse.VirtualMouse;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 @PluginDescriptor(
-        name = "Lunar Plank Make (Neto)",
+        name = "Neto Lunar Plank Make",
         description = "lunar plank maker",
         tags = {"magic", "moneymaking"},
-        enabledByDefault = false
+        enabledByDefault = false,
+        minClientVersion = "2.0.0"
 )
 @Slf4j
 public class LunarPlankMakePlugin extends Plugin {
