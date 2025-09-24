@@ -264,16 +264,15 @@ public class NetoRCScript extends Script {
                 }
             }
         }
-
-        int runecraftLevel = Microbot.getClient().getRealSkillLevel(Skill.RUNECRAFT);
-        if (runecraftLevel <= 98) {
-            if (!Rs2Inventory.hasRunePouch()) {
-                Rs2Bank.withdrawRunePouch();
+        int runecraftLevel = client.getRealSkillLevel(Skill.RUNECRAFT);
+        if (runecraftLevel >= 99) {
+            if (!Rs2Equipment.isWearing("Runecraft cape")) {
+                Rs2Bank.withdrawAndEquip("Runecraft cape");
                 sleepGaussian(700, 200);
             }
         } else {
-            if (!Rs2Equipment.isWearing("runecraft cape")) {
-                Rs2Bank.withdrawAndEquip("runecraft cape");
+            if (!Rs2Inventory.hasRunePouch()) {
+                Rs2Bank.withdrawRunePouch();
                 sleepGaussian(700, 200);
             }
         }
@@ -791,6 +790,7 @@ public class NetoRCScript extends Script {
 //            }
 
             sleepUntil(() -> Rs2Inventory.contains(pureEss));
+
             if (config.runeType() == RuneType.BLOOD) {
                 Rs2GameObject.interact(bloodAltar, "Craft-rune");
             }
@@ -819,7 +819,6 @@ public class NetoRCScript extends Script {
 
         Rs2Tab.switchToEquipmentTab();
         sleepGaussian(1300, 200);
-
         List<Teleports> bankTeleport = needRefill
                 ? Arrays.asList(
                 Teleports.FEROX_ENCLAVE,
