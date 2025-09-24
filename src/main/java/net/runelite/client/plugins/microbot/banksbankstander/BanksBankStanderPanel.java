@@ -6,6 +6,7 @@ import net.runelite.client.ui.PluginPanel;
 
 import javax.swing.BorderFactory;
 import javax.swing.Box;
+import javax.swing.BoxLayout;
 import javax.swing.JButton;
 import javax.swing.JCheckBox;
 import javax.swing.JComboBox;
@@ -39,6 +40,7 @@ public class BanksBankStanderPanel extends PluginPanel
     private final JTextComponent stateDropdownEditor;
     private final JButton saveButton;
     private final JButton deleteButton;
+    private final JButton startStopButton;
 
     private final JComboBox<BanksInteractOrder> interactOrderCombo;
     private final JTextField firstItemField;
@@ -110,11 +112,15 @@ public class BanksBankStanderPanel extends PluginPanel
         sleepMaxSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 30000, 1));
         sleepTargetSpinner = new JSpinner(new SpinnerNumberModel(0, 0, 30000, 1));
 
+        startStopButton = new JButton();
+        configureStartStopButton(startStopButton);
+
         add(buildStateSelectionPanel(), BorderLayout.NORTH);
         add(buildContentPanel(), BorderLayout.CENTER);
 
         initializeListeners();
         loadInitialState();
+        updateStartStopButton();
     }
 
     private void initializeListeners()
@@ -122,6 +128,7 @@ public class BanksBankStanderPanel extends PluginPanel
         stateDropdown.addActionListener(e -> onStateSelected());
         saveButton.addActionListener(e -> onSave());
         deleteButton.addActionListener(e -> onDelete());
+        startStopButton.addActionListener(e -> onStartStop());
     }
 
     private Component buildStateSelectionPanel()
@@ -139,7 +146,15 @@ public class BanksBankStanderPanel extends PluginPanel
         buttonRow.setOpaque(false);
         buttonRow.add(saveButton);
         buttonRow.add(deleteButton);
-        container.add(buttonRow, BorderLayout.SOUTH);
+
+        JPanel bottomButtons = new JPanel();
+        bottomButtons.setOpaque(false);
+        bottomButtons.setLayout(new BoxLayout(bottomButtons, BoxLayout.Y_AXIS));
+        bottomButtons.add(buttonRow);
+        bottomButtons.add(Box.createVerticalStrut(5));
+        bottomButtons.add(startStopButton);
+
+        container.add(bottomButtons, BorderLayout.SOUTH);
 
         return container;
     }
@@ -363,6 +378,20 @@ public class BanksBankStanderPanel extends PluginPanel
         }
     }
 
+    private void onStartStop()
+    {
+        if (plugin.isScriptRunning())
+        {
+            plugin.stopScript();
+        }
+        else
+        {
+            plugin.startScript();
+        }
+
+        updateStartStopButton();
+    }
+
     private BanksBankStanderState buildStateFromFields(String name)
     {
         BanksBankStanderState state = new BanksBankStanderState();
@@ -453,6 +482,32 @@ public class BanksBankStanderPanel extends PluginPanel
         button.setBackground(new Color(200, 55, 55));
         button.setForeground(Color.WHITE);
         button.setFocusPainted(false);
+    }
+
+    private void configureStartStopButton(JButton button)
+    {
+        button.setFont(FontManager.getRunescapeBoldFont());
+        button.setFocusPainted(false);
+        button.setForeground(Color.WHITE);
+        button.setOpaque(true);
+        button.setAlignmentX(Component.CENTER_ALIGNMENT);
+    }
+
+    public void updateStartStopButton()
+    {
+        boolean running = plugin.isScriptRunning();
+        if (running)
+        {
+            startStopButton.setText("Stop");
+            startStopButton.setBackground(new Color(200, 55, 55));
+        }
+        else
+        {
+            startStopButton.setText("Start");
+            startStopButton.setBackground(new Color(46, 204, 113));
+        }
+
+        startStopButton.setMaximumSize(new Dimension(Integer.MAX_VALUE, startStopButton.getPreferredSize().height));
     }
 
     private static String nonNull(String value)

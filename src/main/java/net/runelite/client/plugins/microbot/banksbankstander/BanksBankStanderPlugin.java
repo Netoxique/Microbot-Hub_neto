@@ -98,7 +98,6 @@ public class BanksBankStanderPlugin extends Plugin {
         }
 
         addPanel();
-        banksBankStanderScript.run(config);
     }
     ///* Added by Storm
     @Subscribe
@@ -138,7 +137,7 @@ public class BanksBankStanderPlugin extends Plugin {
     }
     //*/ Added by Storm
     protected void shutDown() {
-        banksBankStanderScript.shutdown();
+        stopScript();
         overlayManager.remove(banksBankStanderOverlay);
         removePanel();
         savedStates.clear();
@@ -256,9 +255,11 @@ public class BanksBankStanderPlugin extends Plugin {
     }
 
     private void restartScript() {
-        if (banksBankStanderScript.isRunning()) {
-            banksBankStanderScript.shutdown();
+        if (!isScriptRunning()) {
+            return;
         }
+
+        banksBankStanderScript.shutdown();
         banksBankStanderScript.run(config);
     }
 
@@ -291,5 +292,38 @@ public class BanksBankStanderPlugin extends Plugin {
             lastSelectedState = name;
             configManager.setConfiguration(CONFIG_GROUP, LAST_STATE_KEY, name);
         }
+    }
+
+    public void startScript()
+    {
+        if (banksBankStanderScript == null || banksBankStanderScript.isRunning())
+        {
+            return;
+        }
+
+        banksBankStanderScript.run(config);
+        if (panel != null)
+        {
+            panel.updateStartStopButton();
+        }
+    }
+
+    public void stopScript()
+    {
+        if (banksBankStanderScript == null || !banksBankStanderScript.isRunning())
+        {
+            return;
+        }
+
+        banksBankStanderScript.shutdown();
+        if (panel != null)
+        {
+            panel.updateStartStopButton();
+        }
+    }
+
+    public boolean isScriptRunning()
+    {
+        return banksBankStanderScript != null && banksBankStanderScript.isRunning();
     }
 }
