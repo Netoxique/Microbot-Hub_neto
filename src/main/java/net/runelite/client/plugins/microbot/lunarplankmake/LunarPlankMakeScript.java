@@ -4,6 +4,9 @@ import java.util.Map;
 import java.util.concurrent.TimeUnit;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
@@ -72,9 +75,14 @@ public class LunarPlankMakeScript extends Script {
         useRandomDelay = config.useRandomDelay();
         maxRandomDelay = config.maxRandomDelay();
 
+        Rs2Antiban.resetAntibanSettings();
+        Rs2Antiban.antibanSetupTemplates.applyCookingSetup();
+        Rs2Antiban.setActivity(Activity.CASTING_PLANK_MAKE);
+        Rs2AntibanSettings.simulateMistakes = false;
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
-                if (!super.run() || !Microbot.isLoggedIn()) return;
+                if (!super.run() || !isRunning() || !Microbot.isLoggedIn()) return;
                 switch (currentState) {
                     case PLANKING:
                         plankItems(config);
@@ -109,7 +117,13 @@ public class LunarPlankMakeScript extends Script {
             Rs2Inventory.interact(config.ITEM().getName());
 
             // Wait for the inventory count to change indicating Planks have been made
-            if (waitForInventoryChange(config.ITEM().getFinished(), initialPlankCount)) {
+            boolean inventoryChanged = waitForInventoryChange(config.ITEM().getFinished(), initialPlankCount);
+
+            if (!isRunning()) {
+                return;
+            }
+
+            if (inventoryChanged) {
                 int plankMadeThisAction = Rs2Inventory.count(config.ITEM().getFinished()) - initialPlankCount;
                 plankMade += plankMadeThisAction;
                 addDelay();
@@ -125,6 +139,9 @@ public class LunarPlankMakeScript extends Script {
     private boolean waitForInventoryChange(String itemName, int initialCount) {
         long start = System.currentTimeMillis();
         while (Rs2Inventory.count(itemName) == initialCount) {
+            if (!isRunning()) {
+                return false;
+            }
             if (System.currentTimeMillis() - start > 3000) { // 3-second timeout
                 return false;
             }
