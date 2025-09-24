@@ -4,7 +4,6 @@ import net.runelite.client.ui.ColorScheme;
 import net.runelite.client.ui.FontManager;
 import net.runelite.client.ui.PluginPanel;
 
-import javax.swing.BorderFactory;
 import javax.swing.Box;
 import javax.swing.BoxLayout;
 import javax.swing.JButton;
@@ -19,7 +18,6 @@ import javax.swing.JSpinner;
 import javax.swing.JTextField;
 import javax.swing.SpinnerNumberModel;
 import javax.swing.border.EmptyBorder;
-import javax.swing.border.TitledBorder;
 import javax.swing.text.JTextComponent;
 import java.awt.BorderLayout;
 import java.awt.Color;
@@ -115,8 +113,7 @@ public class BanksBankStanderPanel extends PluginPanel
         startStopButton = new JButton();
         configureStartStopButton(startStopButton);
 
-        add(buildStateSelectionPanel(), BorderLayout.NORTH);
-        add(buildContentPanel(), BorderLayout.CENTER);
+        add(buildStateSelectionPanel(), BorderLayout.CENTER);
 
         initializeListeners();
         loadInitialState();
@@ -133,14 +130,17 @@ public class BanksBankStanderPanel extends PluginPanel
 
     private Component buildStateSelectionPanel()
     {
-        JPanel container = new JPanel(new BorderLayout(0, 5));
+        JPanel container = new JPanel(new BorderLayout(0, 10));
         container.setOpaque(false);
 
-        JLabel label = new JLabel("Saved states");
-        label.setForeground(Color.WHITE);
-        container.add(label, BorderLayout.NORTH);
+        JPanel stateControls = new JPanel(new BorderLayout(0, 5));
+        stateControls.setOpaque(false);
 
-        container.add(stateDropdown, BorderLayout.CENTER);
+        JLabel savedStatesLabel = new JLabel("Saved states");
+        savedStatesLabel.setForeground(Color.WHITE);
+        stateControls.add(savedStatesLabel, BorderLayout.NORTH);
+
+        stateControls.add(stateDropdown, BorderLayout.CENTER);
 
         JPanel buttonRow = new JPanel(new GridLayout(1, 2, 5, 0));
         buttonRow.setOpaque(false);
@@ -154,47 +154,40 @@ public class BanksBankStanderPanel extends PluginPanel
         bottomButtons.add(Box.createVerticalStrut(5));
         bottomButtons.add(startStopButton);
 
-        container.add(bottomButtons, BorderLayout.SOUTH);
+        stateControls.add(bottomButtons, BorderLayout.SOUTH);
 
-        return container;
-    }
+        container.add(stateControls, BorderLayout.NORTH);
 
-    private Component buildContentPanel()
-    {
-        JPanel content = new JPanel(new GridBagLayout());
-        content.setOpaque(false);
+        JPanel optionsPanel = new JPanel(new GridBagLayout());
+        optionsPanel.setOpaque(false);
 
         int row = 0;
 
-        JPanel itemPanel = createSectionPanel("Item Settings");
-        addFormRow(itemPanel, 0, "Interact Order", interactOrderCombo);
-        addFormRow(itemPanel, 1, "First Item", firstItemField);
-        addFormRow(itemPanel, 2, "First Item Quantity", firstItemQuantitySpinner);
-        addFormRow(itemPanel, 3, "Second Item", secondItemField);
-        addFormRow(itemPanel, 4, "Second Item Quantity", secondItemQuantitySpinner);
-        addFormRow(itemPanel, 5, "Third Item", thirdItemField);
-        addFormRow(itemPanel, 6, "Third Item Quantity", thirdItemQuantitySpinner);
-        addFormRow(itemPanel, 7, "Fourth Item", fourthItemField);
-        addFormRow(itemPanel, 8, "Fourth Item Quantity", fourthItemQuantitySpinner);
-        addSection(content, row++, itemPanel);
+        row = addSectionLabel(optionsPanel, row, "Item settings");
+        row = addFormRow(optionsPanel, row, "Interact Order", interactOrderCombo);
+        row = addFormRow(optionsPanel, row, "First Item", firstItemField);
+        row = addFormRow(optionsPanel, row, "First Item Quantity", firstItemQuantitySpinner);
+        row = addFormRow(optionsPanel, row, "Second Item", secondItemField);
+        row = addFormRow(optionsPanel, row, "Second Item Quantity", secondItemQuantitySpinner);
+        row = addFormRow(optionsPanel, row, "Third Item", thirdItemField);
+        row = addFormRow(optionsPanel, row, "Third Item Quantity", thirdItemQuantitySpinner);
+        row = addFormRow(optionsPanel, row, "Fourth Item", fourthItemField);
+        row = addFormRow(optionsPanel, row, "Fourth Item Quantity", fourthItemQuantitySpinner);
 
-        JPanel togglePanel = createSectionPanel("Toggles");
-        addCheckboxRow(togglePanel, 0, pauseCheckbox);
-        addCheckboxRow(togglePanel, 1, promptCheckbox);
-        addCheckboxRow(togglePanel, 2, waitForProcessCheckbox);
-        addCheckboxRow(togglePanel, 3, depositAllCheckbox);
-        addCheckboxRow(togglePanel, 4, amuletCheckbox);
-        addSection(content, row++, togglePanel);
+        row = addSectionLabel(optionsPanel, row, "Toggles");
+        row = addCheckboxRow(optionsPanel, row, pauseCheckbox);
+        row = addCheckboxRow(optionsPanel, row, promptCheckbox);
+        row = addCheckboxRow(optionsPanel, row, waitForProcessCheckbox);
+        row = addCheckboxRow(optionsPanel, row, depositAllCheckbox);
+        row = addCheckboxRow(optionsPanel, row, amuletCheckbox);
 
-        JPanel interactionPanel = createSectionPanel("Interaction Menu");
-        addFormRow(interactionPanel, 0, "Interaction Option", interactionOptionField);
-        addSection(content, row++, interactionPanel);
+        row = addSectionLabel(optionsPanel, row, "Interaction Menu");
+        row = addFormRow(optionsPanel, row, "Interaction Option", interactionOptionField);
 
-        JPanel sleepPanel = createSectionPanel("Sleep Settings");
-        addFormRow(sleepPanel, 0, "Sleep Min", sleepMinSpinner);
-        addFormRow(sleepPanel, 1, "Sleep Max", sleepMaxSpinner);
-        addFormRow(sleepPanel, 2, "Sleep Target", sleepTargetSpinner);
-        addSection(content, row++, sleepPanel);
+        row = addSectionLabel(optionsPanel, row, "Sleep Settings");
+        row = addFormRow(optionsPanel, row, "Sleep Min", sleepMinSpinner);
+        row = addFormRow(optionsPanel, row, "Sleep Max", sleepMaxSpinner);
+        row = addFormRow(optionsPanel, row, "Sleep Target", sleepTargetSpinner);
 
         GridBagConstraints filler = new GridBagConstraints();
         filler.gridx = 0;
@@ -202,69 +195,67 @@ public class BanksBankStanderPanel extends PluginPanel
         filler.weightx = 1;
         filler.weighty = 1;
         filler.fill = GridBagConstraints.BOTH;
-        content.add(Box.createVerticalGlue(), filler);
+        optionsPanel.add(Box.createVerticalGlue(), filler);
 
-        JScrollPane scrollPane = new JScrollPane(content);
+        JScrollPane scrollPane = new JScrollPane(optionsPanel);
         scrollPane.setBorder(null);
         scrollPane.getViewport().setBackground(ColorScheme.DARK_GRAY_COLOR);
-        return scrollPane;
+
+        container.add(scrollPane, BorderLayout.CENTER);
+
+        return container;
     }
 
-    private JPanel createSectionPanel(String title)
-    {
-        JPanel panel = new JPanel(new GridBagLayout());
-        panel.setOpaque(true);
-        panel.setBackground(ColorScheme.DARKER_GRAY_COLOR);
-        TitledBorder border = BorderFactory.createTitledBorder(BorderFactory.createLineBorder(ColorScheme.DARK_GRAY_COLOR), title);
-        border.setTitleColor(Color.WHITE);
-        panel.setBorder(border);
-        return panel;
-    }
-
-    private void addSection(JPanel container, int row, JComponent section)
+    private int addSectionLabel(JPanel panel, int row, String text)
     {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
-        gbc.gridy = row;
-        gbc.weightx = 1;
-        gbc.fill = GridBagConstraints.HORIZONTAL;
-        gbc.insets = new Insets(5, 0, 5, 0);
-        container.add(section, gbc);
+        gbc.gridy = row++;
+        gbc.gridwidth = 2;
+        gbc.anchor = GridBagConstraints.WEST;
+        int topInset = row == 1 ? 0 : 10;
+        gbc.insets = new Insets(topInset, 10, 5, 10);
+        JLabel label = new JLabel(text);
+        label.setFont(FontManager.getRunescapeBoldFont());
+        label.setForeground(Color.WHITE);
+        panel.add(label, gbc);
+        return row;
     }
 
-    private void addFormRow(JPanel panel, int row, String labelText, JComponent component)
+    private int addFormRow(JPanel panel, int row, String labelText, JComponent component)
     {
-        int baseRow = row * 2;
-
         GridBagConstraints labelConstraints = new GridBagConstraints();
         labelConstraints.gridx = 0;
-        labelConstraints.gridy = baseRow;
+        labelConstraints.gridy = row++;
         labelConstraints.gridwidth = 2;
         labelConstraints.anchor = GridBagConstraints.WEST;
-        labelConstraints.insets = new Insets(5, 10, 0, 10);
+        labelConstraints.insets = new Insets(0, 10, 0, 10);
         JLabel label = new JLabel(labelText);
         label.setForeground(Color.WHITE);
         panel.add(label, labelConstraints);
 
         GridBagConstraints componentConstraints = new GridBagConstraints();
         componentConstraints.gridx = 0;
-        componentConstraints.gridy = baseRow + 1;
+        componentConstraints.gridy = row++;
         componentConstraints.gridwidth = 2;
         componentConstraints.weightx = 1;
         componentConstraints.fill = GridBagConstraints.HORIZONTAL;
         componentConstraints.insets = new Insets(0, 10, 5, 10);
         panel.add(component, componentConstraints);
+
+        return row;
     }
 
-    private void addCheckboxRow(JPanel panel, int row, JCheckBox checkbox)
+    private int addCheckboxRow(JPanel panel, int row, JCheckBox checkbox)
     {
         GridBagConstraints gbc = new GridBagConstraints();
         gbc.gridx = 0;
-        gbc.gridy = row;
+        gbc.gridy = row++;
         gbc.gridwidth = 2;
         gbc.anchor = GridBagConstraints.WEST;
-        gbc.insets = new Insets(5, 10, 5, 10);
+        gbc.insets = new Insets(0, 10, 5, 10);
         panel.add(checkbox, gbc);
+        return row;
     }
 
     private void loadInitialState()
