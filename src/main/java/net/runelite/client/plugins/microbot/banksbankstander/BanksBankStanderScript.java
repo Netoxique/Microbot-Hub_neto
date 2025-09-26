@@ -51,6 +51,8 @@ public class BanksBankStanderScript extends Script {
     List<Rs2ItemModel> inventorySlots;
     private BanksInteractOrder interactOrderSetting;
 
+    private static final long PROCESSING_RESTART_THRESHOLD_MS = 3000;
+
     public boolean run(BanksBankStanderConfig config) {
         this.config = config; // Initialize the config object before accessing its parameters
         itemsProcessed = 0;
@@ -176,6 +178,7 @@ public class BanksBankStanderScript extends Script {
             if (hasItems()) {
                 Rs2Bank.closeBank();
                 sleepUntil(() -> !Rs2Bank.isOpen());
+                previousItemChange = 0;
                 currentStatus = CurrentStatus.COMBINE_ITEMS;
                 return "";
             }
@@ -257,21 +260,39 @@ public class BanksBankStanderScript extends Script {
             isWaitingForPrompt = false; // Ensure prompt flag is reset
             if (secondItemId != null) {
                 if (config.amuletOfChemistry()) {
-                    sleepUntil(() -> !Rs2Inventory.hasItem(secondItemId) || (!Rs2Equipment.isWearing(ItemID.AMULET_OF_CHEMISTRY) && !Rs2Equipment.isWearing(ItemID.AMULET_OF_CHEMISTRY_IMBUED_CHARGED)), 40000);
+                    sleepUntil(() -> !Rs2Inventory.hasItem(secondItemId)
+                            || (!Rs2Equipment.isWearing(ItemID.AMULET_OF_CHEMISTRY)
+                            && !Rs2Equipment.isWearing(ItemID.AMULET_OF_CHEMISTRY_IMBUED_CHARGED))
+                            || shouldForceRestartProcessing(), 40000);
                     sleep(calculateSleepDuration(1));
                     checkForAmulet();
 //                    if(Rs2Bank.isOpen()) {
 //                        Rs2Bank.closeBank();
 //                    }
                 } else {
-                    sleepUntil(() -> !Rs2Inventory.hasItem(secondItemId), 40000);
+                    sleepUntil(() -> !Rs2Inventory.hasItem(secondItemId)
+                            || shouldForceRestartProcessing(), 40000);
                 }
             } else {
-                sleepUntil(() -> !Rs2Inventory.hasItem(config.secondItemIdentifier()), 40000);
+                sleepUntil(() -> !Rs2Inventory.hasItem(config.secondItemIdentifier())
+                        || shouldForceRestartProcessing(), 40000);
             }
             sleep(calculateSleepDuration(1));
         }
         return true;
+    }
+
+    private boolean shouldForceRestartProcessing() {
+        if (!config.waitForAnimation()) {
+            return false;
+        }
+
+        if (previousItemChange == 0) {
+            return false;
+        }
+
+        return !Rs2Player.isAnimating()
+                && System.currentTimeMillis() - previousItemChange >= PROCESSING_RESTART_THRESHOLD_MS;
     }
 
     public void interactOrder(Integer itemId) {

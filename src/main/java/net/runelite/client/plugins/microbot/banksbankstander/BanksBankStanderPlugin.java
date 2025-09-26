@@ -105,9 +105,11 @@ public class BanksBankStanderPlugin extends Plugin {
     @Subscribe
     public void onItemContainerChanged(ItemContainerChanged inventory){
         if(inventory.getContainerId()==93){
-            if (!Rs2Bank.isOpen()) {
-                BanksBankStanderScript.itemsProcessed++;
+            if (Rs2Bank.isOpen()) {
+                return;
             }
+
+            BanksBankStanderScript.itemsProcessed++;
             if (BanksBankStanderScript.secondItemId != null) { // Use secondItemId if it's available
                 if (Arrays.stream(inventory.getItemContainer().getItems())
                         .anyMatch(x -> x.getId() == BanksBankStanderScript.secondItemId)) {
