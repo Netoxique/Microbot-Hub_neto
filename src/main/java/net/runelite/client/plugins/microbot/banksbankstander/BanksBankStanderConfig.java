@@ -220,6 +220,17 @@ public interface BanksBankStanderConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "PrescriptionGoggles",
+            name = "Wear prescription goggles",
+            description = "wear prescription goggles for certain activities",
+            position = 8,
+            section = toggles
+    )
+    default boolean prescriptionGoggles() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "Interaction Option",
             name = "Interaction Option",
             description = "default is \"use\".",

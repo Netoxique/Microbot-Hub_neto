@@ -23,6 +23,7 @@ public class BanksBankStanderState
     private boolean waitForAnimation;
     private boolean depositAll;
     private boolean amuletOfChemistry;
+    private boolean prescriptionGoggles;
     private String interactionOption;
     private int sleepMin;
     private int sleepMax;
@@ -45,6 +46,7 @@ public class BanksBankStanderState
         state.setWaitForAnimation(config.waitForAnimation());
         state.setDepositAll(config.depositAll());
         state.setAmuletOfChemistry(config.amuletOfChemistry());
+        state.setPrescriptionGoggles(config.prescriptionGoggles());
         state.setInteractionOption(config.menu());
         state.setSleepMin(config.sleepMin());
         state.setSleepMax(config.sleepMax());
@@ -69,6 +71,7 @@ public class BanksBankStanderState
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "WaitForProcess", waitForAnimation);
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "DepositAll", depositAll);
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "AmuletofChemistry", amuletOfChemistry);
+        configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "PrescriptionGoggles", prescriptionGoggles);
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "Interaction Option", sanitize(interactionOption));
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "Sleep Min", sleepMin);
         configManager.setConfiguration(BanksBankStanderPlugin.CONFIG_GROUP, "Sleep Max", sleepMax);

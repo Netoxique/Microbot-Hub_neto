@@ -55,6 +55,7 @@ public class BanksBankStanderPanel extends PluginPanel
     private final JCheckBox waitForProcessCheckbox;
     private final JCheckBox depositAllCheckbox;
     private final JCheckBox amuletCheckbox;
+    private final JCheckBox gogglesCheckbox;
 
     private final JTextField interactionOptionField;
 
@@ -102,6 +103,7 @@ public class BanksBankStanderPanel extends PluginPanel
         waitForProcessCheckbox = createCheckbox("Wait for process?");
         depositAllCheckbox = createCheckbox("Deposit all");
         amuletCheckbox = createCheckbox("Wear amulet of chemistry");
+        gogglesCheckbox = createCheckbox("Wear prescription goggles");
 
         interactionOptionField = new JTextField();
         interactionOptionField.setColumns(12);
@@ -180,6 +182,7 @@ public class BanksBankStanderPanel extends PluginPanel
         row = addCheckboxRow(optionsPanel, row, waitForProcessCheckbox);
         row = addCheckboxRow(optionsPanel, row, depositAllCheckbox);
         row = addCheckboxRow(optionsPanel, row, amuletCheckbox);
+        row = addCheckboxRow(optionsPanel, row, gogglesCheckbox);
 
         row = addSectionLabel(optionsPanel, row, "Interaction Menu");
         row = addFormRow(optionsPanel, row, "Interaction Option", interactionOptionField);
@@ -401,6 +404,7 @@ public class BanksBankStanderPanel extends PluginPanel
         state.setWaitForAnimation(waitForProcessCheckbox.isSelected());
         state.setDepositAll(depositAllCheckbox.isSelected());
         state.setAmuletOfChemistry(amuletCheckbox.isSelected());
+        state.setPrescriptionGoggles(gogglesCheckbox.isSelected());
         state.setInteractionOption(interactionOptionField.getText().trim());
         state.setSleepMin(((Number) sleepMinSpinner.getValue()).intValue());
         state.setSleepMax(((Number) sleepMaxSpinner.getValue()).intValue());
@@ -429,6 +433,7 @@ public class BanksBankStanderPanel extends PluginPanel
         waitForProcessCheckbox.setSelected(state.isWaitForAnimation());
         depositAllCheckbox.setSelected(state.isDepositAll());
         amuletCheckbox.setSelected(state.isAmuletOfChemistry());
+        gogglesCheckbox.setSelected(state.isPrescriptionGoggles());
         interactionOptionField.setText(nonNull(state.getInteractionOption()));
         sleepMinSpinner.setValue(state.getSleepMin());
         sleepMaxSpinner.setValue(state.getSleepMax());

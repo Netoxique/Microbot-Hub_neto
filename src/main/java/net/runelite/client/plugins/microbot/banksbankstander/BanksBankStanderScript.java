@@ -53,6 +53,8 @@ public class BanksBankStanderScript extends Script {
 
     private static final long PROCESSING_RESTART_THRESHOLD_MS = 3000;
 
+    private String goggles = "Prescription goggles";
+
     public boolean run(BanksBankStanderConfig config) {
         this.config = config; // Initialize the config object before accessing its parameters
         itemsProcessed = 0;
@@ -156,6 +158,9 @@ public class BanksBankStanderScript extends Script {
 
             if (config.amuletOfChemistry()) {
                 checkForAmulet();
+            }
+            if (config.prescriptionGoggles()) {
+                checkForGoggles();
             }
 
             depositUnwantedItems(firstItemId, config.firstItemQuantity());
@@ -266,6 +271,9 @@ public class BanksBankStanderScript extends Script {
                             || shouldForceRestartProcessing(), 40000);
                     sleep(calculateSleepDuration(1));
                     checkForAmulet();
+                    if (config.prescriptionGoggles()) {
+                        checkForGoggles();
+                    }
 //                    if(Rs2Bank.isOpen()) {
 //                        Rs2Bank.closeBank();
 //                    }
@@ -599,6 +607,27 @@ public class BanksBankStanderScript extends Script {
             if (currentAmulet != null) {
                 sleep(Rs2Random.between(1000, 1500));
                 Rs2Bank.depositOne(currentAmulet.getId());
+                sleep(Rs2Random.between(1000, 1500));
+            }
+        }
+    }
+
+    private void checkForGoggles() {
+        if (!Rs2Equipment.isWearing(goggles)) {
+            Rs2ItemModel currentHead = Rs2Equipment.get(EquipmentInventorySlot.HEAD);
+            if (!Rs2Bank.isOpen()) {
+                Rs2Bank.openBank();
+                sleepUntil(Rs2Bank::isOpen);
+            }
+            if (Rs2Bank.isOpen() && Rs2Bank.hasItem(goggles)) {
+                Rs2Bank.withdrawAndEquip(goggles);
+            } else {
+                Microbot.log("Missing Prescription Goggles. (disable toggle if not required to wear goggles)");
+                shutdown();
+            }
+            if (currentHead != null) {
+                sleep(Rs2Random.between(1000, 1500));
+                Rs2Bank.depositOne(currentHead.getId());
                 sleep(Rs2Random.between(1000, 1500));
             }
         }
