@@ -39,7 +39,7 @@ public class BanksBankStanderOverlay extends OverlayPanel {
                     .build());
             ///* Added by Storm
             panelComponent.getChildren().add(LineComponent.builder()
-                    .left("New features added by eXioStorm & Netoxic")
+                    .left("New features by eXioStorm, Netoxic")
                     .leftColor(PluginDescriptor.stormColor)
                     .build());
             panelComponent.getChildren().add(LineComponent.builder()
