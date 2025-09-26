@@ -1,26 +1,18 @@
 package net.runelite.client.plugins.microbot.lunarplankmake;
 
-import java.util.Map;
-import java.util.concurrent.TimeUnit;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
-import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
-import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
-import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
-import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
-import net.runelite.client.plugins.microbot.util.magic.Runes;
-import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.math.Random;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.util.QuantityFormatter;
-import net.runelite.client.plugins.microbot.util.math.Random;
-import net.runelite.client.plugins.microbot.util.inventory.RunePouchType;
+
+import java.util.concurrent.TimeUnit;
 
 public class LunarPlankMakeScript extends Script {
 
-    public static String version = "1.1.0";
     public static String combinedMessage = "";
     public static long plankMade = 0;
     private int profitPerPlank = 0;
@@ -29,7 +21,6 @@ public class LunarPlankMakeScript extends Script {
     private int setDelay;
     private boolean useRandomDelay;
     private int maxRandomDelay;
-    private LunarPlankMakeConfig activeConfig;
 
     // State management
     private enum State {
@@ -110,7 +101,6 @@ public class LunarPlankMakeScript extends Script {
                 currentState = State.PREP;
                 return;
             }
-
             int initialPlankCount = Rs2Inventory.count(config.ITEM().getFinished());
             Rs2Magic.cast(MagicAction.PLANK_MAKE);
             addDelay();

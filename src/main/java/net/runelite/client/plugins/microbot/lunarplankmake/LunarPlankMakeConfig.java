@@ -4,7 +4,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
-import net.runelite.client.plugins.microbot.GeoffPlugins.lunarplankmake.enums.Logs;
+import net.runelite.client.plugins.microbot.lunarplankmake.enums.Logs;
 
 @ConfigGroup("plankMake")
 public interface LunarPlankMakeConfig extends Config {

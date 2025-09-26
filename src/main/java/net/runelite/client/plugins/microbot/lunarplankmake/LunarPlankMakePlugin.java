@@ -1,28 +1,30 @@
 package net.runelite.client.plugins.microbot.lunarplankmake;
 
-import java.awt.AWTException;
-
-import javax.inject.Inject;
-
 import com.google.inject.Provides;
-
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
-import net.runelite.client.plugins.microbot.Microbot;
-import net.runelite.client.plugins.microbot.util.mouse.VirtualMouse;
+import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.ui.overlay.OverlayManager;
+
+import javax.inject.Inject;
+import java.awt.*;
 
 @PluginDescriptor(
         name = "Neto Lunar Plank Make",
-        description = "lunar plank maker",
+        description = "Geoff's lunar plank maker",
         tags = {"magic", "moneymaking"},
-        enabledByDefault = false,
-        minClientVersion = "2.0.0"
+        version = LunarPlankMakePlugin.version,
+        minClientVersion = "2.0.13",
+        cardUrl = "",
+        iconUrl = "",
+        enabledByDefault = PluginConstants.DEFAULT_ENABLED,
+        isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class LunarPlankMakePlugin extends Plugin {
+    public static final String version = "1.0.1";
     @Inject
     private LunarPlankMakeConfig config;
 
