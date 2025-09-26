@@ -45,7 +45,7 @@ import java.util.Objects;
 )
 @Slf4j
 public class BanksBankStanderPlugin extends Plugin {
-    public static final String version = "2.1.0";
+    public static final String version = "3.0.0";
     static final String CONFIG_GROUP = "BankStander";
     private static final String SAVED_STATES_KEY = "savedStates";
     private static final String LAST_STATE_KEY = "lastState";
