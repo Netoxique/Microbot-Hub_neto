@@ -86,16 +86,16 @@ public class BanksBankStanderPanel extends PluginPanel
         interactOrderCombo = new JComboBox<>(BanksInteractOrder.values());
         firstItemField = new JTextField();
         firstItemField.setColumns(12);
-        firstItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(1, 0, 28, 1));
+        firstItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(1, 0, null, 1));
         secondItemField = new JTextField();
         secondItemField.setColumns(12);
-        secondItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 27, 1));
+        secondItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, null, 1));
         thirdItemField = new JTextField();
         thirdItemField.setColumns(12);
-        thirdItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 27, 1));
+        thirdItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, null, 1));
         fourthItemField = new JTextField();
         fourthItemField.setColumns(12);
-        fourthItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, 27, 1));
+        fourthItemQuantitySpinner = new JSpinner(new SpinnerNumberModel(0, 0, null, 1));
 
         pauseCheckbox = createCheckbox("Pause between states");
         promptCheckbox = createCheckbox("Prompt?");
