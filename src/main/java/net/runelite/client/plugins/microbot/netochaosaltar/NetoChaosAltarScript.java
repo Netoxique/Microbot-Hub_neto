@@ -236,12 +236,11 @@ public class NetoChaosAltarScript extends Script {
                 && Rs2Inventory.contains(DRAGON_BONES))
                 {
             Rs2Inventory.interact(lastBones, "use");
-            sleep(100, 300);
-            Rs2GameObject.interact(CHAOS_ALTAR);
-            Rs2Player.waitForXpDrop(Skill.PRAYER);
-
             // Small random delay between offerings
-            sleep(100, 200);
+            sleepGaussian(150,50);
+            Rs2GameObject.interact(CHAOS_ALTAR);
+//            Rs2Player.waitForXpDrop(Skill.PRAYER);
+            sleepGaussian(150,50);
         }
     }
 
