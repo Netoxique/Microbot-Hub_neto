@@ -3,7 +3,6 @@ package net.runelite.client.plugins.microbot.wildyescape;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
-import net.runelite.client.plugins.microbot.storm.plugins.PlayerMonitor.PlayerMonitorPlugin;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -14,6 +13,8 @@ import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.globval.WidgetIndices;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.api.coords.WorldArea;
+
+import net.runelite.client.plugins.Plugin;
 
 import java.util.List;
 import java.util.concurrent.TimeUnit;
@@ -61,7 +62,11 @@ public class NetoWildyEscapeScript extends Script {
         // stop wilderness agility plugin
         Microbot.stopPlugin("net.runelite.client.plugins.microbot.wildernessagility.WildernessAgilityPlugin");
         // start player monitor plugin
-        Microbot.startPlugin(PlayerMonitorPlugin.class);
+        Plugin playerMonitorPlugin = (Plugin) Microbot.getPlugin(
+                "net.runelite.client.plugins.microbot.storm.plugins.PlayerMonitor.PlayerMonitorPlugin");
+        if (playerMonitorPlugin != null && !Microbot.isPluginEnabled(playerMonitorPlugin.getClass())) {
+            Microbot.startPlugin(playerMonitorPlugin);
+        }
         // equip necklace if found in inventory
         if (Rs2Inventory.hasItem("Phoenix necklace")) {
             while (!Rs2Equipment.isWearing("Phoenix necklace")) {

@@ -25,6 +25,7 @@ public class LunarPlankMakeScript extends Script {
     public static long plankMade = 0;
     private int profitPerPlank = 0;
     private long startTime;
+    private LunarPlankMakeConfig activeConfig;
     private boolean useSetDelay;
     private int setDelay;
     private boolean useRandomDelay;
