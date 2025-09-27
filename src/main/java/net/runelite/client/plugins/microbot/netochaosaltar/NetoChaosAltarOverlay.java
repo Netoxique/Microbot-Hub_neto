@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.chaosaltar;
+package net.runelite.client.plugins.microbot.netochaosaltar;
 
 import net.runelite.client.plugins.microbot.util.player.Rs2Pvp;
 import net.runelite.client.ui.overlay.OverlayPanel;

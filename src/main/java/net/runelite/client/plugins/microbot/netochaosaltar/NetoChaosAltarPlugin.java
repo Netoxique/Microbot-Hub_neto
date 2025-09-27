@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.chaosaltar;
+package net.runelite.client.plugins.microbot.netochaosaltar;
 
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
@@ -27,12 +27,12 @@ import javax.inject.Inject;
 import java.awt.Rectangle;
 
 @PluginDescriptor(
-        name = "Neto Chaos Altar",
+        name = "Neto Chaos Altar 2",
         description = "Automates bone offering at the Chaos Altar",
         tags = {"prayer", "bones", "altar"},
         enabledByDefault = false,
         authors = {"Neoxic"},
-        version = "1.0.0",
+        version = "1.1.0",
         minClientVersion = "2.0.0",
         isExternal = PluginConstants.IS_EXTERNAL
 )
@@ -103,8 +103,12 @@ public class NetoChaosAltarPlugin extends Plugin implements SchedulablePlugin {
         //need to add the chat message we get when we try to attack an NPC with an empty staff.
 
         if (msg.contains("Oh dear, you are dead!")) {
-            NetoChaosAltarScript.didWeDie = true;
             clearChatHistory();
+            if (netoChaosAltarScript != null) {
+                netoChaosAltarScript.onPlayerDeath();
+            } else {
+                NetoChaosAltarScript.didWeDie = true;
+            }
         }
 
 

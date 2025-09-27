@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.chaosaltar;
+package net.runelite.client.plugins.microbot.netochaosaltar;
 
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.GameObject;
@@ -8,6 +8,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.pluginscheduler.condition.logical.LockCondition;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
@@ -25,6 +26,7 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import java.util.Comparator;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import static net.runelite.api.ItemID.DRAGON_BONES;
 import static net.runelite.api.NpcID.CHAOS_FANATIC;
@@ -40,19 +42,34 @@ public class NetoChaosAltarScript extends Script {
     private static final int CHAOS_ALTAR = 411;
 
     private NetoChaosAltarConfig config;
+    private NetoChaosAltarPlugin plugin;
     private boolean autoRetaliate = false;
 
     private State currentState = State.UNKNOWN;
 
     public static boolean didWeDie = false;
+    private final AtomicBoolean bankAfterDeathRequested = new AtomicBoolean(false);
 
     public boolean run(NetoChaosAltarConfig config, NetoChaosAltarPlugin plugin) {
+        this.config = config;
+        this.plugin = plugin;
         Microbot.enableAutoRunOn = false;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
                 long startTime = System.currentTimeMillis();
+
+                if (bankAfterDeathRequested.compareAndSet(true, false)) {
+                    Microbot.log("Death detected. Forcing immediate banking.");
+                    LockCondition lockCondition = this.plugin != null ? this.plugin.getLockCondition() : null;
+                    if (lockCondition != null && !lockCondition.isLocked()) {
+                        lockCondition.lock();
+                    }
+                    handleBanking();
+                    didWeDie = false;
+                    return;
+                }
 
                 if (!autoRetaliate) {
                     Rs2Combat.setAutoRetaliate(false);
@@ -100,6 +117,11 @@ public class NetoChaosAltarScript extends Script {
             }
         }, 0, 1000, TimeUnit.MILLISECONDS);
         return true;
+    }
+
+    public void onPlayerDeath() {
+        didWeDie = true;
+        bankAfterDeathRequested.set(true);
     }
 
     private GameObject getChaosAltar() {

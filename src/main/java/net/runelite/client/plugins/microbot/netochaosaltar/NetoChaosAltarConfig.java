@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.chaosaltar;
+package net.runelite.client.plugins.microbot.netochaosaltar;
 
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
