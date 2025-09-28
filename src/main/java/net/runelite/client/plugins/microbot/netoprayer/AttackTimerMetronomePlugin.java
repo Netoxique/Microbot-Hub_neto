@@ -42,6 +42,7 @@ import net.runelite.client.game.NPCManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.util.npc.Rs2NpcManager;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
@@ -123,7 +124,8 @@ public class AttackTimerMetronomePlugin extends Plugin
     private int soundEffectId = -1;
     public Dimension DEFAULT_SIZE = new Dimension(DEFAULT_SIZE_UNIT_PX, DEFAULT_SIZE_UNIT_PX);
 
-    private Rs2PrayerEnum activePrayer; // Track the currently active prayer
+    private Rs2PrayerEnum activePrayer; // Track the currently active offensive prayer
+    private Rs2PrayerEnum activeDefensivePrayer; // Track the currently active defensive prayer
     private int prayerDeactivationTick = -1; // Tracks when to deactivate the prayer
 
     private AttackStyle cachedAttackStyle = null;
@@ -543,13 +545,11 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Subscribe
     public void onGameTick(GameTick tick)
     {
+        handleDefensivePrayers();
+
         AttackTimerMetronomeConfig.PrayerMode prayerMode = config.enableLazyFlicking();
         int ticksUntilAttack = getTicksUntilNextAttack();
 
-        // Skip all prayer logic if PrayerMode is NONE
-        if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.NONE) return;
-
-        // Handle Lazy Flick Mode
         if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.LAZY)
         {
             if (ticksUntilAttack > 0)
@@ -644,6 +644,131 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
     }
 
+    private void handleDefensivePrayers()
+    {
+        if (!config.enableDefensivePrayers())
+        {
+            deactivateDefensivePrayer();
+            return;
+        }
+
+        Rs2PrayerEnum defensivePrayer = determineDefensivePrayer();
+
+        if (defensivePrayer == null)
+        {
+            deactivateDefensivePrayer();
+            return;
+        }
+
+        if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(defensivePrayer)
+                && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+        {
+            Rs2Prayer.toggle(activeDefensivePrayer, false);
+        }
+
+        if (!defensivePrayer.equals(activeDefensivePrayer) || !Rs2Prayer.isPrayerActive(defensivePrayer))
+        {
+            Rs2Prayer.toggle(defensivePrayer, true);
+            activeDefensivePrayer = defensivePrayer;
+        }
+    }
+
+    private void deactivateDefensivePrayer()
+    {
+        if (activeDefensivePrayer != null && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+        {
+            Rs2Prayer.toggle(activeDefensivePrayer, false);
+        }
+
+        activeDefensivePrayer = null;
+    }
+
+    private Rs2PrayerEnum determineDefensivePrayer()
+    {
+        Player localPlayer = client.getLocalPlayer();
+        if (localPlayer == null)
+        {
+            return null;
+        }
+
+        List<NPC> npcs = client.getNpcs();
+        if (npcs == null)
+        {
+            return null;
+        }
+
+        Rs2PrayerEnum prioritizedPrayer = null;
+
+        for (NPC npc : npcs)
+        {
+            if (npc == null)
+            {
+                continue;
+            }
+
+            Actor npcTarget = npc.getInteracting();
+            if (npcTarget != localPlayer)
+            {
+                continue;
+            }
+
+            Rs2PrayerEnum mappedPrayer = mapStyleToPrayer(Rs2NpcManager.getAttackStyle(npc.getId()));
+
+            if (mappedPrayer == null)
+            {
+                continue;
+            }
+
+            if (mappedPrayer == Rs2PrayerEnum.PROTECT_MAGIC)
+            {
+                return mappedPrayer;
+            }
+
+            if (mappedPrayer == Rs2PrayerEnum.PROTECT_RANGE)
+            {
+                prioritizedPrayer = Rs2PrayerEnum.PROTECT_RANGE;
+            }
+            else if (prioritizedPrayer == null)
+            {
+                prioritizedPrayer = mappedPrayer;
+            }
+        }
+
+        return prioritizedPrayer;
+    }
+
+    private Rs2PrayerEnum mapStyleToPrayer(String style)
+    {
+        if (style == null || style.isEmpty())
+        {
+            return null;
+        }
+
+        String normalized = style.toLowerCase();
+        if (normalized.contains(","))
+        {
+            normalized = normalized.split(",")[0].trim();
+        }
+
+        if (normalized.contains("magic"))
+        {
+            return Rs2PrayerEnum.PROTECT_MAGIC;
+        }
+
+        if (normalized.contains("range"))
+        {
+            return Rs2PrayerEnum.PROTECT_RANGE;
+        }
+
+        if (normalized.contains("melee") || normalized.contains("crush")
+                || normalized.contains("slash") || normalized.contains("stab"))
+        {
+            return Rs2PrayerEnum.PROTECT_MELEE;
+        }
+
+        return null;
+    }
+
     private Rs2PrayerEnum determineOffensivePrayer(AttackStyle attackStyle) {
         switch (attackStyle) {
             case ACCURATE: // Melee styles
@@ -681,6 +806,7 @@ public class AttackTimerMetronomePlugin extends Plugin
             attackDelayHoldoffTicks = 0;
 
             activePrayer = null;
+            activeDefensivePrayer = null;
             outOfCombatTicks = 0;
             prayerDeactivationTick = -1;
             Rs2Prayer.disableAllPrayers();
@@ -691,6 +817,15 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Override
     protected void startUp() throws Exception
     {
+        try
+        {
+            Rs2NpcManager.loadJson();
+        }
+        catch (Exception ex)
+        {
+            log.warn("Failed to load NPC data for defensive prayers", ex);
+        }
+
         overlayManager.add(overlay);
         overlay.setPreferredSize(DEFAULT_SIZE);
     }
@@ -700,6 +835,7 @@ public class AttackTimerMetronomePlugin extends Plugin
     {
         overlayManager.remove(overlay);
         attackDelayHoldoffTicks = 0;
+        deactivateDefensivePrayer();
         super.shutDown();
     }
 }

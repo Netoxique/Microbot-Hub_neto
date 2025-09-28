@@ -29,11 +29,11 @@ public interface AttackTimerMetronomeConfig extends Config
 	String TickNumberSettings = "Attack Cooldown Tick Settings";
 
 	@ConfigItem(
-			position = 1,
-			keyName = "enableLazyFlicking",
-			name = "Enable Offensive Prayers",
-			description = "Toggle the lazy flicking of offensive prayers based on attack style",
-			section = TickNumberSettings
+				position = 1,
+				keyName = "enableLazyFlicking",
+				name = "Enable Offensive Prayers",
+				description = "Toggle the lazy flicking of offensive prayers based on attack style",
+				section = TickNumberSettings
 
 	)
 	default PrayerMode enableLazyFlicking()
@@ -42,11 +42,23 @@ public interface AttackTimerMetronomeConfig extends Config
 	}
 
 	@ConfigItem(
-			position = 2,
-			keyName = "showTick",
-			name = "Show Attack Cooldown Ticks",
-			description = "Shows number of ticks until next attack",
-			section = TickNumberSettings
+				position = 2,
+				keyName = "enableDefensivePrayers",
+				name = "Enable Defensive Prayers",
+				description = "Automatically protect from the detected enemy attack style",
+				section = TickNumberSettings
+	)
+	default boolean enableDefensivePrayers()
+	{
+		return false;
+	}
+
+	@ConfigItem(
+				position = 3,
+				keyName = "showTick",
+				name = "Show Attack Cooldown Ticks",
+				description = "Shows number of ticks until next attack",
+				section = TickNumberSettings
 	)
 	default boolean showTick()
 	{
