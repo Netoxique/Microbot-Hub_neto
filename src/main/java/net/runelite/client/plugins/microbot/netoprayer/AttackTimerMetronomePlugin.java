@@ -51,8 +51,12 @@ import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 @Slf4j
 @PluginDescriptor(
@@ -131,6 +135,11 @@ public class AttackTimerMetronomePlugin extends Plugin
     private int queuedDefensivePrayerTick = -1; // Tick on which to activate the queued defensive prayer
     private int prayerDeactivationTick = -1; // Tracks when to deactivate the offensive prayer
     private int defensivePrayerDeactivateTick = -1; // Tracks when to deactivate defensive flicks
+
+    private ExecutorService offensivePrayerExecutor;
+    private ExecutorService defensivePrayerExecutor;
+    private final Object offensiveLock = new Object();
+    private final Object defensiveLock = new Object();
 
     private AttackStyle cachedAttackStyle = null;
     private boolean cachedIsChargedStaff = false;
@@ -549,63 +558,27 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Subscribe
     public void onGameTick(GameTick tick)
     {
-        handleDefensivePrayers();
-
         AttackTimerMetronomeConfig.PrayerMode prayerMode = config.enableLazyFlicking();
+        AttackTimerMetronomeConfig.DefensivePrayerMode defensiveMode = config.defensivePrayerMode();
         int ticksUntilAttack = getTicksUntilNextAttack();
+        boolean isAttacking = isPlayerAttacking();
+        AttackStyle attackStyle = getAttackStyle();
+        int currentTick = client.getTickCount();
+        List<NpcSnapshot> npcSnapshots = defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.NONE
+                ? Collections.emptyList()
+                : createNpcSnapshots(client.getLocalPlayer());
 
-        if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.LAZY)
+        if (defensivePrayerExecutor != null && !defensivePrayerExecutor.isShutdown())
         {
-            if (ticksUntilAttack > 0)
-            {
-                if (ticksUntilAttack == 2)
-                {
-                    Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(getAttackStyle());
-                    activatePrayer(offensivePrayer);
-                    prayerDeactivationTick = 1;
-                }
-            }
-
-            if (prayerDeactivationTick == 0)
-            {
-                Rs2Prayer.toggle(activePrayer);
-                prayerDeactivationTick = -1; // Reset deactivation tracker
-            }
-
-            if (prayerDeactivationTick > 0)
-            {
-                prayerDeactivationTick--;
-            }
+            defensivePrayerExecutor.execute(() -> handleDefensivePrayers(defensiveMode, npcSnapshots, currentTick));
         }
-        // Handle Normal Mode
-        else if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.NORMAL)
-        {
-            boolean isAttacking = isPlayerAttacking();
 
-            if (isAttacking)
-            {
-                Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(getAttackStyle());
-                if (offensivePrayer != null && !offensivePrayer.equals(activePrayer))
-                {
-                    activatePrayer(offensivePrayer);
-                    activePrayer = offensivePrayer; // Track the currently active prayer
-                }
-                outOfCombatTicks = 0; // Reset out-of-combat counter
-            }
-            else
-            {
-                outOfCombatTicks++;
-                if (outOfCombatTicks >= OUT_OF_COMBAT_TIMEOUT_TICKS)
-                {
-                    Rs2Prayer.toggle(activePrayer, false);
-                    activePrayer = null; // Clear the active prayer
-                    outOfCombatTicks = 0; // Reset after deactivation
-                }
-            }
+        if (offensivePrayerExecutor != null && !offensivePrayerExecutor.isShutdown())
+        {
+            offensivePrayerExecutor.execute(() -> handleOffensivePrayers(prayerMode, ticksUntilAttack, isAttacking, attackStyle));
         }
 
         // Update attack state logic (common for both modes)
-        boolean isAttacking = isPlayerAttacking();
         switch (attackState)
         {
             case NOT_ATTACKING:
@@ -666,67 +639,158 @@ public class AttackTimerMetronomePlugin extends Plugin
             return;
         }
 
-        int activationTick = client.getTickCount();
-        int attackSpeed = getIncomingAttackSpeed();
+        if (defensivePrayerExecutor == null || defensivePrayerExecutor.isShutdown())
+        {
+            return;
+        }
+
+        int currentTick = client.getTickCount();
+        List<NpcSnapshot> npcSnapshots = createNpcSnapshots(client.getLocalPlayer());
+        int activationTick = currentTick;
+        int attackSpeed = getIncomingAttackSpeed(npcSnapshots);
         if (attackSpeed > 1)
         {
             activationTick += attackSpeed - 1;
         }
 
-        queueDefensivePrayerFlick(determineDefensivePrayer(), activationTick);
+        final int finalActivationTick = activationTick;
+        defensivePrayerExecutor.execute(() ->
+        {
+            Rs2PrayerEnum prayer = determineDefensivePrayer(npcSnapshots);
+            queueDefensivePrayerFlick(prayer, finalActivationTick, currentTick);
+        });
     }
 
 
     private void activatePrayer(Rs2PrayerEnum prayer) {
-        if (prayer != null && !Rs2Prayer.isPrayerActive(prayer)) {
+        if (prayer == null)
+        {
+            return;
+        }
+
+        if (!Rs2Prayer.isPrayerActive(prayer))
+        {
             Rs2Prayer.toggle(prayer, true);
-            activePrayer = prayer; // Track the active prayer
+        }
+
+        activePrayer = prayer; // Track the currently active prayer
+    }
+
+    private void handleOffensivePrayers(AttackTimerMetronomeConfig.PrayerMode prayerMode,
+                                        int ticksUntilAttack,
+                                        boolean isAttacking,
+                                        AttackStyle attackStyle)
+    {
+        synchronized (offensiveLock)
+        {
+            if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.LAZY)
+            {
+                if (ticksUntilAttack > 0 && ticksUntilAttack == 2)
+                {
+                    Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(attackStyle);
+                    activatePrayer(offensivePrayer);
+                    if (offensivePrayer != null)
+                    {
+                        prayerDeactivationTick = 1;
+                    }
+                }
+
+                if (prayerDeactivationTick == 0)
+                {
+                    if (activePrayer != null)
+                    {
+                        Rs2Prayer.toggle(activePrayer);
+                    }
+                    prayerDeactivationTick = -1; // Reset deactivation tracker
+                }
+
+                if (prayerDeactivationTick > 0)
+                {
+                    prayerDeactivationTick--;
+                }
+            }
+            else if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.NORMAL)
+            {
+                if (isAttacking)
+                {
+                    Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(attackStyle);
+                    if (offensivePrayer != null && !offensivePrayer.equals(activePrayer))
+                    {
+                        activatePrayer(offensivePrayer);
+                    }
+                    outOfCombatTicks = 0; // Reset out-of-combat counter
+                }
+                else
+                {
+                    outOfCombatTicks++;
+                    if (outOfCombatTicks >= OUT_OF_COMBAT_TIMEOUT_TICKS)
+                    {
+                        if (activePrayer != null)
+                        {
+                            Rs2Prayer.toggle(activePrayer, false);
+                        }
+                        activePrayer = null; // Clear the active prayer
+                        outOfCombatTicks = 0; // Reset after deactivation
+                    }
+                }
+            }
         }
     }
 
-    private void handleDefensivePrayers()
+    private void handleDefensivePrayers(AttackTimerMetronomeConfig.DefensivePrayerMode defensiveMode,
+                                        List<NpcSnapshot> npcSnapshots,
+                                        int currentTick)
     {
-        AttackTimerMetronomeConfig.DefensivePrayerMode defensiveMode = config.defensivePrayerMode();
-
-        if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.NONE)
+        synchronized (defensiveLock)
         {
-            deactivateDefensivePrayer();
-            return;
-        }
+            if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.NONE)
+            {
+                deactivateDefensivePrayerInternal();
+                return;
+            }
 
-        if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
-        {
-            handlePerfectLazyFlick();
-            return;
-        }
+            if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+            {
+                handlePerfectLazyFlickLocked(currentTick);
+                return;
+            }
 
-        // Continuous defensive prayers
-        queuedDefensivePrayer = null;
-        queuedDefensivePrayerTick = -1;
-        defensivePrayerDeactivateTick = -1;
+            // Continuous defensive prayers
+            queuedDefensivePrayer = null;
+            queuedDefensivePrayerTick = -1;
+            defensivePrayerDeactivateTick = -1;
 
-        Rs2PrayerEnum defensivePrayer = determineDefensivePrayer();
+            Rs2PrayerEnum defensivePrayer = determineDefensivePrayer(npcSnapshots);
 
-        if (defensivePrayer == null)
-        {
-            deactivateDefensivePrayer();
-            return;
-        }
+            if (defensivePrayer == null)
+            {
+                deactivateDefensivePrayerInternal();
+                return;
+            }
 
-        if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(defensivePrayer)
-                && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
-        {
-            Rs2Prayer.toggle(activeDefensivePrayer, false);
-        }
+            if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(defensivePrayer)
+                    && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+            {
+                Rs2Prayer.toggle(activeDefensivePrayer, false);
+            }
 
-        if (!defensivePrayer.equals(activeDefensivePrayer) || !Rs2Prayer.isPrayerActive(defensivePrayer))
-        {
-            Rs2Prayer.toggle(defensivePrayer, true);
-            activeDefensivePrayer = defensivePrayer;
+            if (!defensivePrayer.equals(activeDefensivePrayer) || !Rs2Prayer.isPrayerActive(defensivePrayer))
+            {
+                Rs2Prayer.toggle(defensivePrayer, true);
+                activeDefensivePrayer = defensivePrayer;
+            }
         }
     }
 
     private void deactivateDefensivePrayer()
+    {
+        synchronized (defensiveLock)
+        {
+            deactivateDefensivePrayerInternal();
+        }
+    }
+
+    private void deactivateDefensivePrayerInternal()
     {
         if (activeDefensivePrayer != null && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
         {
@@ -739,10 +803,8 @@ public class AttackTimerMetronomePlugin extends Plugin
         defensivePrayerDeactivateTick = -1;
     }
 
-    private void handlePerfectLazyFlick()
+    private void handlePerfectLazyFlickLocked(int currentTick)
     {
-        int currentTick = client.getTickCount();
-
         if (queuedDefensivePrayer != null && queuedDefensivePrayerTick != -1
                 && currentTick >= queuedDefensivePrayerTick)
         {
@@ -778,43 +840,32 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
     }
 
-    private void queueDefensivePrayerFlick(Rs2PrayerEnum prayer, int activationTick)
+    private void queueDefensivePrayerFlick(Rs2PrayerEnum prayer, int activationTick, int currentTick)
     {
-        if (prayer == null)
+        synchronized (defensiveLock)
         {
-            return;
-        }
-
-        queuedDefensivePrayer = prayer;
-        int currentTick = client.getTickCount();
-        queuedDefensivePrayerTick = Math.max(currentTick, activationTick);
-    }
-
-    private Rs2PrayerEnum determineDefensivePrayer()
-    {
-        Player localPlayer = client.getLocalPlayer();
-        if (localPlayer == null)
-        {
-            return null;
-        }
-
-        List<NPC> npcs = client.getNpcs();
-        if (npcs == null)
-        {
-            return null;
-        }
-
-        Rs2PrayerEnum prioritizedPrayer = null;
-
-        for (NPC npc : npcs)
-        {
-            if (npc == null)
+            if (prayer == null)
             {
-                continue;
+                return;
             }
 
-            Actor npcTarget = npc.getInteracting();
-            if (npcTarget != localPlayer)
+            queuedDefensivePrayer = prayer;
+            queuedDefensivePrayerTick = Math.max(currentTick, activationTick);
+        }
+    }
+
+    private Rs2PrayerEnum determineDefensivePrayer(List<NpcSnapshot> npcSnapshots)
+    {
+        Rs2PrayerEnum prioritizedPrayer = null;
+
+        if (npcSnapshots == null)
+        {
+            return null;
+        }
+
+        for (NpcSnapshot npc : npcSnapshots)
+        {
+            if (!npc.isTargetingPlayer())
             {
                 continue;
             }
@@ -844,30 +895,18 @@ public class AttackTimerMetronomePlugin extends Plugin
         return prioritizedPrayer;
     }
 
-    private int getIncomingAttackSpeed()
+    private int getIncomingAttackSpeed(List<NpcSnapshot> npcSnapshots)
     {
-        Player localPlayer = client.getLocalPlayer();
-        if (localPlayer == null)
-        {
-            return -1;
-        }
-
-        List<NPC> npcs = client.getNpcs();
-        if (npcs == null)
+        if (npcSnapshots == null)
         {
             return -1;
         }
 
         int bestSpeed = Integer.MAX_VALUE;
 
-        for (NPC npc : npcs)
+        for (NpcSnapshot npc : npcSnapshots)
         {
-            if (npc == null)
-            {
-                continue;
-            }
-
-            if (npc.getInteracting() != localPlayer)
+            if (!npc.isTargetingPlayer())
             {
                 continue;
             }
@@ -954,13 +993,14 @@ public class AttackTimerMetronomePlugin extends Plugin
         if (event.getGroup().equals("zprayerhelper"))
         {
             attackDelayHoldoffTicks = 0;
+            synchronized (offensiveLock)
+            {
+                activePrayer = null;
+                outOfCombatTicks = 0;
+                prayerDeactivationTick = -1;
+            }
 
-            activePrayer = null;
-            activeDefensivePrayer = null;
-            queuedDefensivePrayer = null;
-            outOfCombatTicks = 0;
-            prayerDeactivationTick = -1;
-            defensivePrayerDeactivateTick = -1;
+            deactivateDefensivePrayer();
             Rs2Prayer.disableAllPrayers();
         }
     }
@@ -980,6 +1020,9 @@ public class AttackTimerMetronomePlugin extends Plugin
 
         overlayManager.add(overlay);
         overlay.setPreferredSize(DEFAULT_SIZE);
+
+        offensivePrayerExecutor = createSingleThreadExecutor("neto-offensive-prayer");
+        defensivePrayerExecutor = createSingleThreadExecutor("neto-defensive-prayer");
     }
 
     @Override
@@ -988,9 +1031,79 @@ public class AttackTimerMetronomePlugin extends Plugin
         overlayManager.remove(overlay);
         attackDelayHoldoffTicks = 0;
         deactivateDefensivePrayer();
-        queuedDefensivePrayer = null;
-        queuedDefensivePrayerTick = -1;
-        defensivePrayerDeactivateTick = -1;
+
+        shutdownExecutor(offensivePrayerExecutor);
+        shutdownExecutor(defensivePrayerExecutor);
+        offensivePrayerExecutor = null;
+        defensivePrayerExecutor = null;
         super.shutDown();
+    }
+
+    private ExecutorService createSingleThreadExecutor(String threadName)
+    {
+        return Executors.newSingleThreadExecutor(r ->
+        {
+            Thread thread = new Thread(r, threadName);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    private void shutdownExecutor(ExecutorService executor)
+    {
+        if (executor != null)
+        {
+            executor.shutdownNow();
+        }
+    }
+
+    private List<NpcSnapshot> createNpcSnapshots(Player localPlayer)
+    {
+        if (localPlayer == null)
+        {
+            return Collections.emptyList();
+        }
+
+        List<NPC> npcs = client.getNpcs();
+        if (npcs == null || npcs.isEmpty())
+        {
+            return Collections.emptyList();
+        }
+
+        List<NpcSnapshot> snapshots = new ArrayList<>(npcs.size());
+        for (NPC npc : npcs)
+        {
+            if (npc == null)
+            {
+                continue;
+            }
+
+            boolean targetingPlayer = npc.getInteracting() == localPlayer;
+            snapshots.add(new NpcSnapshot(npc.getId(), targetingPlayer));
+        }
+
+        return snapshots;
+    }
+
+    private static final class NpcSnapshot
+    {
+        private final int id;
+        private final boolean targetingPlayer;
+
+        private NpcSnapshot(int id, boolean targetingPlayer)
+        {
+            this.id = id;
+            this.targetingPlayer = targetingPlayer;
+        }
+
+        int getId()
+        {
+            return id;
+        }
+
+        boolean isTargetingPlayer()
+        {
+            return targetingPlayer;
+        }
     }
 }
