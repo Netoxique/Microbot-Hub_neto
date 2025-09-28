@@ -128,6 +128,7 @@ public class AttackTimerMetronomePlugin extends Plugin
     private Rs2PrayerEnum activePrayer; // Track the currently active offensive prayer
     private Rs2PrayerEnum activeDefensivePrayer; // Track the currently active defensive prayer
     private Rs2PrayerEnum queuedDefensivePrayer; // Prayer queued for perfect lazy flicking
+    private int queuedDefensivePrayerTick = -1; // Tick on which to activate the queued defensive prayer
     private int prayerDeactivationTick = -1; // Tracks when to deactivate the offensive prayer
     private int defensivePrayerDeactivateTick = -1; // Tracks when to deactivate defensive flicks
 
@@ -665,7 +666,14 @@ public class AttackTimerMetronomePlugin extends Plugin
             return;
         }
 
-        queueDefensivePrayerFlick(determineDefensivePrayer());
+        int activationTick = client.getTickCount();
+        int attackSpeed = getIncomingAttackSpeed();
+        if (attackSpeed > 1)
+        {
+            activationTick += attackSpeed - 1;
+        }
+
+        queueDefensivePrayerFlick(determineDefensivePrayer(), activationTick);
     }
 
 
@@ -694,6 +702,7 @@ public class AttackTimerMetronomePlugin extends Plugin
 
         // Continuous defensive prayers
         queuedDefensivePrayer = null;
+        queuedDefensivePrayerTick = -1;
         defensivePrayerDeactivateTick = -1;
 
         Rs2PrayerEnum defensivePrayer = determineDefensivePrayer();
@@ -726,6 +735,7 @@ public class AttackTimerMetronomePlugin extends Plugin
 
         activeDefensivePrayer = null;
         queuedDefensivePrayer = null;
+        queuedDefensivePrayerTick = -1;
         defensivePrayerDeactivateTick = -1;
     }
 
@@ -733,10 +743,12 @@ public class AttackTimerMetronomePlugin extends Plugin
     {
         int currentTick = client.getTickCount();
 
-        if (queuedDefensivePrayer != null)
+        if (queuedDefensivePrayer != null && queuedDefensivePrayerTick != -1
+                && currentTick >= queuedDefensivePrayerTick)
         {
             Rs2PrayerEnum prayerToActivate = queuedDefensivePrayer;
             queuedDefensivePrayer = null;
+            queuedDefensivePrayerTick = -1;
 
             if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(prayerToActivate)
                     && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
@@ -755,7 +767,7 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
 
         if (activeDefensivePrayer != null && defensivePrayerDeactivateTick != -1
-                && currentTick >= defensivePrayerDeactivateTick)
+                && currentTick > defensivePrayerDeactivateTick)
         {
             if (Rs2Prayer.isPrayerActive(activeDefensivePrayer))
             {
@@ -766,7 +778,7 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
     }
 
-    private void queueDefensivePrayerFlick(Rs2PrayerEnum prayer)
+    private void queueDefensivePrayerFlick(Rs2PrayerEnum prayer, int activationTick)
     {
         if (prayer == null)
         {
@@ -774,6 +786,8 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
 
         queuedDefensivePrayer = prayer;
+        int currentTick = client.getTickCount();
+        queuedDefensivePrayerTick = Math.max(currentTick, activationTick);
     }
 
     private Rs2PrayerEnum determineDefensivePrayer()
@@ -828,6 +842,49 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
 
         return prioritizedPrayer;
+    }
+
+    private int getIncomingAttackSpeed()
+    {
+        Player localPlayer = client.getLocalPlayer();
+        if (localPlayer == null)
+        {
+            return -1;
+        }
+
+        List<NPC> npcs = client.getNpcs();
+        if (npcs == null)
+        {
+            return -1;
+        }
+
+        int bestSpeed = Integer.MAX_VALUE;
+
+        for (NPC npc : npcs)
+        {
+            if (npc == null)
+            {
+                continue;
+            }
+
+            if (npc.getInteracting() != localPlayer)
+            {
+                continue;
+            }
+
+            int attackSpeed = Rs2NpcManager.getAttackSpeed(npc.getId());
+            if (attackSpeed <= 0)
+            {
+                continue;
+            }
+
+            if (attackSpeed < bestSpeed)
+            {
+                bestSpeed = attackSpeed;
+            }
+        }
+
+        return bestSpeed == Integer.MAX_VALUE ? -1 : bestSpeed;
     }
 
     private Rs2PrayerEnum mapStyleToPrayer(String style)
@@ -932,6 +989,7 @@ public class AttackTimerMetronomePlugin extends Plugin
         attackDelayHoldoffTicks = 0;
         deactivateDefensivePrayer();
         queuedDefensivePrayer = null;
+        queuedDefensivePrayerTick = -1;
         defensivePrayerDeactivateTick = -1;
         super.shutDown();
     }
