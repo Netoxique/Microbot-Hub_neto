@@ -31,6 +31,7 @@ package net.runelite.client.plugins.microbot.netoprayer;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
+import net.runelite.api.HitsplatID;
 import net.runelite.api.events.*;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -126,7 +127,9 @@ public class AttackTimerMetronomePlugin extends Plugin
 
     private Rs2PrayerEnum activePrayer; // Track the currently active offensive prayer
     private Rs2PrayerEnum activeDefensivePrayer; // Track the currently active defensive prayer
-    private int prayerDeactivationTick = -1; // Tracks when to deactivate the prayer
+    private Rs2PrayerEnum queuedDefensivePrayer; // Prayer queued for perfect lazy flicking
+    private int prayerDeactivationTick = -1; // Tracks when to deactivate the offensive prayer
+    private int defensivePrayerDeactivateTick = -1; // Tracks when to deactivate defensive flicks
 
     private AttackStyle cachedAttackStyle = null;
     private boolean cachedIsChargedStaff = false;
@@ -637,6 +640,35 @@ public class AttackTimerMetronomePlugin extends Plugin
     }
 
 
+    @Subscribe
+    public void onHitsplatApplied(HitsplatApplied event)
+    {
+        if (config.defensivePrayerMode() != AttackTimerMetronomeConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+        {
+            return;
+        }
+
+        if (!(event.getActor() instanceof Player) || event.getActor() != client.getLocalPlayer())
+        {
+            return;
+        }
+
+        Hitsplat hitsplat = event.getHitsplat();
+        if (hitsplat == null)
+        {
+            return;
+        }
+
+        int hitsplatType = hitsplat.getHitsplatType();
+        if (hitsplatType != HitsplatID.DAMAGE_ME && hitsplatType != HitsplatID.BLOCK_ME)
+        {
+            return;
+        }
+
+        queueDefensivePrayerFlick(determineDefensivePrayer());
+    }
+
+
     private void activatePrayer(Rs2PrayerEnum prayer) {
         if (prayer != null && !Rs2Prayer.isPrayerActive(prayer)) {
             Rs2Prayer.toggle(prayer, true);
@@ -646,11 +678,23 @@ public class AttackTimerMetronomePlugin extends Plugin
 
     private void handleDefensivePrayers()
     {
-        if (!config.enableDefensivePrayers())
+        AttackTimerMetronomeConfig.DefensivePrayerMode defensiveMode = config.defensivePrayerMode();
+
+        if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.NONE)
         {
             deactivateDefensivePrayer();
             return;
         }
+
+        if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+        {
+            handlePerfectLazyFlick();
+            return;
+        }
+
+        // Continuous defensive prayers
+        queuedDefensivePrayer = null;
+        defensivePrayerDeactivateTick = -1;
 
         Rs2PrayerEnum defensivePrayer = determineDefensivePrayer();
 
@@ -681,6 +725,55 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
 
         activeDefensivePrayer = null;
+        queuedDefensivePrayer = null;
+        defensivePrayerDeactivateTick = -1;
+    }
+
+    private void handlePerfectLazyFlick()
+    {
+        int currentTick = client.getTickCount();
+
+        if (queuedDefensivePrayer != null)
+        {
+            Rs2PrayerEnum prayerToActivate = queuedDefensivePrayer;
+            queuedDefensivePrayer = null;
+
+            if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(prayerToActivate)
+                    && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+            {
+                Rs2Prayer.toggle(activeDefensivePrayer, false);
+            }
+
+            if (prayerToActivate != null && (!prayerToActivate.equals(activeDefensivePrayer)
+                    || !Rs2Prayer.isPrayerActive(prayerToActivate)))
+            {
+                Rs2Prayer.toggle(prayerToActivate, true);
+            }
+
+            activeDefensivePrayer = prayerToActivate;
+            defensivePrayerDeactivateTick = currentTick + 1;
+        }
+
+        if (activeDefensivePrayer != null && defensivePrayerDeactivateTick != -1
+                && currentTick >= defensivePrayerDeactivateTick)
+        {
+            if (Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+            {
+                Rs2Prayer.toggle(activeDefensivePrayer, false);
+            }
+            activeDefensivePrayer = null;
+            defensivePrayerDeactivateTick = -1;
+        }
+    }
+
+    private void queueDefensivePrayerFlick(Rs2PrayerEnum prayer)
+    {
+        if (prayer == null)
+        {
+            return;
+        }
+
+        queuedDefensivePrayer = prayer;
     }
 
     private Rs2PrayerEnum determineDefensivePrayer()
@@ -807,8 +900,10 @@ public class AttackTimerMetronomePlugin extends Plugin
 
             activePrayer = null;
             activeDefensivePrayer = null;
+            queuedDefensivePrayer = null;
             outOfCombatTicks = 0;
             prayerDeactivationTick = -1;
+            defensivePrayerDeactivateTick = -1;
             Rs2Prayer.disableAllPrayers();
         }
     }
@@ -836,6 +931,8 @@ public class AttackTimerMetronomePlugin extends Plugin
         overlayManager.remove(overlay);
         attackDelayHoldoffTicks = 0;
         deactivateDefensivePrayer();
+        queuedDefensivePrayer = null;
+        defensivePrayerDeactivateTick = -1;
         super.shutDown();
     }
 }

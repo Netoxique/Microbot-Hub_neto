@@ -12,13 +12,23 @@ public interface AttackTimerMetronomeConfig extends Config
 {
 	@Getter
 	@RequiredArgsConstructor
-	enum PrayerMode {
-		NONE("None"),           // New option
-		LAZY("Lazy Flick"),
-		NORMAL("Normal");
+        enum PrayerMode {
+                NONE("None"),           // New option
+                LAZY("Lazy Flick"),
+                NORMAL("Normal");
 
-		private final String description;
-	}
+                private final String description;
+        }
+
+        @Getter
+        @RequiredArgsConstructor
+        enum DefensivePrayerMode {
+                NONE("None"),
+                PERFECT_LAZY_FLICK("Perfect Lazy Flick"),
+                CONTINUOUS("Continuous");
+
+                private final String description;
+        }
 
 
 	@ConfigSection(
@@ -41,17 +51,17 @@ public interface AttackTimerMetronomeConfig extends Config
 		return PrayerMode.LAZY;
 	}
 
-	@ConfigItem(
-				position = 2,
-				keyName = "enableDefensivePrayers",
-				name = "Enable Defensive Prayers",
-				description = "Automatically protect from the detected enemy attack style",
-				section = TickNumberSettings
-	)
-	default boolean enableDefensivePrayers()
-	{
-		return false;
-	}
+        @ConfigItem(
+                                position = 2,
+                                keyName = "defensivePrayerMode",
+                                name = "Defensive Prayer Mode",
+                                description = "Choose how defensive prayers are activated",
+                                section = TickNumberSettings
+        )
+        default DefensivePrayerMode defensivePrayerMode()
+        {
+                return DefensivePrayerMode.NONE;
+        }
 
 	@ConfigItem(
 				position = 3,
