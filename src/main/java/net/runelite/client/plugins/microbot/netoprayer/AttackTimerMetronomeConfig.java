@@ -6,6 +6,7 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
+import net.runelite.client.plugins.microbot.util.misc.SpecialAttackWeaponEnum;
 
 @ConfigGroup("zprayerhelper")
 public interface AttackTimerMetronomeConfig extends Config
@@ -31,12 +32,19 @@ public interface AttackTimerMetronomeConfig extends Config
         }
 
 
-	@ConfigSection(
-			name = "Prayer Settings",
-			description = "Settings",
-			position = 1
-	)
-	String TickNumberSettings = "Attack Cooldown Tick Settings";
+        @ConfigSection(
+                        name = "Prayer Settings",
+                        description = "Settings",
+                        position = 1
+        )
+        String TickNumberSettings = "Attack Cooldown Tick Settings";
+
+        @ConfigSection(
+                        name = "Special Attack",
+                        description = "Special attack configuration",
+                        position = 2
+        )
+        String SpecialAttackSettings = "Special Attack Settings";
 
 	@ConfigItem(
 				position = 1,
@@ -63,17 +71,41 @@ public interface AttackTimerMetronomeConfig extends Config
                 return DefensivePrayerMode.NONE;
         }
 
-	@ConfigItem(
-				position = 3,
-				keyName = "showTick",
-				name = "Show Attack Cooldown Ticks",
-				description = "Shows number of ticks until next attack",
-				section = TickNumberSettings
-	)
-	default boolean showTick()
-	{
-		return true;
-	}
+        @ConfigItem(
+                                position = 3,
+                                keyName = "showTick",
+                                name = "Show Attack Cooldown Ticks",
+                                description = "Shows number of ticks until next attack",
+                                section = TickNumberSettings
+        )
+        default boolean showTick()
+        {
+                return true;
+        }
+
+        @ConfigItem(
+                                position = 1,
+                                keyName = "useWeaponSpec",
+                                name = "Use weapon sepc.",
+                                description = "Automatically use the selected special attack weapon when available.",
+                                section = SpecialAttackSettings
+        )
+        default boolean useWeaponSpec()
+        {
+                return false;
+        }
+
+        @ConfigItem(
+                                position = 2,
+                                keyName = "specWeapon",
+                                name = "Spec weapon",
+                                description = "Weapon to use for special attacks.",
+                                section = SpecialAttackSettings
+        )
+        default SpecialAttackWeaponEnum specWeapon()
+        {
+                return SpecialAttackWeaponEnum.DRAGON_DAGGER;
+        }
 
 
 

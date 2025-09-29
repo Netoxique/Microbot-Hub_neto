@@ -43,11 +43,17 @@ import net.runelite.client.game.NPCManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.misc.SpecialAttackWeaponEnum;
+import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcManager;
+import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
 import java.awt.*;
@@ -57,6 +63,10 @@ import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @PluginDescriptor(
@@ -138,6 +148,10 @@ public class AttackTimerMetronomePlugin extends Plugin
 
     private ExecutorService offensivePrayerExecutor;
     private ExecutorService defensivePrayerExecutor;
+    private ScheduledExecutorService specialAttackExecutor;
+    private ScheduledFuture<?> specialAttackFuture;
+    private final AtomicReference<Rs2NpcModel> specialAttackTarget = new AtomicReference<>();
+    private static final long SPECIAL_ATTACK_POLL_DELAY_MS = 600L;
     private final Object offensiveLock = new Object();
     private final Object defensiveLock = new Object();
 
@@ -1002,6 +1016,7 @@ public class AttackTimerMetronomePlugin extends Plugin
 
             deactivateDefensivePrayer();
             Rs2Prayer.disableAllPrayers();
+            configureSpecialAttackSettings();
         }
     }
 
@@ -1023,6 +1038,8 @@ public class AttackTimerMetronomePlugin extends Plugin
 
         offensivePrayerExecutor = createSingleThreadExecutor("neto-offensive-prayer");
         defensivePrayerExecutor = createSingleThreadExecutor("neto-defensive-prayer");
+        startSpecialAttackTask();
+        configureSpecialAttackSettings();
     }
 
     @Override
@@ -1034,8 +1051,10 @@ public class AttackTimerMetronomePlugin extends Plugin
 
         shutdownExecutor(offensivePrayerExecutor);
         shutdownExecutor(defensivePrayerExecutor);
+        stopSpecialAttackTask();
         offensivePrayerExecutor = null;
         defensivePrayerExecutor = null;
+        Microbot.getSpecialAttackConfigs().reset();
         super.shutDown();
     }
 
@@ -1049,11 +1068,189 @@ public class AttackTimerMetronomePlugin extends Plugin
         });
     }
 
+    private ScheduledExecutorService createSingleThreadScheduledExecutor(String threadName)
+    {
+        return Executors.newSingleThreadScheduledExecutor(r ->
+        {
+            Thread thread = new Thread(r, threadName);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
     private void shutdownExecutor(ExecutorService executor)
     {
         if (executor != null)
         {
             executor.shutdownNow();
+        }
+    }
+
+    private void startSpecialAttackTask()
+    {
+        if (specialAttackExecutor == null || specialAttackExecutor.isShutdown())
+        {
+            specialAttackExecutor = createSingleThreadScheduledExecutor("neto-special-attack");
+        }
+
+        if (specialAttackFuture == null || specialAttackFuture.isCancelled())
+        {
+            specialAttackTarget.set(null);
+            specialAttackFuture = specialAttackExecutor.scheduleWithFixedDelay(
+                    this::performSpecialAttackIfReady,
+                    0,
+                    SPECIAL_ATTACK_POLL_DELAY_MS,
+                    TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void stopSpecialAttackTask()
+    {
+        if (specialAttackFuture != null)
+        {
+            specialAttackFuture.cancel(true);
+            specialAttackFuture = null;
+        }
+
+        shutdownExecutor(specialAttackExecutor);
+        specialAttackExecutor = null;
+        specialAttackTarget.set(null);
+    }
+
+    private void configureSpecialAttackSettings()
+    {
+        if (!config.useWeaponSpec())
+        {
+            Microbot.getSpecialAttackConfigs().reset();
+            specialAttackTarget.set(null);
+            return;
+        }
+
+        SpecialAttackWeaponEnum weapon = config.specWeapon();
+        if (weapon == null)
+        {
+            Microbot.getSpecialAttackConfigs().reset();
+            specialAttackTarget.set(null);
+            return;
+        }
+
+        Microbot.getSpecialAttackConfigs().setSpecialAttack(true);
+        Microbot.getSpecialAttackConfigs().setSpecialAttackWeapon(weapon);
+        Microbot.getSpecialAttackConfigs().setMinimumSpecEnergy(weapon.getEnergyRequired());
+    }
+
+    private void performSpecialAttackIfReady()
+    {
+        try
+        {
+            if (!config.useWeaponSpec())
+            {
+                return;
+            }
+
+            if (!Microbot.isLoggedIn())
+            {
+                return;
+            }
+
+            if (!Microbot.getSpecialAttackConfigs().useSpecWeapon())
+            {
+                return;
+            }
+
+            if (Rs2Equipment.isWearingFullGuthan())
+            {
+                return;
+            }
+
+            if (isSpecialAttackButtonDisabled())
+            {
+                return;
+            }
+
+            if (Rs2Player.isInteracting())
+            {
+                Object interacting = Rs2Player.getInteracting();
+                if (interacting instanceof Rs2NpcModel)
+                {
+                    specialAttackTarget.set((Rs2NpcModel) interacting);
+                    Rs2Npc.attack(specialAttackTarget.get());
+                }
+            }
+            else
+            {
+                specialAttackTarget.set(null);
+            }
+        }
+        catch (Exception ex)
+        {
+            log.warn("Error executing special attack logic", ex);
+        }
+    }
+
+    private boolean isSpecialAttackButtonDisabled()
+    {
+        Widget widget = getSpecialAttackWidget();
+        if (widget == null || widget.isHidden())
+        {
+            return true;
+        }
+
+        if (widget.getClickMask() == 0)
+        {
+            return true;
+        }
+
+        SpecialAttackWeaponEnum weapon = config.specWeapon();
+        if (weapon == null)
+        {
+            return true;
+        }
+
+        int requiredEnergy = weapon.getEnergyRequired();
+        int currentEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
+        return currentEnergy < requiredEnergy;
+    }
+
+    private Widget getSpecialAttackWidget()
+    {
+        Widget widget = getWidgetByInfoName("COMBAT_SPECIAL_ATTACK");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        widget = getWidgetByInfoName("COMBAT_SPECIAL_ATTACK_BUTTON");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        widget = getWidgetByInfoName("SPECIAL_ATTACK");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        widget = getWidgetByInfoName("MINIMAP_SPECIAL_ATTACK_ORB");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        return null;
+    }
+
+    private Widget getWidgetByInfoName(String name)
+    {
+        try
+        {
+            WidgetInfo widgetInfo = WidgetInfo.valueOf(name);
+            return client.getWidget(widgetInfo);
+        }
+        catch (IllegalArgumentException ex)
+        {
+            return null;
         }
     }
 
