@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.netoprayer;
+package net.runelite.client.plugins.microbot.netocombathelp;
 
 /*
  * Copyright (c) 2024, Lexer747 <https://github.com/Lexer747>

@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.netoprayer;
+package net.runelite.client.plugins.microbot.netocombathelp;
 
 
 /*
@@ -70,7 +70,7 @@ import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @PluginDescriptor(
-        name = PluginDescriptor.zerozero + "Neto Prayer Helper",
+        name = PluginDescriptor.zerozero + "Neto Combat Helper",
         description = "Prayer helper",
         tags = {"timers", "overlays", "tick", "Lazy Flicking", "Prayer"},
         enabledByDefault = false,

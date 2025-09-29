@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.netoprayer;
+package net.runelite.client.plugins.microbot.netocombathelp;
 
 /*
  * Copyright (c) 2022, Nick Graves <https://github.com/ngraves95>

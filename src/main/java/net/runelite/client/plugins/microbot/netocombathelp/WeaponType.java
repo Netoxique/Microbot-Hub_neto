@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.netoprayer;
+package net.runelite.client.plugins.microbot.netocombathelp;
 
 /*
  * Copyright (c) 2017, honeyhoney <https://github.com/honeyhoney>
@@ -30,7 +30,7 @@ import lombok.Getter;
 
 import java.util.Map;
 
-import static net.runelite.client.plugins.microbot.netoprayer.AttackStyle.*;
+import static net.runelite.client.plugins.microbot.netocombathelp.AttackStyle.*;
 
 @Getter
 enum WeaponType
