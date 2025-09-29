@@ -39,17 +39,17 @@ import javax.inject.Inject;
 import java.awt.*;
 
 
-public class AttackTimerMetronomeTileOverlay extends Overlay
+public class NetoCombatHelperTileOverlay extends Overlay
 {
 
     private final Client client;
-    private final AttackTimerMetronomeConfig config;
-    private final AttackTimerMetronomePlugin plugin;
+    private final NetoCombatHelperConfig config;
+    private final NetoCombatHelperPlugin plugin;
 
     private Player player;
 
     @Inject
-    public AttackTimerMetronomeTileOverlay(Client client, AttackTimerMetronomeConfig config, AttackTimerMetronomePlugin plugin)
+    public NetoCombatHelperTileOverlay(Client client, NetoCombatHelperConfig config, NetoCombatHelperPlugin plugin)
     {
         super(plugin);
         this.client = client;
@@ -66,7 +66,7 @@ public class AttackTimerMetronomeTileOverlay extends Overlay
         player = client.getLocalPlayer();
         plugin.renderedState = plugin.attackState;
 
-        if (plugin.attackState == AttackTimerMetronomePlugin.AttackState.NOT_ATTACKING)
+        if (plugin.attackState == NetoCombatHelperPlugin.AttackState.NOT_ATTACKING)
         {
             return null;
         }

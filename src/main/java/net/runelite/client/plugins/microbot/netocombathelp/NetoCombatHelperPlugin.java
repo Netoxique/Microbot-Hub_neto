@@ -76,7 +76,7 @@ import java.util.concurrent.atomic.AtomicReference;
         enabledByDefault = false,
         minClientVersion = "2.0.0"
 )
-public class AttackTimerMetronomePlugin extends Plugin
+public class NetoCombatHelperPlugin extends Plugin
 {
     public enum AttackState {
         NOT_ATTACKING,
@@ -91,10 +91,10 @@ public class AttackTimerMetronomePlugin extends Plugin
     private ConfigManager configManager;
 
     @Inject
-    private AttackTimerMetronomeTileOverlay overlay;
+    private NetoCombatHelperTileOverlay overlay;
 
     @Inject
-    private AttackTimerMetronomeConfig config;
+    private NetoCombatHelperConfig config;
 
     @Inject
     private ItemManager itemManager;
@@ -209,9 +209,9 @@ public class AttackTimerMetronomePlugin extends Plugin
     // endregion
 
     @Provides
-    AttackTimerMetronomeConfig provideConfig(ConfigManager configManager)
+    NetoCombatHelperConfig provideConfig(ConfigManager configManager)
     {
-        return configManager.getConfig(AttackTimerMetronomeConfig.class);
+        return configManager.getConfig(NetoCombatHelperConfig.class);
     }
 
     private int getItemIdFromContainer(ItemContainer container, int slotID)
@@ -572,13 +572,13 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Subscribe
     public void onGameTick(GameTick tick)
     {
-        AttackTimerMetronomeConfig.PrayerMode prayerMode = config.enableLazyFlicking();
-        AttackTimerMetronomeConfig.DefensivePrayerMode defensiveMode = config.defensivePrayerMode();
+        NetoCombatHelperConfig.PrayerMode prayerMode = config.enableLazyFlicking();
+        NetoCombatHelperConfig.DefensivePrayerMode defensiveMode = config.defensivePrayerMode();
         int ticksUntilAttack = getTicksUntilNextAttack();
         boolean isAttacking = isPlayerAttacking();
         AttackStyle attackStyle = getAttackStyle();
         int currentTick = client.getTickCount();
-        List<NpcSnapshot> npcSnapshots = defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.NONE
+        List<NpcSnapshot> npcSnapshots = defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.NONE
                 ? Collections.emptyList()
                 : createNpcSnapshots(client.getLocalPlayer());
 
@@ -631,7 +631,7 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Subscribe
     public void onHitsplatApplied(HitsplatApplied event)
     {
-        if (config.defensivePrayerMode() != AttackTimerMetronomeConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+        if (config.defensivePrayerMode() != NetoCombatHelperConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
         {
             return;
         }
@@ -690,14 +690,14 @@ public class AttackTimerMetronomePlugin extends Plugin
         activePrayer = prayer; // Track the currently active prayer
     }
 
-    private void handleOffensivePrayers(AttackTimerMetronomeConfig.PrayerMode prayerMode,
+    private void handleOffensivePrayers(NetoCombatHelperConfig.PrayerMode prayerMode,
                                         int ticksUntilAttack,
                                         boolean isAttacking,
                                         AttackStyle attackStyle)
     {
         synchronized (offensiveLock)
         {
-            if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.LAZY)
+            if (prayerMode == NetoCombatHelperConfig.PrayerMode.LAZY)
             {
                 if (ticksUntilAttack > 0 && ticksUntilAttack == 2)
                 {
@@ -723,7 +723,7 @@ public class AttackTimerMetronomePlugin extends Plugin
                     prayerDeactivationTick--;
                 }
             }
-            else if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.NORMAL)
+            else if (prayerMode == NetoCombatHelperConfig.PrayerMode.NORMAL)
             {
                 if (isAttacking)
                 {
@@ -751,19 +751,19 @@ public class AttackTimerMetronomePlugin extends Plugin
         }
     }
 
-    private void handleDefensivePrayers(AttackTimerMetronomeConfig.DefensivePrayerMode defensiveMode,
+    private void handleDefensivePrayers(NetoCombatHelperConfig.DefensivePrayerMode defensiveMode,
                                         List<NpcSnapshot> npcSnapshots,
                                         int currentTick)
     {
         synchronized (defensiveLock)
         {
-            if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.NONE)
+            if (defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.NONE)
             {
                 deactivateDefensivePrayerInternal();
                 return;
             }
 
-            if (defensiveMode == AttackTimerMetronomeConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+            if (defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
             {
                 handlePerfectLazyFlickLocked(currentTick);
                 return;

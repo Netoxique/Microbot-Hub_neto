@@ -9,7 +9,7 @@ import net.runelite.client.config.ConfigSection;
 import net.runelite.client.plugins.microbot.util.misc.SpecialAttackWeaponEnum;
 
 @ConfigGroup("zprayerhelper")
-public interface AttackTimerMetronomeConfig extends Config
+public interface NetoCombatHelperConfig extends Config
 {
 	@Getter
 	@RequiredArgsConstructor
