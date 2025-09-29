@@ -1145,41 +1145,41 @@ public class NetoCombatHelperPlugin extends Plugin
         {
             if (!config.useWeaponSpec())
             {
+                specialAttackTarget.set(null);
                 return;
             }
 
             if (!Microbot.isLoggedIn())
             {
-                return;
-            }
-
-            if (!Microbot.getSpecialAttackConfigs().useSpecWeapon())
-            {
+                specialAttackTarget.set(null);
                 return;
             }
 
             if (Rs2Equipment.isWearingFullGuthan())
             {
+                specialAttackTarget.set(null);
                 return;
             }
 
-            if (isSpecialAttackButtonDisabled())
-            {
-                return;
-            }
-
-            if (Rs2Player.isInteracting())
-            {
-                Object interacting = Rs2Player.getInteracting();
-                if (interacting instanceof Rs2NpcModel)
-                {
-                    specialAttackTarget.set((Rs2NpcModel) interacting);
-                    Rs2Npc.attack(specialAttackTarget.get());
-                }
-            }
-            else
+            if (!Rs2Player.isInteracting())
             {
                 specialAttackTarget.set(null);
+                return;
+            }
+
+            Object interacting = Rs2Player.getInteracting();
+            if (!(interacting instanceof Rs2NpcModel))
+            {
+                specialAttackTarget.set(null);
+                return;
+            }
+
+            Rs2NpcModel interactingNpc = (Rs2NpcModel) interacting;
+            specialAttackTarget.set(interactingNpc);
+
+            if (Microbot.getSpecialAttackConfigs().useSpecWeapon())
+            {
+                Rs2Npc.attack(interactingNpc);
             }
         }
         catch (Exception ex)
