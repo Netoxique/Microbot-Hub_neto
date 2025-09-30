@@ -29,7 +29,7 @@ import java.util.*;
 import java.util.Deque;
 
 @PluginDescriptor(
-        name = PluginConstants.DEFAULT_PREFIX + "Herbiboar (Neto)",
+        name = PluginConstants.DEFAULT_PREFIX + "Herbiboar",
         description = "Automatically hunts herbiboars with trail tracking and banking support",
         tags = {"skilling", "hunter", "herbiboar"},
         authors = {"AI Agent"},

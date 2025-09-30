@@ -12,7 +12,7 @@ import javax.inject.Inject;
 import java.awt.*;
 
 @PluginDescriptor(
-        name = "Neto Lunar Plank Make",
+        name = PluginDescriptor.Geoff + "Lunar Plank Make",
         description = "Geoff's lunar plank maker",
         tags = {"magic", "moneymaking"},
         version = LunarPlankMakePlugin.version,
