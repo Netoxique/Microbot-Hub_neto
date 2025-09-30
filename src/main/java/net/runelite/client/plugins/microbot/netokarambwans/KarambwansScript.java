@@ -7,6 +7,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.NpcID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
@@ -18,6 +19,7 @@ import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
 import java.util.Map;
@@ -213,8 +215,10 @@ public class KarambwansScript extends Script {
     }
 
     private void deposit_inv() {
+
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY); // IMPORTANT FOR INV INTERACTIONS
         Rs2Bank.openBank();
-        sleepUntil(Rs2Bank::isOpen);
+        sleepUntil( ()-> Rs2Bank.isOpen());
 
         Rs2Bank.emptyFishBarrel();
 
