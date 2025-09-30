@@ -199,7 +199,6 @@ public class KarambwansScript extends Script {
                 ItemID.TBWT_KARAMBWAN_VESSEL,
                 ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI,
                 ItemID.TBWT_RAW_KARAMBWANJI
-
         );
 
         if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {

@@ -32,10 +32,21 @@ public interface KarambwansConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "usePoh",
+            name = "Use POH / Crafting Cape",
+            description = "Bank with cape and teleport back with ring.",
+            position = 1,
+            section = generalSection
+    )
+    default boolean usePoh() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "startingState",
             name = "Starting State",
             description = "Choose the initial state of the bot.",
-            position = 1,
+            position = 2,
             section = generalSection
     )
     default KarambwanInfo.states STARTING_STATE() {
