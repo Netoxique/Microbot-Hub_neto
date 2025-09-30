@@ -17,7 +17,7 @@ import java.awt.*;
         description = "A plugin to fish karambwans",
         tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
-        version = "1.0.0",
+        version = "1.1.0",
         minClientVersion = "2.0.0",
         enabledByDefault = false
 //        isExternal = PluginConstants.IS_EXTERNAL

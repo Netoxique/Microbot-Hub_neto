@@ -8,9 +8,9 @@ import net.runelite.client.config.*;
         "• Karambwan Vessel<br/>" +
         "• Dramen Staff<br/><br/>" +
         "• Fish Barrel (Preferrable)<br/>" +
-        "• Crafting Cape (Optional)<br/>" +
+        "• Crafting Cape (IF +85 CONS.) <br/>" +
+        "• Rune Pouch (IF +85 CONS.) <br/>" +
         "• Construction Cape (Optional)<br/>" +
-        "• Rune Pouch (House Tel.) (Optional)<br/>" +
         "<b>Setup:</b><br/>" +
         "1. Literally start with the required items in your bank.<br/>")
 
