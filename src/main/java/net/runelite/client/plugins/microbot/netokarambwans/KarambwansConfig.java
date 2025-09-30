@@ -10,7 +10,7 @@ import net.runelite.client.config.*;
         "• Fish Barrel (Preferrable)<br/>" +
         "• Crafting Cape (IF +85 CONS.) <br/>" +
         "• Rune Pouch (IF +85 CONS.) <br/>" +
-        "• Construction Cape (Optional)<br/>" +
+        "• Construction Cape (Optional)<br/><br/>" +
         "<b>Setup:</b><br/>" +
         "1. Literally start with the required items in your bank.<br/>")
 
