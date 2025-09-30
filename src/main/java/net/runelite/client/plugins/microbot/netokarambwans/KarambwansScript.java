@@ -173,7 +173,7 @@ public class KarambwansScript extends Script {
             Rs2Bank.withdrawAll(ItemID.TBWT_RAW_KARAMBWANJI);
         }
 
-        boolean hasFairyCons = Microbot.getClient().getRealSkillLevel(Skill.CONSTRUCTION) >= 85;
+        boolean hasFairyCons = Microbot.getClient().getRealSkillLevel(Skill.CONSTRUCTION) >= 84;
         if (hasFairyCons) {
             boolean has99Construction = Microbot.getClient().getRealSkillLevel(Skill.CONSTRUCTION) >= 99;
             if (has99Construction) {
