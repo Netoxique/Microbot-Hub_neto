@@ -168,14 +168,17 @@ public class KarambwansScript extends Script {
             Rs2Bank.withdrawAll(ItemID.TBWT_RAW_KARAMBWANJI);
         }
 
-        boolean has99Construction = Microbot.getClient().getRealSkillLevel(Skill.CONSTRUCTION) >= 99;
-        if (has99Construction) {
-            equipConstructionCape();
-        } else {
-            ensureRunePouchLoaded();
-        }
+        boolean hasFairyCons = Microbot.getClient().getRealSkillLevel(Skill.CONSTRUCTION) >= 85;
+        if (hasFairyCons) {
+            boolean has99Construction = Microbot.getClient().getRealSkillLevel(Skill.CONSTRUCTION) >= 99;
+            if (has99Construction) {
+                equipConstructionCape();
+            } else {
+                ensureRunePouchLoaded();
+            }
 
-        handleCraftingCape(has99Construction);
+            handleCraftingCape(has99Construction);
+        }
 
         Rs2Bank.closeBank();
 
