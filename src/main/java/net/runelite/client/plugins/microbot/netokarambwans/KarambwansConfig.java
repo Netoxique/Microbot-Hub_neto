@@ -3,13 +3,13 @@ package net.runelite.client.plugins.microbot.netokarambwans;
 import net.runelite.client.config.*;
 
 @ConfigGroup("GabulhasKarambwans")
-@ConfigInformation(
-        "<ol>" +
-                "<li>Configure the fairy rings to DKP (last destination must be DKP)</li>" +
-                "<li>Make sure to have karambwan vessel and raw karambwanji in your inventory</li>" +
-                "<li>Start the script next to the karambwan fishing spot</li>" +
-                "</ol>"
-)
+@ConfigInformation("Automated Karambwan Fishing + Re-baiting<br/><br/>" +
+        "<b>Requirements:</b><br/>" +
+        "• Karambwan Vessel<br/>" +
+        "• Fish Barrel (Preferrable)<br/>" +
+        "• Dramen Staff<br/><br/>" +
+        "<b>Setup:</b><br/>" +
+        "1. Literally start with the required items in your bank.<br/>")
 
 public interface KarambwansConfig extends Config {
     @ConfigSection(
