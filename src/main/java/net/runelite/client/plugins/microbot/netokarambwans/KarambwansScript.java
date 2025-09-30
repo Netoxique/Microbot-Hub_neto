@@ -216,6 +216,8 @@ public class KarambwansScript extends Script {
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
 
+        Rs2Bank.emptyFishBarrel();
+
         Rs2Bank.depositAllExcept(
                 ItemID.FISH_BARREL_OPEN,
                 ItemID.FISH_BARREL_CLOSED,
@@ -223,15 +225,11 @@ public class KarambwansScript extends Script {
                 ItemID.TBWT_KARAMBWAN_VESSEL_LOADED_WITH_KARAMBWANJI,
                 ItemID.TBWT_RAW_KARAMBWANJI,
                 ItemID.BH_RUNE_POUCH,
-                CRAFTING_CAPE_IDS[0],
-                CRAFTING_CAPE_IDS[1],
-                CONSTRUCTION_CAPE_IDS[0],
-                CONSTRUCTION_CAPE_IDS[1]
+                ItemID.SKILLCAPE_CONSTRUCTION,
+                ItemID.SKILLCAPE_CONSTRUCTION_TRIMMED,
+                ItemID.SKILLCAPE_CRAFTING,
+                ItemID.SKILLCAPE_CRAFTING_TRIMMED
         );
-
-        if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN) || Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
-            Rs2Bank.emptyFishBarrel();
-        }
     }
 
     private void interactWithFishingSpot() {
