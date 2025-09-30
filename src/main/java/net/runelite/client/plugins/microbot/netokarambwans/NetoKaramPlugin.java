@@ -7,6 +7,7 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
 //import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -52,6 +53,7 @@ public class NetoKaramPlugin extends Plugin {
     }
 
     protected void shutDown() {
+        BreakHandlerScript.setLockState(false);
         karambwansScript.shutdown();
         overlayManager.remove(karambwansOverlay);
     }
