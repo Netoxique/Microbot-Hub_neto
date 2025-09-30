@@ -87,27 +87,6 @@ public class HerbiboarScript extends Script {
         return Rs2Player.getRunEnergy() <= config.thresholdEnergy();
     }
     
-    private static final int[] STAMINA_POTIONS_ASC = {
-            ItemID._1DOSESTAMINA,
-            ItemID._2DOSESTAMINA,
-            ItemID._3DOSESTAMINA,
-            ItemID._4DOSESTAMINA
-    };
-
-    private static final int[] SUPER_ENERGY_POTIONS_ASC = {
-            ItemID._1DOSE2ENERGY,
-            ItemID._2DOSE2ENERGY,
-            ItemID._3DOSE2ENERGY,
-            ItemID._4DOSE2ENERGY
-    };
-
-    private static final int[] ENERGY_POTIONS_ASC = {
-            ItemID._1DOSE1ENERGY,
-            ItemID._2DOSE1ENERGY,
-            ItemID._3DOSE1ENERGY,
-            ItemID._4DOSE1ENERGY
-    };
-
     private void manageRunEnergy(HerbiboarConfig config) {
         HerbiboarConfig.RunEnergyOption energyOption = config.runEnergyOption();
 
@@ -117,20 +96,47 @@ public class HerbiboarScript extends Script {
                         (!config.stamBuffAlwaysActive() && !energyUnderThreshold(config))) {
                     return;
                 }
-                if (hasAnyPotion(STAMINA_POTIONS_ASC)) {
-                    drinkPotionWithLeastDoses(STAMINA_POTIONS_ASC);
+                if (Rs2Inventory.contains(ItemID._4DOSESTAMINA, ItemID._3DOSESTAMINA, ItemID._2DOSESTAMINA, ItemID._1DOSESTAMINA)) {
+                    Rs2Inventory.interact(ItemID._4DOSESTAMINA, "Drink");
+                    if (!Rs2Inventory.contains(ItemID._4DOSESTAMINA)) {
+                        Rs2Inventory.interact(ItemID._3DOSESTAMINA, "Drink");
+                    }
+                    if (!Rs2Inventory.contains(ItemID._3DOSESTAMINA)) {
+                        Rs2Inventory.interact(ItemID._2DOSESTAMINA, "Drink");
+                    }
+                    if (!Rs2Inventory.contains(ItemID._2DOSESTAMINA)) {
+                        Rs2Inventory.interact(ItemID._1DOSESTAMINA, "Drink");
+                    }
                 }
                 break;
             case SUPER_ENERGY_POTION:
                 if (!energyUnderThreshold(config)) return;
-                if (hasAnyPotion(SUPER_ENERGY_POTIONS_ASC)) {
-                    drinkPotionWithLeastDoses(SUPER_ENERGY_POTIONS_ASC);
+                if (Rs2Inventory.contains(ItemID._4DOSE2ENERGY, ItemID._3DOSE2ENERGY, ItemID._2DOSE2ENERGY, ItemID._1DOSE2ENERGY)) {
+                    Rs2Inventory.interact(ItemID._4DOSE2ENERGY, "Drink");
+                    if (!Rs2Inventory.contains(ItemID._4DOSE2ENERGY)) {
+                        Rs2Inventory.interact(ItemID._3DOSE2ENERGY, "Drink");
+                    }
+                    if (!Rs2Inventory.contains(ItemID._3DOSE2ENERGY)) {
+                        Rs2Inventory.interact(ItemID._2DOSE2ENERGY, "Drink");
+                    }
+                    if (!Rs2Inventory.contains(ItemID._2DOSE2ENERGY)) {
+                        Rs2Inventory.interact(ItemID._1DOSE2ENERGY, "Drink");
+                    }
                 }
                 break;
             case ENERGY_POTION:
                 if (!energyUnderThreshold(config)) return;
-                if (hasAnyPotion(ENERGY_POTIONS_ASC)) {
-                    drinkPotionWithLeastDoses(ENERGY_POTIONS_ASC);
+                if (Rs2Inventory.contains(ItemID._4DOSE1ENERGY, ItemID._3DOSE1ENERGY, ItemID._2DOSE1ENERGY, ItemID._1DOSE1ENERGY)) {
+                    Rs2Inventory.interact(ItemID._4DOSE1ENERGY, "Drink");
+                    if (!Rs2Inventory.contains(ItemID._4DOSE1ENERGY)) {
+                        Rs2Inventory.interact(ItemID._3DOSE1ENERGY, "Drink");
+                    }
+                    if (!Rs2Inventory.contains(ItemID._3DOSE1ENERGY)) {
+                        Rs2Inventory.interact(ItemID._2DOSE1ENERGY, "Drink");
+                    }
+                    if (!Rs2Inventory.contains(ItemID._2DOSE1ENERGY)) {
+                        Rs2Inventory.interact(ItemID._1DOSE1ENERGY, "Drink");
+                    }
                 }
                 break;
             case STRANGE_FRUIT:
@@ -142,24 +148,6 @@ public class HerbiboarScript extends Script {
             case NONE:
             default:
                 break;
-        }
-    }
-
-    private boolean hasAnyPotion(int... potionIds) {
-        for (int potionId : potionIds) {
-            if (Rs2Inventory.contains(potionId)) {
-                return true;
-            }
-        }
-        return false;
-    }
-
-    private void drinkPotionWithLeastDoses(int... potionIdsAscending) {
-        for (int potionId : potionIdsAscending) {
-            if (Rs2Inventory.contains(potionId)) {
-                Rs2Inventory.interact(potionId, "Drink");
-                return;
-            }
         }
     }
     
