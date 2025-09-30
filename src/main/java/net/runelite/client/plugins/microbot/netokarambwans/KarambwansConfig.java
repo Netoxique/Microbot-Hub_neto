@@ -6,8 +6,11 @@ import net.runelite.client.config.*;
 @ConfigInformation("Automated Karambwan Fishing + Re-baiting<br/><br/>" +
         "<b>Requirements:</b><br/>" +
         "• Karambwan Vessel<br/>" +
-        "• Fish Barrel (Preferrable)<br/>" +
         "• Dramen Staff<br/><br/>" +
+        "• Fish Barrel (Preferrable)<br/>" +
+        "• Crafting Cape (Optional)<br/>" +
+        "• Construction Cape (Optional)<br/>" +
+        "• Rune Pouch (House Tel.) (Optional)<br/>" +
         "<b>Setup:</b><br/>" +
         "1. Literally start with the required items in your bank.<br/>")
 
