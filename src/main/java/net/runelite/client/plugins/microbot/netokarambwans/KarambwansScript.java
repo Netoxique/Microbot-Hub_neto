@@ -7,6 +7,7 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.NpcID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
@@ -44,6 +45,8 @@ public class KarambwansScript extends Script {
 
     public boolean run(KarambwansConfig config) {
         Microbot.enableAutoRunOn = true;
+
+        BreakHandlerScript.setLockState(true);
 
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyRunecraftingSetup();
@@ -191,7 +194,12 @@ public class KarambwansScript extends Script {
     }
 
     private void fishingLoop() {
+        BreakHandlerScript.setLockState(false);
+        if (BreakHandlerScript.isBreakActive() || BreakHandlerScript.breakIn <= 0) {
+            return;
+        }
         if (Rs2Inventory.isFull()) {
+            BreakHandlerScript.setLockState(true);
             botStatus = states.WALKING_TO_BANK;
             return;
         }
