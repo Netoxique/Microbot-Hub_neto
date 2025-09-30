@@ -253,7 +253,7 @@ public class KarambwansScript extends Script {
         deposit_inv();
         Rs2Bank.withdrawItem(ItemID.NET);
         if (Rs2Bank.isOpen()) {
-            Rs2Bank.closeBank(); sleepGaussian(900,300);
+            Rs2Bank.closeBank(); sleepGaussian(600,200);
         }
         Rs2Walker.walkTo(baitPoint);
     }
@@ -278,7 +278,7 @@ public class KarambwansScript extends Script {
 
     private void walkToFish() {
         if (Rs2Bank.isOpen()) {
-            Rs2Bank.closeBank(); sleepGaussian(900,300);
+            Rs2Bank.closeBank(); sleepGaussian(600,200);
         }
         Rs2Walker.walkTo(fishingPoint, 15);
         interactWithFishingSpot();
