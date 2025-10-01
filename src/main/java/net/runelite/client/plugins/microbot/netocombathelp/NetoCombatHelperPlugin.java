@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.netoprayer;
+package net.runelite.client.plugins.microbot.netocombathelp;
 
 
 /*
@@ -31,6 +31,7 @@ package net.runelite.client.plugins.microbot.netoprayer;
 import com.google.inject.Provides;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
+import net.runelite.api.HitsplatID;
 import net.runelite.api.events.*;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
@@ -42,25 +43,40 @@ import net.runelite.client.game.NPCManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.misc.SpecialAttackWeaponEnum;
+import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
+import net.runelite.client.plugins.microbot.util.npc.Rs2NpcManager;
+import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.WidgetInfo;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 @Slf4j
 @PluginDescriptor(
-        name = PluginDescriptor.zerozero + "Neto Prayer Helper",
+        name = PluginDescriptor.zerozero + "Neto Combat Helper",
         description = "Prayer helper",
         tags = {"timers", "overlays", "tick", "Lazy Flicking", "Prayer"},
         enabledByDefault = false,
         minClientVersion = "2.0.0"
 )
-public class AttackTimerMetronomePlugin extends Plugin
+public class NetoCombatHelperPlugin extends Plugin
 {
     public enum AttackState {
         NOT_ATTACKING,
@@ -75,10 +91,10 @@ public class AttackTimerMetronomePlugin extends Plugin
     private ConfigManager configManager;
 
     @Inject
-    private AttackTimerMetronomeTileOverlay overlay;
+    private NetoCombatHelperTileOverlay overlay;
 
     @Inject
-    private AttackTimerMetronomeConfig config;
+    private NetoCombatHelperConfig config;
 
     @Inject
     private ItemManager itemManager;
@@ -123,8 +139,21 @@ public class AttackTimerMetronomePlugin extends Plugin
     private int soundEffectId = -1;
     public Dimension DEFAULT_SIZE = new Dimension(DEFAULT_SIZE_UNIT_PX, DEFAULT_SIZE_UNIT_PX);
 
-    private Rs2PrayerEnum activePrayer; // Track the currently active prayer
-    private int prayerDeactivationTick = -1; // Tracks when to deactivate the prayer
+    private Rs2PrayerEnum activePrayer; // Track the currently active offensive prayer
+    private Rs2PrayerEnum activeDefensivePrayer; // Track the currently active defensive prayer
+    private Rs2PrayerEnum queuedDefensivePrayer; // Prayer queued for perfect lazy flicking
+    private int queuedDefensivePrayerTick = -1; // Tick on which to activate the queued defensive prayer
+    private int prayerDeactivationTick = -1; // Tracks when to deactivate the offensive prayer
+    private int defensivePrayerDeactivateTick = -1; // Tracks when to deactivate defensive flicks
+
+    private ExecutorService offensivePrayerExecutor;
+    private ExecutorService defensivePrayerExecutor;
+    private ScheduledExecutorService specialAttackExecutor;
+    private ScheduledFuture<?> specialAttackFuture;
+    private final AtomicReference<Rs2NpcModel> specialAttackTarget = new AtomicReference<>();
+    private static final long SPECIAL_ATTACK_POLL_DELAY_MS = 600L;
+    private final Object offensiveLock = new Object();
+    private final Object defensiveLock = new Object();
 
     private AttackStyle cachedAttackStyle = null;
     private boolean cachedIsChargedStaff = false;
@@ -180,9 +209,9 @@ public class AttackTimerMetronomePlugin extends Plugin
     // endregion
 
     @Provides
-    AttackTimerMetronomeConfig provideConfig(ConfigManager configManager)
+    NetoCombatHelperConfig provideConfig(ConfigManager configManager)
     {
-        return configManager.getConfig(AttackTimerMetronomeConfig.class);
+        return configManager.getConfig(NetoCombatHelperConfig.class);
     }
 
     private int getItemIdFromContainer(ItemContainer container, int slotID)
@@ -543,65 +572,27 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Subscribe
     public void onGameTick(GameTick tick)
     {
-        AttackTimerMetronomeConfig.PrayerMode prayerMode = config.enableLazyFlicking();
+        NetoCombatHelperConfig.PrayerMode prayerMode = config.enableLazyFlicking();
+        NetoCombatHelperConfig.DefensivePrayerMode defensiveMode = config.defensivePrayerMode();
         int ticksUntilAttack = getTicksUntilNextAttack();
+        boolean isAttacking = isPlayerAttacking();
+        AttackStyle attackStyle = getAttackStyle();
+        int currentTick = client.getTickCount();
+        List<NpcSnapshot> npcSnapshots = defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.NONE
+                ? Collections.emptyList()
+                : createNpcSnapshots(client.getLocalPlayer());
 
-        // Skip all prayer logic if PrayerMode is NONE
-        if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.NONE) return;
-
-        // Handle Lazy Flick Mode
-        if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.LAZY)
+        if (defensivePrayerExecutor != null && !defensivePrayerExecutor.isShutdown())
         {
-            if (ticksUntilAttack > 0)
-            {
-                if (ticksUntilAttack == 2)
-                {
-                    Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(getAttackStyle());
-                    activatePrayer(offensivePrayer);
-                    prayerDeactivationTick = 1;
-                }
-            }
-
-            if (prayerDeactivationTick == 0)
-            {
-                Rs2Prayer.toggle(activePrayer);
-                prayerDeactivationTick = -1; // Reset deactivation tracker
-            }
-
-            if (prayerDeactivationTick > 0)
-            {
-                prayerDeactivationTick--;
-            }
+            defensivePrayerExecutor.execute(() -> handleDefensivePrayers(defensiveMode, npcSnapshots, currentTick));
         }
-        // Handle Normal Mode
-        else if (prayerMode == AttackTimerMetronomeConfig.PrayerMode.NORMAL)
-        {
-            boolean isAttacking = isPlayerAttacking();
 
-            if (isAttacking)
-            {
-                Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(getAttackStyle());
-                if (offensivePrayer != null && !offensivePrayer.equals(activePrayer))
-                {
-                    activatePrayer(offensivePrayer);
-                    activePrayer = offensivePrayer; // Track the currently active prayer
-                }
-                outOfCombatTicks = 0; // Reset out-of-combat counter
-            }
-            else
-            {
-                outOfCombatTicks++;
-                if (outOfCombatTicks >= OUT_OF_COMBAT_TIMEOUT_TICKS)
-                {
-                    Rs2Prayer.toggle(activePrayer, false);
-                    activePrayer = null; // Clear the active prayer
-                    outOfCombatTicks = 0; // Reset after deactivation
-                }
-            }
+        if (offensivePrayerExecutor != null && !offensivePrayerExecutor.isShutdown())
+        {
+            offensivePrayerExecutor.execute(() -> handleOffensivePrayers(prayerMode, ticksUntilAttack, isAttacking, attackStyle));
         }
 
         // Update attack state logic (common for both modes)
-        boolean isAttacking = isPlayerAttacking();
         switch (attackState)
         {
             case NOT_ATTACKING:
@@ -637,11 +628,348 @@ public class AttackTimerMetronomePlugin extends Plugin
     }
 
 
-    private void activatePrayer(Rs2PrayerEnum prayer) {
-        if (prayer != null && !Rs2Prayer.isPrayerActive(prayer)) {
-            Rs2Prayer.toggle(prayer, true);
-            activePrayer = prayer; // Track the active prayer
+    @Subscribe
+    public void onHitsplatApplied(HitsplatApplied event)
+    {
+        if (config.defensivePrayerMode() != NetoCombatHelperConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+        {
+            return;
         }
+
+        if (!(event.getActor() instanceof Player) || event.getActor() != client.getLocalPlayer())
+        {
+            return;
+        }
+
+        Hitsplat hitsplat = event.getHitsplat();
+        if (hitsplat == null)
+        {
+            return;
+        }
+
+        int hitsplatType = hitsplat.getHitsplatType();
+        if (hitsplatType != HitsplatID.DAMAGE_ME && hitsplatType != HitsplatID.BLOCK_ME)
+        {
+            return;
+        }
+
+        if (defensivePrayerExecutor == null || defensivePrayerExecutor.isShutdown())
+        {
+            return;
+        }
+
+        int currentTick = client.getTickCount();
+        List<NpcSnapshot> npcSnapshots = createNpcSnapshots(client.getLocalPlayer());
+        int activationTick = currentTick;
+        int attackSpeed = getIncomingAttackSpeed(npcSnapshots);
+        if (attackSpeed > 1)
+        {
+            activationTick += attackSpeed - 1;
+        }
+
+        final int finalActivationTick = activationTick;
+        defensivePrayerExecutor.execute(() ->
+        {
+            Rs2PrayerEnum prayer = determineDefensivePrayer(npcSnapshots);
+            queueDefensivePrayerFlick(prayer, finalActivationTick, currentTick);
+        });
+    }
+
+
+    private void activatePrayer(Rs2PrayerEnum prayer) {
+        if (prayer == null)
+        {
+            return;
+        }
+
+        if (!Rs2Prayer.isPrayerActive(prayer))
+        {
+            Rs2Prayer.toggle(prayer, true);
+        }
+
+        activePrayer = prayer; // Track the currently active prayer
+    }
+
+    private void handleOffensivePrayers(NetoCombatHelperConfig.PrayerMode prayerMode,
+                                        int ticksUntilAttack,
+                                        boolean isAttacking,
+                                        AttackStyle attackStyle)
+    {
+        synchronized (offensiveLock)
+        {
+            if (prayerMode == NetoCombatHelperConfig.PrayerMode.LAZY)
+            {
+                if (ticksUntilAttack > 0 && ticksUntilAttack == 2)
+                {
+                    Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(attackStyle);
+                    activatePrayer(offensivePrayer);
+                    if (offensivePrayer != null)
+                    {
+                        prayerDeactivationTick = 1;
+                    }
+                }
+
+                if (prayerDeactivationTick == 0)
+                {
+                    if (activePrayer != null)
+                    {
+                        Rs2Prayer.toggle(activePrayer);
+                    }
+                    prayerDeactivationTick = -1; // Reset deactivation tracker
+                }
+
+                if (prayerDeactivationTick > 0)
+                {
+                    prayerDeactivationTick--;
+                }
+            }
+            else if (prayerMode == NetoCombatHelperConfig.PrayerMode.NORMAL)
+            {
+                if (isAttacking)
+                {
+                    Rs2PrayerEnum offensivePrayer = determineOffensivePrayer(attackStyle);
+                    if (offensivePrayer != null && !offensivePrayer.equals(activePrayer))
+                    {
+                        activatePrayer(offensivePrayer);
+                    }
+                    outOfCombatTicks = 0; // Reset out-of-combat counter
+                }
+                else
+                {
+                    outOfCombatTicks++;
+                    if (outOfCombatTicks >= OUT_OF_COMBAT_TIMEOUT_TICKS)
+                    {
+                        if (activePrayer != null)
+                        {
+                            Rs2Prayer.toggle(activePrayer, false);
+                        }
+                        activePrayer = null; // Clear the active prayer
+                        outOfCombatTicks = 0; // Reset after deactivation
+                    }
+                }
+            }
+        }
+    }
+
+    private void handleDefensivePrayers(NetoCombatHelperConfig.DefensivePrayerMode defensiveMode,
+                                        List<NpcSnapshot> npcSnapshots,
+                                        int currentTick)
+    {
+        synchronized (defensiveLock)
+        {
+            if (defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.NONE)
+            {
+                deactivateDefensivePrayerInternal();
+                return;
+            }
+
+            if (defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.PERFECT_LAZY_FLICK)
+            {
+                handlePerfectLazyFlickLocked(currentTick);
+                return;
+            }
+
+            // Continuous defensive prayers
+            queuedDefensivePrayer = null;
+            queuedDefensivePrayerTick = -1;
+            defensivePrayerDeactivateTick = -1;
+
+            Rs2PrayerEnum defensivePrayer = determineDefensivePrayer(npcSnapshots);
+
+            if (defensivePrayer == null)
+            {
+                deactivateDefensivePrayerInternal();
+                return;
+            }
+
+            if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(defensivePrayer)
+                    && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+            {
+                Rs2Prayer.toggle(activeDefensivePrayer, false);
+            }
+
+            if (!defensivePrayer.equals(activeDefensivePrayer) || !Rs2Prayer.isPrayerActive(defensivePrayer))
+            {
+                Rs2Prayer.toggle(defensivePrayer, true);
+                activeDefensivePrayer = defensivePrayer;
+            }
+        }
+    }
+
+    private void deactivateDefensivePrayer()
+    {
+        synchronized (defensiveLock)
+        {
+            deactivateDefensivePrayerInternal();
+        }
+    }
+
+    private void deactivateDefensivePrayerInternal()
+    {
+        if (activeDefensivePrayer != null && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+        {
+            Rs2Prayer.toggle(activeDefensivePrayer, false);
+        }
+
+        activeDefensivePrayer = null;
+        queuedDefensivePrayer = null;
+        queuedDefensivePrayerTick = -1;
+        defensivePrayerDeactivateTick = -1;
+    }
+
+    private void handlePerfectLazyFlickLocked(int currentTick)
+    {
+        if (queuedDefensivePrayer != null && queuedDefensivePrayerTick != -1
+                && currentTick >= queuedDefensivePrayerTick)
+        {
+            Rs2PrayerEnum prayerToActivate = queuedDefensivePrayer;
+            queuedDefensivePrayer = null;
+            queuedDefensivePrayerTick = -1;
+
+            if (activeDefensivePrayer != null && !activeDefensivePrayer.equals(prayerToActivate)
+                    && Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+            {
+                Rs2Prayer.toggle(activeDefensivePrayer, false);
+            }
+
+            if (prayerToActivate != null && (!prayerToActivate.equals(activeDefensivePrayer)
+                    || !Rs2Prayer.isPrayerActive(prayerToActivate)))
+            {
+                Rs2Prayer.toggle(prayerToActivate, true);
+            }
+
+            activeDefensivePrayer = prayerToActivate;
+            defensivePrayerDeactivateTick = currentTick + 1;
+        }
+
+        if (activeDefensivePrayer != null && defensivePrayerDeactivateTick != -1
+                && currentTick > defensivePrayerDeactivateTick)
+        {
+            if (Rs2Prayer.isPrayerActive(activeDefensivePrayer))
+            {
+                Rs2Prayer.toggle(activeDefensivePrayer, false);
+            }
+            activeDefensivePrayer = null;
+            defensivePrayerDeactivateTick = -1;
+        }
+    }
+
+    private void queueDefensivePrayerFlick(Rs2PrayerEnum prayer, int activationTick, int currentTick)
+    {
+        synchronized (defensiveLock)
+        {
+            if (prayer == null)
+            {
+                return;
+            }
+
+            queuedDefensivePrayer = prayer;
+            queuedDefensivePrayerTick = Math.max(currentTick, activationTick);
+        }
+    }
+
+    private Rs2PrayerEnum determineDefensivePrayer(List<NpcSnapshot> npcSnapshots)
+    {
+        Rs2PrayerEnum prioritizedPrayer = null;
+
+        if (npcSnapshots == null)
+        {
+            return null;
+        }
+
+        for (NpcSnapshot npc : npcSnapshots)
+        {
+            if (!npc.isTargetingPlayer())
+            {
+                continue;
+            }
+
+            Rs2PrayerEnum mappedPrayer = mapStyleToPrayer(Rs2NpcManager.getAttackStyle(npc.getId()));
+
+            if (mappedPrayer == null)
+            {
+                continue;
+            }
+
+            if (mappedPrayer == Rs2PrayerEnum.PROTECT_MAGIC)
+            {
+                return mappedPrayer;
+            }
+
+            if (mappedPrayer == Rs2PrayerEnum.PROTECT_RANGE)
+            {
+                prioritizedPrayer = Rs2PrayerEnum.PROTECT_RANGE;
+            }
+            else if (prioritizedPrayer == null)
+            {
+                prioritizedPrayer = mappedPrayer;
+            }
+        }
+
+        return prioritizedPrayer;
+    }
+
+    private int getIncomingAttackSpeed(List<NpcSnapshot> npcSnapshots)
+    {
+        if (npcSnapshots == null)
+        {
+            return -1;
+        }
+
+        int bestSpeed = Integer.MAX_VALUE;
+
+        for (NpcSnapshot npc : npcSnapshots)
+        {
+            if (!npc.isTargetingPlayer())
+            {
+                continue;
+            }
+
+            int attackSpeed = Rs2NpcManager.getAttackSpeed(npc.getId());
+            if (attackSpeed <= 0)
+            {
+                continue;
+            }
+
+            if (attackSpeed < bestSpeed)
+            {
+                bestSpeed = attackSpeed;
+            }
+        }
+
+        return bestSpeed == Integer.MAX_VALUE ? -1 : bestSpeed;
+    }
+
+    private Rs2PrayerEnum mapStyleToPrayer(String style)
+    {
+        if (style == null || style.isEmpty())
+        {
+            return null;
+        }
+
+        String normalized = style.toLowerCase();
+        if (normalized.contains(","))
+        {
+            normalized = normalized.split(",")[0].trim();
+        }
+
+        if (normalized.contains("magic"))
+        {
+            return Rs2PrayerEnum.PROTECT_MAGIC;
+        }
+
+        if (normalized.contains("range"))
+        {
+            return Rs2PrayerEnum.PROTECT_RANGE;
+        }
+
+        if (normalized.contains("melee") || normalized.contains("crush")
+                || normalized.contains("slash") || normalized.contains("stab"))
+        {
+            return Rs2PrayerEnum.PROTECT_MELEE;
+        }
+
+        return null;
     }
 
     private Rs2PrayerEnum determineOffensivePrayer(AttackStyle attackStyle) {
@@ -679,11 +1007,16 @@ public class AttackTimerMetronomePlugin extends Plugin
         if (event.getGroup().equals("zprayerhelper"))
         {
             attackDelayHoldoffTicks = 0;
+            synchronized (offensiveLock)
+            {
+                activePrayer = null;
+                outOfCombatTicks = 0;
+                prayerDeactivationTick = -1;
+            }
 
-            activePrayer = null;
-            outOfCombatTicks = 0;
-            prayerDeactivationTick = -1;
+            deactivateDefensivePrayer();
             Rs2Prayer.disableAllPrayers();
+            configureSpecialAttackSettings();
         }
     }
 
@@ -691,8 +1024,22 @@ public class AttackTimerMetronomePlugin extends Plugin
     @Override
     protected void startUp() throws Exception
     {
+        try
+        {
+            Rs2NpcManager.loadJson();
+        }
+        catch (Exception ex)
+        {
+            log.warn("Failed to load NPC data for defensive prayers", ex);
+        }
+
         overlayManager.add(overlay);
         overlay.setPreferredSize(DEFAULT_SIZE);
+
+        offensivePrayerExecutor = createSingleThreadExecutor("neto-offensive-prayer");
+        defensivePrayerExecutor = createSingleThreadExecutor("neto-defensive-prayer");
+        startSpecialAttackTask();
+        configureSpecialAttackSettings();
     }
 
     @Override
@@ -700,6 +1047,260 @@ public class AttackTimerMetronomePlugin extends Plugin
     {
         overlayManager.remove(overlay);
         attackDelayHoldoffTicks = 0;
+        deactivateDefensivePrayer();
+
+        shutdownExecutor(offensivePrayerExecutor);
+        shutdownExecutor(defensivePrayerExecutor);
+        stopSpecialAttackTask();
+        offensivePrayerExecutor = null;
+        defensivePrayerExecutor = null;
+        Microbot.getSpecialAttackConfigs().reset();
         super.shutDown();
+    }
+
+    private ExecutorService createSingleThreadExecutor(String threadName)
+    {
+        return Executors.newSingleThreadExecutor(r ->
+        {
+            Thread thread = new Thread(r, threadName);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    private ScheduledExecutorService createSingleThreadScheduledExecutor(String threadName)
+    {
+        return Executors.newSingleThreadScheduledExecutor(r ->
+        {
+            Thread thread = new Thread(r, threadName);
+            thread.setDaemon(true);
+            return thread;
+        });
+    }
+
+    private void shutdownExecutor(ExecutorService executor)
+    {
+        if (executor != null)
+        {
+            executor.shutdownNow();
+        }
+    }
+
+    private void startSpecialAttackTask()
+    {
+        if (specialAttackExecutor == null || specialAttackExecutor.isShutdown())
+        {
+            specialAttackExecutor = createSingleThreadScheduledExecutor("neto-special-attack");
+        }
+
+        if (specialAttackFuture == null || specialAttackFuture.isCancelled())
+        {
+            specialAttackTarget.set(null);
+            specialAttackFuture = specialAttackExecutor.scheduleWithFixedDelay(
+                    this::performSpecialAttackIfReady,
+                    0,
+                    SPECIAL_ATTACK_POLL_DELAY_MS,
+                    TimeUnit.MILLISECONDS);
+        }
+    }
+
+    private void stopSpecialAttackTask()
+    {
+        if (specialAttackFuture != null)
+        {
+            specialAttackFuture.cancel(true);
+            specialAttackFuture = null;
+        }
+
+        shutdownExecutor(specialAttackExecutor);
+        specialAttackExecutor = null;
+        specialAttackTarget.set(null);
+    }
+
+    private void configureSpecialAttackSettings()
+    {
+        if (!config.useWeaponSpec())
+        {
+            Microbot.getSpecialAttackConfigs().reset();
+            specialAttackTarget.set(null);
+            return;
+        }
+
+        SpecialAttackWeaponEnum weapon = config.specWeapon();
+        if (weapon == null)
+        {
+            Microbot.getSpecialAttackConfigs().reset();
+            specialAttackTarget.set(null);
+            return;
+        }
+
+        Microbot.getSpecialAttackConfigs().setSpecialAttack(true);
+        Microbot.getSpecialAttackConfigs().setSpecialAttackWeapon(weapon);
+        Microbot.getSpecialAttackConfigs().setMinimumSpecEnergy(weapon.getEnergyRequired());
+    }
+
+    private void performSpecialAttackIfReady()
+    {
+        try
+        {
+            if (!config.useWeaponSpec())
+            {
+                specialAttackTarget.set(null);
+                return;
+            }
+
+            if (!Microbot.isLoggedIn())
+            {
+                specialAttackTarget.set(null);
+                return;
+            }
+
+            if (Rs2Equipment.isWearingFullGuthan())
+            {
+                specialAttackTarget.set(null);
+                return;
+            }
+
+            if (!Rs2Player.isInteracting())
+            {
+                specialAttackTarget.set(null);
+                return;
+            }
+
+            Object interacting = Rs2Player.getInteracting();
+            if (!(interacting instanceof Rs2NpcModel))
+            {
+                specialAttackTarget.set(null);
+                return;
+            }
+
+            Rs2NpcModel interactingNpc = (Rs2NpcModel) interacting;
+            specialAttackTarget.set(interactingNpc);
+
+            if (Microbot.getSpecialAttackConfigs().useSpecWeapon())
+            {
+                Rs2Npc.attack(interactingNpc);
+            }
+        }
+        catch (Exception ex)
+        {
+            log.warn("Error executing special attack logic", ex);
+        }
+    }
+
+    private boolean isSpecialAttackButtonDisabled()
+    {
+        Widget widget = getSpecialAttackWidget();
+        if (widget == null || widget.isHidden())
+        {
+            return true;
+        }
+
+        if (widget.getClickMask() == 0)
+        {
+            return true;
+        }
+
+        SpecialAttackWeaponEnum weapon = config.specWeapon();
+        if (weapon == null)
+        {
+            return true;
+        }
+
+        int requiredEnergy = weapon.getEnergyRequired();
+        int currentEnergy = client.getVarpValue(VarPlayer.SPECIAL_ATTACK_PERCENT) / 10;
+        return currentEnergy < requiredEnergy;
+    }
+
+    private Widget getSpecialAttackWidget()
+    {
+        Widget widget = getWidgetByInfoName("COMBAT_SPECIAL_ATTACK");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        widget = getWidgetByInfoName("COMBAT_SPECIAL_ATTACK_BUTTON");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        widget = getWidgetByInfoName("SPECIAL_ATTACK");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        widget = getWidgetByInfoName("MINIMAP_SPECIAL_ATTACK_ORB");
+        if (widget != null)
+        {
+            return widget;
+        }
+
+        return null;
+    }
+
+    private Widget getWidgetByInfoName(String name)
+    {
+        try
+        {
+            WidgetInfo widgetInfo = WidgetInfo.valueOf(name);
+            return client.getWidget(widgetInfo);
+        }
+        catch (IllegalArgumentException ex)
+        {
+            return null;
+        }
+    }
+
+    private List<NpcSnapshot> createNpcSnapshots(Player localPlayer)
+    {
+        if (localPlayer == null)
+        {
+            return Collections.emptyList();
+        }
+
+        List<NPC> npcs = client.getNpcs();
+        if (npcs == null || npcs.isEmpty())
+        {
+            return Collections.emptyList();
+        }
+
+        List<NpcSnapshot> snapshots = new ArrayList<>(npcs.size());
+        for (NPC npc : npcs)
+        {
+            if (npc == null)
+            {
+                continue;
+            }
+
+            boolean targetingPlayer = npc.getInteracting() == localPlayer;
+            snapshots.add(new NpcSnapshot(npc.getId(), targetingPlayer));
+        }
+
+        return snapshots;
+    }
+
+    private static final class NpcSnapshot
+    {
+        private final int id;
+        private final boolean targetingPlayer;
+
+        private NpcSnapshot(int id, boolean targetingPlayer)
+        {
+            this.id = id;
+            this.targetingPlayer = targetingPlayer;
+        }
+
+        int getId()
+        {
+            return id;
+        }
+
+        boolean isTargetingPlayer()
+        {
+            return targetingPlayer;
+        }
     }
 }
