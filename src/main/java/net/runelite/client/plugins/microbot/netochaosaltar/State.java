@@ -1,4 +1,4 @@
-package net.runelite.client.plugins.microbot.chaosaltar;
+package net.runelite.client.plugins.microbot.netochaosaltar;
 
 public enum State {
         UNKNOWN,
