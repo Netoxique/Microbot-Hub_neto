@@ -43,7 +43,10 @@ import net.runelite.client.game.NPCManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
+import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.misc.SpecialAttackWeaponEnum;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcManager;
@@ -51,6 +54,7 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.ui.overlay.OverlayManager;
 import net.runelite.api.widgets.Widget;
 import net.runelite.api.widgets.WidgetInfo;
@@ -60,6 +64,7 @@ import java.awt.*;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -67,6 +72,8 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
+
+import static net.runelite.client.plugins.microbot.util.Global.sleepGaussian;
 
 @Slf4j
 @PluginDescriptor(
@@ -161,6 +168,13 @@ public class NetoCombatHelperPlugin extends Plugin
 
     private static final int OUT_OF_COMBAT_TIMEOUT_TICKS = 150; // ~3000ms (150 game ticks)
     private int outOfCombatTicks = 0; // Counter for time since last attack
+
+    private static final EnumSet<AttackStyle> MELEE_STYLES = EnumSet.of(
+            AttackStyle.ACCURATE,
+            AttackStyle.AGGRESSIVE,
+            AttackStyle.DEFENSIVE,
+            AttackStyle.CONTROLLED
+    );
 
     @Subscribe
     public void onVarbitChanged(VarbitChanged varbitChanged)
@@ -577,6 +591,9 @@ public class NetoCombatHelperPlugin extends Plugin
         int ticksUntilAttack = getTicksUntilNextAttack();
         boolean isAttacking = isPlayerAttacking();
         AttackStyle attackStyle = getAttackStyle();
+
+        handleCombatSkillBalancing(attackStyle);
+
         int currentTick = client.getTickCount();
         List<NpcSnapshot> npcSnapshots = defensiveMode == NetoCombatHelperConfig.DefensivePrayerMode.NONE
                 ? Collections.emptyList()
@@ -673,6 +690,158 @@ public class NetoCombatHelperPlugin extends Plugin
             Rs2PrayerEnum prayer = determineDefensivePrayer(npcSnapshots);
             queueDefensivePrayerFlick(prayer, finalActivationTick, currentTick);
         });
+    }
+
+
+    private void handleCombatSkillBalancing(AttackStyle currentAttackStyle)
+    {
+        if (!config.balanceCombatSkills())
+        {
+            return;
+        }
+
+        if (client == null || client.getGameState() != GameState.LOGGED_IN || client.getLocalPlayer() == null)
+        {
+            return;
+        }
+
+        if (currentAttackStyle == null || !MELEE_STYLES.contains(currentAttackStyle))
+        {
+            return;
+        }
+
+        Skill skillToTrain = determineLowestCombatSkill();
+        if (skillToTrain == null)
+        {
+            return;
+        }
+
+        Integer targetIndex = findMeleeAttackStyleIndexForSkill(skillToTrain);
+        if (targetIndex == null)
+        {
+            return;
+        }
+
+        if (client.getVarpValue(VarPlayer.ATTACK_STYLE) == targetIndex)
+        {
+            return;
+        }
+
+        WidgetInfo widgetInfo = getWidgetInfoForIndex(targetIndex);
+        if (widgetInfo == null)
+        {
+            return;
+        }
+
+        Rs2Tab.switchTo(InterfaceTab.COMBAT);
+        sleepGaussian(600, 100);
+        Rs2Combat.setAttackStyle(widgetInfo);
+        sleepGaussian(600, 100);
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
+    }
+
+    private Skill determineLowestCombatSkill()
+    {
+        int attackLevel = client.getRealSkillLevel(Skill.ATTACK);
+        int strengthLevel = client.getRealSkillLevel(Skill.STRENGTH);
+        int defenceLevel = client.getRealSkillLevel(Skill.DEFENCE);
+
+        if (attackLevel == strengthLevel && strengthLevel == defenceLevel)
+        {
+            return null;
+        }
+
+        int minLevel = Math.min(attackLevel, Math.min(strengthLevel, defenceLevel));
+        if (attackLevel == minLevel)
+        {
+            return Skill.ATTACK;
+        }
+        if (strengthLevel == minLevel)
+        {
+            return Skill.STRENGTH;
+        }
+
+        return Skill.DEFENCE;
+    }
+
+    private Integer findMeleeAttackStyleIndexForSkill(Skill skill)
+    {
+        int weaponTypeId = client.getVarbitValue(Varbits.EQUIPPED_WEAPON_TYPE);
+        WeaponType weaponType = WeaponType.getWeaponType(weaponTypeId);
+        if (weaponType == null)
+        {
+            return null;
+        }
+
+        AttackStyle[] attackStyles = weaponType.getAttackStyles();
+        if (attackStyles == null)
+        {
+            return null;
+        }
+
+        List<AttackStyle> preferredStyles = getPreferredStylesForSkill(skill);
+        for (AttackStyle preferred : preferredStyles)
+        {
+            Integer index = findAttackStyleIndex(attackStyles, preferred);
+            if (index != null)
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private List<AttackStyle> getPreferredStylesForSkill(Skill skill)
+    {
+        switch (skill)
+        {
+            case ATTACK:
+                return Arrays.asList(AttackStyle.ACCURATE, AttackStyle.CONTROLLED);
+            case STRENGTH:
+                return Arrays.asList(AttackStyle.AGGRESSIVE, AttackStyle.CONTROLLED);
+            case DEFENCE:
+                return Arrays.asList(AttackStyle.DEFENSIVE, AttackStyle.CONTROLLED);
+            default:
+                return Collections.emptyList();
+        }
+    }
+
+    private Integer findAttackStyleIndex(AttackStyle[] attackStyles, AttackStyle targetStyle)
+    {
+        if (attackStyles == null || targetStyle == null)
+        {
+            return null;
+        }
+
+        int limit = Math.min(attackStyles.length, 4);
+        for (int i = 0; i < limit; i++)
+        {
+            AttackStyle style = attackStyles[i];
+            if (style == targetStyle)
+            {
+                return i;
+            }
+        }
+
+        return null;
+    }
+
+    private WidgetInfo getWidgetInfoForIndex(int index)
+    {
+        switch (index)
+        {
+            case 0:
+                return WidgetInfo.COMBAT_STYLE_ONE;
+            case 1:
+                return WidgetInfo.COMBAT_STYLE_TWO;
+            case 2:
+                return WidgetInfo.COMBAT_STYLE_THREE;
+            case 3:
+                return WidgetInfo.COMBAT_STYLE_FOUR;
+            default:
+                return null;
+        }
     }
 
 
@@ -1150,12 +1319,6 @@ public class NetoCombatHelperPlugin extends Plugin
             }
 
             if (!Microbot.isLoggedIn())
-            {
-                specialAttackTarget.set(null);
-                return;
-            }
-
-            if (Rs2Equipment.isWearingFullGuthan())
             {
                 specialAttackTarget.set(null);
                 return;

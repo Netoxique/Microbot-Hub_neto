@@ -84,6 +84,18 @@ public interface NetoCombatHelperConfig extends Config
         }
 
         @ConfigItem(
+                                position = 4,
+                                keyName = "balanceCombatSkills",
+                                name = "Balance combat skills",
+                                description = "Automatically switch to the attack style that trains the lowest combat skill (Attack, Strength, Defence).",
+                                section = TickNumberSettings
+        )
+        default boolean balanceCombatSkills()
+        {
+                return false;
+        }
+
+        @ConfigItem(
                                 position = 1,
                                 keyName = "useWeaponSpec",
                                 name = "Use weapon sepc.",
