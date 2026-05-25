@@ -1,6 +1,5 @@
 package net.runelite.client.plugins.microbot.looter.scripts;
 
-import net.runelite.api.GameObject;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.looter.AutoLooterConfig;
@@ -9,7 +8,7 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
@@ -48,15 +47,15 @@ public class FlaxScript extends Script {
 
                 switch (state) {
                     case LOOTING:
-                        if (Rs2Inventory.getEmptySlots() <= config.minFreeSlots()) {
+                        if (Rs2Inventory.emptySlotCount() <= config.minFreeSlots()) {
                             state = LooterState.BANKING;
                             return;
                         }
                         if (config.worldHop() && Rs2Player.hopIfPlayerDetected(1, 10, 10)) return;
                         
-                        GameObject flaxObject = Rs2GameObject.findObject("flax", false, config.distanceToStray(), true, initialPlayerLocation);
+                        Rs2TileObjectModel flaxObject = Microbot.getRs2TileObjectCache().query().withName("flax").within(initialPlayerLocation, config.distanceToStray()).nearestOnClientThread();
                         if (flaxObject != null) {
-                            if(Rs2GameObject.interact(flaxObject, "pick")){
+                            if(flaxObject.click("pick")){
                                 Rs2Antiban.actionCooldown();
                             }
                         }
@@ -98,7 +97,7 @@ public class FlaxScript extends Script {
             init = false;
             return;
         }
-        if (Rs2Inventory.getEmptySlots() <= config.minFreeSlots()) {
+        if (Rs2Inventory.emptySlotCount() <= config.minFreeSlots()) {
             state = LooterState.BANKING;
             init = false;
             return;

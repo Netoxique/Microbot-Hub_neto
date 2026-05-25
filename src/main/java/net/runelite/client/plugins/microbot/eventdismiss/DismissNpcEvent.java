@@ -2,11 +2,11 @@ package net.runelite.client.plugins.microbot.eventdismiss;
 
 import net.runelite.client.plugins.microbot.BlockingEvent;
 import net.runelite.client.plugins.microbot.BlockingEventPriority;
+import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.Global;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
-import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
-import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
+import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 
 public class DismissNpcEvent implements BlockingEvent {
 
@@ -16,27 +16,40 @@ public class DismissNpcEvent implements BlockingEvent {
         this.config = config;
     }
 
+    private Rs2NpcModel getRandomEventNpc() {
+        var oldModel = Rs2Npc.getRandomEventNPC();
+        if (oldModel == null) return null;
+        return Microbot.getRs2NpcCache().query().where(n -> n.getNpc().equals(oldModel.getRuneliteNpc())).nearest();
+    }
+
     @Override
     public boolean validate() {
-        Rs2NpcModel randomEventNPC = Rs2Npc.getRandomEventNPC();
-        return Rs2Npc.hasLineOfSight(randomEventNPC);
+        Rs2NpcModel randomEventNPC = getRandomEventNpc();
+        if (randomEventNPC == null) {
+            return false;
+        }
+        return randomEventNPC.hasLineOfSight();
     }
 
     @Override
     public boolean execute() {
-        Rs2NpcModel randomEventNPC = Rs2Npc.getRandomEventNPC();
-        boolean shouldDismiss = shouldDismissNpc(randomEventNPC);
-        if (shouldDismiss) {
-            Rs2Npc.interact(randomEventNPC, "Dismiss");
-            Global.sleepUntil(() -> Rs2Npc.getRandomEventNPC() == null);
+        Rs2NpcModel npc = getRandomEventNpc();
+        if (npc == null)
             return true;
-        } else if (!Rs2Inventory.isFull()) {
-            Rs2Npc.interact(randomEventNPC, "Talk-to");
-            Rs2Dialogue.sleepUntilHasContinue();
-            Rs2Dialogue.clickContinue();
+
+        String name = npc.getName();
+
+        if (name == null)
             return true;
+
+        if (("Count Check".equals(name) && !config.dismissCountCheck()) ||
+                ("Genie".equals(name) && !config.dismissGenie())) {
+            talkTo(npc);
+            return !validate();
         }
-        return false;
+
+        dismiss(npc);
+        return !validate();
     }
 
     @Override
@@ -44,57 +57,14 @@ public class DismissNpcEvent implements BlockingEvent {
         return BlockingEventPriority.LOWEST;
     }
 
-    private boolean shouldDismissNpc(Rs2NpcModel npc) {
-        String npcName = npc.getName();
-        if (npcName == null) return false;
-        switch (npcName) {
-            case "Bee keeper":
-                return config.dismissBeekeeper();
-            case "Capt' Arnav":
-                return config.dismissArnav();
-            case "Niles":
-            case "Miles":
-            case "Giles":
-                return config.dismissCerters();
-            case "Count Check":
-                return config.dismissCountCheck();
-            case "Sergeant Damien":
-                return config.dismissDrillDemon();
-            case "Drunken Dwarf":
-                return config.dismissDrunkenDwarf();
-            case "Evil Bob":
-                return config.dismissEvilBob();
-            case "Postie Pete":
-                return config.dismissEvilTwin();
-            case "Freaky Forester":
-                return config.dismissFreakyForester();
-            case "Genie":
-                return config.dismissGenie();
-            case "Leo":
-                return config.dismissGravedigger();
-            case "Dr Jekyll":
-                return config.dismissJekyllAndHyde();
-            case "Frog":
-                return config.dismissKissTheFrog();
-            case "Mysterious Old Man":
-                return config.dismissMysteriousOldMan();
-            case "Pillory Guard":
-                return config.dismissPillory();
-            case "Flippa":
-            case "Tilt":
-                return config.dismissPinball();
-            case "Quiz Master":
-                return config.dismissQuizMaster();
-            case "Rick Turpentine":
-                return config.dismissRickTurpentine();
-            case "Sandwich lady":
-                return config.dismissSandwichLady();
-            case "Strange plant":
-                return config.dismissStrangePlant();
-            case "Dunce":
-                return config.dismissSurpriseExam();
-            default:
-                return false;
-        }
+    private void talkTo(Rs2NpcModel npc) {
+        npc.click("Talk-to");
+        Rs2Dialogue.sleepUntilHasContinue();
+        Rs2Dialogue.clickContinue();
+    }
+
+    private void dismiss(Rs2NpcModel npc) {
+        npc.click("Dismiss");
+        Global.sleepUntil(() -> getRandomEventNpc() == null);
     }
 }

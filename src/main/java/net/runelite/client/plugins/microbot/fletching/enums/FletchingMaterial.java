@@ -7,7 +7,7 @@ import lombok.RequiredArgsConstructor;
 @RequiredArgsConstructor
 public enum FletchingMaterial
 {
-    LOG(""),
+    LOG("Log"),
     WOOD("Wood"),
     OAK("Oak"),
     WILLOW("Willow"),
@@ -18,6 +18,9 @@ public enum FletchingMaterial
 
     private final String name;
 
+    public String getLogItemName() {
+        return this == LOG ? "Logs" : name + " logs";
+    }
 
     @Override
     public String toString()

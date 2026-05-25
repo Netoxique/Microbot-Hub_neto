@@ -12,12 +12,41 @@ import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
 @ConfigGroup("combathotkeys")
 public interface CombatHotkeysConfig extends Config {
 
+    // =========================================================================
+    // DEBUG SECTION — appears at the top (position 0) so it's always visible
+    // =========================================================================
+
     @ConfigSection(
-            name = "Offensive Prayers",
-            description = "Offensive Prayer hotkeys",
+            name = "Debug",
+            description = "Enable the on-screen debug panel and verbose logging to the RuneLite log",
+            position = 0,
+            closedByDefault = true
+    )
+    String debugSection = "debugSection";
+
+    @ConfigItem(
+            keyName = "debugMode",
+            name = "Show debug panel",
+            description = "Renders a debug overlay showing the last key received, last action dispatched, "
+                    + "submitted/succeeded/failed counters, and any error. Also enables TRACE-level logging "
+                    + "from the plugin — check the RuneLite log (Help → Open logs folder) for full detail.",
+            position = 0,
+            section = debugSection
+    )
+    default boolean debugMode() {
+        return false;
+    }
+
+    // =========================================================================
+    // OFFENSIVE SECTION
+    // =========================================================================
+
+    @ConfigSection(
+            name = "Offensive Hotkeys",
+            description = "Offensive Prayer and attack hotkeys",
             position = 1
     )
-    String offensivePrayerSection = "offensivePrayers";
+    String offensiveSection = "offensiveSection";
 
     // Melee
     @ConfigItem(
@@ -25,7 +54,7 @@ public interface CombatHotkeysConfig extends Config {
             name = "Melee Prayer Hotkey",
             description = "Hotkey for offensive melee prayer",
             position = 0,
-            section = offensivePrayerSection
+            section = offensiveSection
     )
     default Keybind offensiveMeleeKey() { return Keybind.NOT_SET; }
 
@@ -34,7 +63,7 @@ public interface CombatHotkeysConfig extends Config {
             name = "Melee Prayer",
             description = "Prayer to toggle with the melee hotkey",
             position = 1,
-            section = offensivePrayerSection
+            section = offensiveSection
     )
     default MeleePrayerOption offensiveMeleePrayer() { return MeleePrayerOption.PIETY; }
 
@@ -44,7 +73,7 @@ public interface CombatHotkeysConfig extends Config {
             name = "Ranged Prayer Hotkey",
             description = "Hotkey for offensive ranged prayer",
             position = 2,
-            section = offensivePrayerSection
+            section = offensiveSection
     )
     default Keybind offensiveRangeKey() { return Keybind.NOT_SET; }
 
@@ -53,7 +82,7 @@ public interface CombatHotkeysConfig extends Config {
             name = "Ranged Prayer",
             description = "Prayer to toggle with the ranged hotkey",
             position = 3,
-            section = offensivePrayerSection
+            section = offensiveSection
     )
     default RangedPrayerOption offensiveRangePrayer() { return RangedPrayerOption.RIGOUR; }
 
@@ -63,7 +92,7 @@ public interface CombatHotkeysConfig extends Config {
             name = "Magic Prayer Hotkey",
             description = "Hotkey for offensive magic prayer",
             position = 4,
-            section = offensivePrayerSection
+            section = offensiveSection
     )
     default Keybind offensiveMagicKey() { return Keybind.NOT_SET; }
 
@@ -72,9 +101,23 @@ public interface CombatHotkeysConfig extends Config {
             name = "Magic Prayer",
             description = "Prayer to toggle with the magic hotkey",
             position = 5,
-            section = offensivePrayerSection
+            section = offensiveSection
     )
     default MagicPrayerOption offensiveMagicPrayer() { return MagicPrayerOption.AUGURY; }
+
+    // Special Attack
+    @ConfigItem(
+            keyName = "specialAttackKey",
+            name = "Special Attack Hotkey",
+            description = "Hotkey to turn on special attack for current weapon",
+            position = 6,
+            section = offensiveSection
+    )
+    default Keybind specialAttackKey() { return Keybind.NOT_SET; }
+
+    // =========================================================================
+    // DEFENSIVE PRAYERS SECTION
+    // =========================================================================
 
     @ConfigSection(
             name = "Defensive Prayers",
@@ -119,6 +162,10 @@ public interface CombatHotkeysConfig extends Config {
         return Keybind.NOT_SET;
     }
 
+    // =========================================================================
+    // FOOD & POTIONS SECTION
+    // =========================================================================
+
     @ConfigSection(
             name = "Food & Potions",
             description = "Food & Potions",
@@ -162,19 +209,34 @@ public interface CombatHotkeysConfig extends Config {
         return Keybind.NOT_SET;
     }
 
+    // =========================================================================
+    // GEAR SETUPS SECTION
+    // =========================================================================
+
     @ConfigSection(
-            name = "Gear setup 1",
-            description = "Gear setup 1",
+            name = "Gear setups",
+            description = "Gear setups",
             position = 4
     )
-    String gearSetup1 = "gearSetup1";
+    String gearSetup = "gearSetup";
+
+    @ConfigItem(
+            keyName = "maxDelay",
+            name = "Max Equip Delay (ms)",
+            description = "Maximum random delay (in milliseconds) between equipping items",
+            position = 0,
+            section = gearSetup
+    )
+    default int maxDelay() {
+        return 500;
+    }
 
     @ConfigItem(
             keyName = "Hotkey for gear 1",
             name = "Hotkey for gear 1",
             description = "Hotkey for gear 1",
             position = 1,
-            section = gearSetup1
+            section = gearSetup
     )
     default Keybind gear1()
     {
@@ -183,29 +245,22 @@ public interface CombatHotkeysConfig extends Config {
 
     @ConfigItem(
             keyName = "Gear IDs 1",
-            name = "Gear IDs",
+            name = "Gear IDs 1",
             description = "List of Gear IDs comma separated",
             position = 2,
-            section = gearSetup1
+            section = gearSetup
     )
     default String gearList1()
     {
         return "";
     }
 
-    @ConfigSection(
-            name = "Gear setup 2",
-            description = "Gear setup 2",
-            position = 5
-    )
-    String gearSetup2 = "gearSetup2";
-
     @ConfigItem(
             keyName = "Hotkey for gear 2",
             name = "Hotkey for gear 2",
             description = "Hotkey for gear 2",
-            position = 1,
-            section = gearSetup2
+            position = 3,
+            section = gearSetup
     )
     default Keybind gear2()
     {
@@ -214,29 +269,22 @@ public interface CombatHotkeysConfig extends Config {
 
     @ConfigItem(
             keyName = "Gear IDs 2",
-            name = "Gear IDs",
+            name = "Gear IDs 2",
             description = "List of Gear IDs comma separated",
-            position = 2,
-            section = gearSetup2
+            position = 4,
+            section = gearSetup
     )
     default String gearList2()
     {
         return "";
     }
 
-    @ConfigSection(
-            name = "Gear setup 3",
-            description = "Gear setup 3",
-            position = 6
-    )
-    String gearSetup3 = "gearSetup3";
-
     @ConfigItem(
             keyName = "Hotkey for gear 3",
             name = "Hotkey for gear 3",
             description = "Hotkey for gear 3",
-            position = 1,
-            section = gearSetup3
+            position = 5,
+            section = gearSetup
     )
     default Keybind gear3() {
         return Keybind.NOT_SET;
@@ -244,28 +292,21 @@ public interface CombatHotkeysConfig extends Config {
 
     @ConfigItem(
             keyName = "Gear IDs 3",
-            name = "Gear IDs",
+            name = "Gear IDs 3",
             description = "List of Gear IDs comma separated",
-            position = 2,
-            section = gearSetup3
+            position = 6,
+            section = gearSetup
     )
     default String gearList3() {
         return "";
     }
 
-    @ConfigSection(
-            name = "Gear setup 4",
-            description = "Gear setup 4",
-            position = 7
-    )
-    String gearSetup4 = "gearSetup4";
-
     @ConfigItem(
             keyName = "Hotkey for gear 4",
             name = "Hotkey for gear 4",
             description = "Hotkey for gear 4",
-            position = 1,
-            section = gearSetup4
+            position = 7,
+            section = gearSetup
     )
     default Keybind gear4() {
         return Keybind.NOT_SET;
@@ -273,28 +314,21 @@ public interface CombatHotkeysConfig extends Config {
 
     @ConfigItem(
             keyName = "Gear IDs 4",
-            name = "Gear IDs",
+            name = "Gear IDs 4",
             description = "List of Gear IDs comma separated",
-            position = 2,
-            section = gearSetup4
+            position = 8,
+            section = gearSetup
     )
     default String gearList4() {
         return "";
     }
 
-    @ConfigSection(
-            name = "Gear setup 5",
-            description = "Gear setup 5",
-            position = 8
-    )
-    String gearSetup5 = "gearSetup5";
-
     @ConfigItem(
             keyName = "Hotkey for gear 5",
             name = "Hotkey for gear 5",
             description = "Hotkey for gear 5",
-            position = 1,
-            section = gearSetup5
+            position = 9,
+            section = gearSetup
     )
     default Keybind gear5() {
         return Keybind.NOT_SET;
@@ -302,14 +336,47 @@ public interface CombatHotkeysConfig extends Config {
 
     @ConfigItem(
             keyName = "Gear IDs 5",
-            name = "Gear IDs",
+            name = "Gear IDs 5",
             description = "List of Gear IDs comma separated",
-            position = 2,
-            section = gearSetup5
+            position = 10,
+            section = gearSetup
     )
     default String gearList5() {
         return "";
     }
+
+    // =========================================================================
+    // MULTISKILLING SECTION
+    // =========================================================================
+
+    @ConfigSection(
+            name = "Multiskilling",
+            description = "Multiskilling hotkeys",
+            position = 5
+    )
+    String multiskillingSection = "multiskillingSection";
+
+    @ConfigItem(
+            keyName = "Alchemy",
+            name = "Alchemy",
+            description = "Keybind to perform alchemy spell",
+            position = 0,
+            section = multiskillingSection
+    )
+    default Keybind highAlchemyKey() { return Keybind.NOT_SET; }
+
+    @ConfigItem(
+            keyName = "itemToAlch",
+            name = "Item to Alch",
+            description = "Enter exact item name to alch (e.g. 'Gold Bar')",
+            position = 1,
+            section = multiskillingSection
+    )
+    default String itemToAlch() { return null; }
+
+    // =========================================================================
+    // DANCE SECTION
+    // =========================================================================
 
     @ConfigItem(
             keyName = "dance boolean",
@@ -321,7 +388,6 @@ public interface CombatHotkeysConfig extends Config {
         return false;
     }
 
-    // config item for a keybind to enable the dance feature
     @ConfigItem(
             keyName = "dance",
             name = "Dance",
@@ -332,7 +398,6 @@ public interface CombatHotkeysConfig extends Config {
         return Keybind.NOT_SET;
     }
 
-    // hidden config for worldpoint called tile1
     @ConfigItem(
             keyName = "tile1",
             name = "",
@@ -342,6 +407,7 @@ public interface CombatHotkeysConfig extends Config {
     default WorldPoint tile1() {
         return null;
     }
+
     @ConfigItem(
             keyName = "tile2",
             name = "",
@@ -352,42 +418,22 @@ public interface CombatHotkeysConfig extends Config {
         return null;
     }
 
-    @ConfigSection(
-            name = "Gear Equip Settings",
-            description = "Settings for randomized equip delays",
-            position = 10
-    )
-    String gearEquipSettings = "gearEquipSettings";
+    // =========================================================================
+    // ENUMS
+    // =========================================================================
 
-    @ConfigItem(
-            keyName = "maxDelay",
-            name = "Max Equip Delay (ms)",
-            description = "Maximum random delay (in milliseconds) between equipping items",
-            position = 0,
-            section = gearEquipSettings
-    )
-    default int maxDelay() {
-        return 500; // default max delay of 500ms
-    }
-
-    public enum MeleePrayerOption {
+    enum MeleePrayerOption {
         SUPERHUMAN_STRENGTH(Rs2PrayerEnum.SUPERHUMAN_STRENGTH),
         ULTIMATE_STRENGTH(Rs2PrayerEnum.ULTIMATE_STRENGTH),
         CHIVALRY(Rs2PrayerEnum.CHIVALRY),
         PIETY(Rs2PrayerEnum.PIETY);
 
         private final Rs2PrayerEnum prayer;
-
-        MeleePrayerOption(Rs2PrayerEnum prayer) {
-            this.prayer = prayer;
-        }
-
-        public Rs2PrayerEnum getPrayer() {
-            return prayer;
-        }
+        MeleePrayerOption(Rs2PrayerEnum prayer) { this.prayer = prayer; }
+        public Rs2PrayerEnum getPrayer() { return prayer; }
     }
 
-    public enum RangedPrayerOption {
+    enum RangedPrayerOption {
         SHARP_EYE(Rs2PrayerEnum.SHARP_EYE),
         HAWK_EYE(Rs2PrayerEnum.HAWK_EYE),
         EAGLE_EYE(Rs2PrayerEnum.EAGLE_EYE),
@@ -395,30 +441,18 @@ public interface CombatHotkeysConfig extends Config {
         RIGOUR(Rs2PrayerEnum.RIGOUR);
 
         private final Rs2PrayerEnum prayer;
-
-        RangedPrayerOption(Rs2PrayerEnum prayer) {
-            this.prayer = prayer;
-        }
-
-        public Rs2PrayerEnum getPrayer() {
-            return prayer;
-        }
+        RangedPrayerOption(Rs2PrayerEnum prayer) { this.prayer = prayer; }
+        public Rs2PrayerEnum getPrayer() { return prayer; }
     }
 
-    public enum MagicPrayerOption {
+    enum MagicPrayerOption {
         MYSTIC_WILL(Rs2PrayerEnum.MYSTIC_WILL),
         MYSTIC_LORE(Rs2PrayerEnum.MYSTIC_LORE),
         MYSTIC_MIGHT(Rs2PrayerEnum.MYSTIC_MIGHT),
         AUGURY(Rs2PrayerEnum.AUGURY);
 
         private final Rs2PrayerEnum prayer;
-
-        MagicPrayerOption(Rs2PrayerEnum prayer) {
-            this.prayer = prayer;
-        }
-
-        public Rs2PrayerEnum getPrayer() {
-            return prayer;
-        }
+        MagicPrayerOption(Rs2PrayerEnum prayer) { this.prayer = prayer; }
+        public Rs2PrayerEnum getPrayer() { return prayer; }
     }
 }

@@ -20,7 +20,8 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
-import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
+import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2PrayerEnum;
@@ -47,7 +48,7 @@ import java.nio.charset.StandardCharsets;
 )
 @Slf4j
 public class FlippersChaserPlugin extends Plugin {
-    public static final String version = "1.0.0";
+    public static final String version = "1.0.2";
 
     @Inject
     private Client client;
@@ -102,7 +103,8 @@ public class FlippersChaserPlugin extends Plugin {
         NPC npc = event.getNpc();
         if (npc.getName().equals("Mogre")) {
             inCombat = true;
-            clientThread.invoke(() -> attackNpc(npc));
+            var rs2Npc = Microbot.getRs2NpcCache().query().where(n -> n.getNpc().equals(npc)).nearest();
+            if (rs2Npc != null) clientThread.invoke(() -> attackNpc(rs2Npc));
         }
     }
 
@@ -118,21 +120,18 @@ public class FlippersChaserPlugin extends Plugin {
     }
 
     private void useFishingExplosive() {
-        NPC fishingSpot = findFishingSpot();
+        Rs2NpcModel fishingSpot = findFishingSpot();
         if (fishingSpot != null) {
-            Rs2Inventory.useItemOnNpc(ItemID.FISHING_EXPLOSIVE, fishingSpot);
+            Rs2Inventory.useItemOnNpc(ItemID.FISHING_EXPLOSIVE, fishingSpot.getNpc());
         }
     }
 
-    private NPC findFishingSpot() {
-        return client.getNpcs().stream()
-            .filter(npc -> npc.getName().equals("Ominous Fishing Spot"))
-            .findFirst()
-            .orElse(null);
+    private Rs2NpcModel findFishingSpot() {
+        return Microbot.getRs2NpcCache().query().withName("Ominous Fishing Spot").nearestOnClientThread();
     }
 
-    private void attackNpc(NPC npc) {
-        Rs2Npc.interact(npc);
+    private void attackNpc(Rs2NpcModel npc) {
+        npc.click("Attack");
         if (Rs2Player.hasPrayerPoints()) {
             Rs2Prayer.toggle(Rs2PrayerEnum.PROTECT_MELEE);
         }

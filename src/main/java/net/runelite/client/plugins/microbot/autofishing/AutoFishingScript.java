@@ -2,8 +2,8 @@ package net.runelite.client.plugins.microbot.autofishing;
 
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.ObjectID;
-import net.runelite.api.ItemID;
+import net.runelite.api.gameval.ItemID;
+import net.runelite.api.gameval.ObjectID;
 import net.runelite.api.Skill;
 import net.runelite.api.TileObject;
 import net.runelite.api.coords.WorldPoint;
@@ -22,7 +22,7 @@ import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
-import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
+import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
@@ -124,9 +124,9 @@ public class AutoFishingScript extends Script {
         }
         activateSpec();
         if (fishAction.isEmpty()) {
-            fishAction = Rs2Npc.getAvailableAction(fishingSpot, selectedFish.getActions());
+            fishAction = Rs2Npc.getAvailableAction(new net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel(fishingSpot.getNpc()), selectedFish.getActions());
         }
-        if (!fishAction.isEmpty() && Rs2Npc.interact(fishingSpot, fishAction)) {
+        if (!fishAction.isEmpty() && fishingSpot.click(fishAction)) {
             Rs2Player.waitForXpDrop(Skill.FISHING);
             Rs2Antiban.actionCooldown();
             Rs2Antiban.takeMicroBreakByChance();
@@ -140,7 +140,7 @@ public class AutoFishingScript extends Script {
     // we process fish that require special handling
     private void handleProcessingFish() {
         if (selectedFish == Fish.SACRED_EEL && Rs2Inventory.hasItem("Knife") && Rs2Inventory.hasItem("Sacred eel")) {
-            Rs2Inventory.useItemOnObject(ItemID.KNIFE, ItemID.SACRED_EEL);
+            Rs2Inventory.useItemOnObject(ItemID.KNIFE, ItemID.SNAKEBOSS_EEL);
         } else if (selectedFish == Fish.INFERNAL_EEL && Rs2Inventory.hasItem("Hammer") && Rs2Inventory.hasItem("Infernal eel")) {
             Rs2Inventory.useItemOnObject(ItemID.HAMMER, ItemID.INFERNAL_EEL);
         }
@@ -156,7 +156,7 @@ public class AutoFishingScript extends Script {
 
         String fishToCook = getRawFishInInventory().stream().findFirst().orElse(null);
 
-        if (fireOrRange != null && fishToCook != null) {
+        if (fishToCook != null) {
             Rs2Inventory.useUnNotedItemOnObject(fishToCook, fireOrRange);
             if (sleepUntil(() -> Rs2Widget.findWidget("How many would you like to cook?", null) != null)) {
                 Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
@@ -212,11 +212,17 @@ public class AutoFishingScript extends Script {
                     itemsLock.add(Rs2Inventory.get(item).getSlot());
                 }
             }
+            if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_CLOSED)) {
+                itemsLock.add(Rs2Inventory.get(ItemID.FISH_BARREL_CLOSED).getSlot());
+            } else if (Rs2Inventory.hasItem(ItemID.FISH_BARREL_OPEN)) {
+                itemsLock.add(Rs2Inventory.get(ItemID.FISH_BARREL_OPEN).getSlot());
+            }
             int[] slotsToLock = itemsLock.stream()
                              .mapToInt(Integer::intValue)
                              .toArray();
 
             sleepUntil(() -> Rs2Bank.lockAllBySlot(slotsToLock));
+            Rs2Bank.emptyFishBarrel();
             Rs2Bank.depositAll();
             sleepUntil(() -> !Rs2Inventory.isFull());
             Rs2Bank.toggleAllLocks();
@@ -235,9 +241,9 @@ public class AutoFishingScript extends Script {
      */
     private Rs2NpcModel findNearestFishingSpot() {
         int[] spotIds = selectedFish.getFishingSpot();
-        return Rs2Npc.getNpcs(npc -> Arrays.stream(spotIds).anyMatch(id -> npc.getId() == id))
-                .findFirst()
-                .orElse(null);
+        return Microbot.getRs2NpcCache().query()
+                .where(npc -> Arrays.stream(spotIds).anyMatch(id -> npc.getId() == id))
+                .nearest();
     }
 
     private List<String> getRawFishInInventory() {
@@ -249,10 +255,9 @@ public class AutoFishingScript extends Script {
     private TileObject getNearbyFireOrRange() {
         Integer[] fireIds = {
             ObjectID.FIRE,
-            ObjectID.FORESTERS_CAMPFIRE,
-            ObjectID.CAMPFIRE,
-            ObjectID.FIRE_43475,
-            ObjectID.FIRE_26185
+            ObjectID.FORESTRY_FIRE,
+            ObjectID.EAGLEPEAK_CAMPFIRE_TIDY,
+            ObjectID.FIRE_COOK
         };
         return Rs2GameObject.getGameObject(fireIds, 15);
     }

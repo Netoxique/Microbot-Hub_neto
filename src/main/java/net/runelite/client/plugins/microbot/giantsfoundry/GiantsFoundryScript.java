@@ -1,7 +1,6 @@
 package net.runelite.client.plugins.microbot.giantsfoundry;
 
 import net.runelite.api.EquipmentInventorySlot;
-import net.runelite.api.GameObject;
 import net.runelite.api.ObjectComposition;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.widgets.Widget;
@@ -17,9 +16,9 @@ import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
-import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 
 import java.awt.event.KeyEvent;
 import java.util.concurrent.TimeUnit;
@@ -35,9 +34,17 @@ public class GiantsFoundryScript extends Script {
 
     public static State state;
     static GiantsFoundryConfig config;
+    static String firstBarName;
+    static String secondBarName;
+    static boolean useBars;
+
 
     public boolean run(GiantsFoundryConfig config) {
         this.config = config;
+        useBars = config.useBars();
+        firstBarName = useBars ? config.FirstBar().getName() : config.firstItem();
+        secondBarName = useBars ? config.SecondBar().getName() : config.secondItem();
+
         setState(State.CRAFTING_WEAPON, true);
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
@@ -96,7 +103,8 @@ public class GiantsFoundryScript extends Script {
     public void getCommission() {
         if (!hasCommission()) {
             GiantsFoundryState.reset();
-            if (Rs2Npc.interact("kovac", "Commission"))
+            var kovac = Microbot.getRs2NpcCache().query().withName("kovac").nearestOnClientThread();
+            if (kovac != null && kovac.click("Commission"))
                 sleepUntil(this::hasCommission, 5000);
         }
     }
@@ -111,7 +119,7 @@ public class GiantsFoundryScript extends Script {
         if (hasSelectedMould())
             return;
 
-        Rs2GameObject.interact(MOULD_JIG);
+        Microbot.getRs2TileObjectCache().query().withId(MOULD_JIG).interact();
 
         sleepUntil(() -> Rs2Widget.findWidget("Forte", null) != null, 5000);
 
@@ -151,50 +159,74 @@ public class GiantsFoundryScript extends Script {
     }
 
     public void fillCrucible() {
-        if (!hasSelectedMould())
-            return;
+        if (!preconditionsMet()) return;
 
-        if (Microbot.getVarbitValue(MouldHelper.SWORD_TYPE_1_VARBIT) == 0) {
-            return;
-        }
-        if (Microbot.getVarbitValue(GiantsFoundryState.VARBIT_GAME_STAGE) != 1) {
-            return;
+        if (!ensureBarsInInventory()) return;
+
+        if (useBars) {
+            addBarsWithWidget(firstBarName, config.FirstBar());
+            addBarsWithWidget(secondBarName, config.SecondBar());
+        } else {
+            addBarsWithInventoryUse(firstBarName);
+            addBarsWithInventoryUse(secondBarName);
         }
 
-        if (!Rs2Inventory.hasItemAmount(config.FirstBar().getName(), config.firstBarAmount())
-                && !Rs2Inventory.hasItemAmount(config.SecondBar().getName(), config.secondBarAmount()) && !canPour()) {
-            Rs2Bank.openBank();
-            //check if inv is empty and deposit all inv items
-            if(Rs2Bank.count(config.FirstBar().getName()) < config.firstBarAmount() || Rs2Bank.count(config.SecondBar().getName()) < config.secondBarAmount()) {
-                Microbot.log("Insufficient bars in bank to continue");
-                this.shutdown();
-                return;
-            }
-            Rs2Bank.withdrawDeficit(config.FirstBar().getName(), config.firstBarAmount());
-            Rs2Bank.withdrawDeficit(config.SecondBar().getName(), config.secondBarAmount());
-            Rs2Bank.closeBank();
-            return;
-        }
-        Rs2Bank.closeBank();
-        if (Rs2Inventory.hasItem(config.FirstBar().getName()) && !canPour()) {
-            Rs2GameObject.interact(CRUCIBLE, "Fill");
-            sleepUntil(() -> Rs2Widget.findWidget("What metal would you like to add?", null) != null, 5000);
-            Rs2Keyboard.keyPress(getKeyFromBar(config.FirstBar()));
-            sleepUntil(() -> !Rs2Inventory.hasItem(config.FirstBar().getName()), 5000);
-        }
-        if (Rs2Inventory.hasItem(config.SecondBar().getName()) && !canPour()) {
-            Rs2GameObject.interact(CRUCIBLE, "Fill");
-            sleepUntil(() -> Rs2Widget.findWidget("What metal would you like to add?", null) != null, 5000);
-            sleep(600, 1200);
-
-            Rs2Keyboard.keyPress(getKeyFromBar(config.SecondBar()));
-            sleepUntil(() -> !Rs2Inventory.hasItem(config.SecondBar().getName()), 5000);
-        }
         if (canPour()) {
-            Rs2GameObject.interact(CRUCIBLE, "Pour");
-            sleep(5000);
-            sleepUntil(() -> !canPour(), 10000);
+            pourCrucible();
         }
+    }
+
+    private boolean preconditionsMet() {
+        if (!hasSelectedMould()) return false;
+        if (Microbot.getVarbitValue(MouldHelper.SWORD_TYPE_1_VARBIT) == 0) return false;
+        return Microbot.getVarbitValue(GiantsFoundryState.VARBIT_GAME_STAGE) == 1;
+    }
+
+    private boolean ensureBarsInInventory() {
+        if ((Rs2Inventory.hasItemAmount(firstBarName, config.firstBarAmount())
+                && Rs2Inventory.hasItemAmount(secondBarName, config.secondBarAmount()))
+                || canPour()) {
+            return true;
+        }
+
+        Rs2Bank.openBank();
+        if (Rs2Bank.count(firstBarName) < config.firstBarAmount()
+                || Rs2Bank.count(secondBarName) < config.secondBarAmount()) {
+            Microbot.log("Insufficient bars / items in bank to continue");
+            this.shutdown();
+            return false;
+        }
+        Rs2Bank.withdrawDeficit(firstBarName, config.firstBarAmount());
+        Rs2Bank.withdrawDeficit(secondBarName, config.secondBarAmount());
+        Rs2Bank.closeBank();
+        return true;
+    }
+
+    private void addBarsWithWidget(String barName, SmithableBars key) {
+        if (!Rs2Inventory.hasItem(barName) || canPour()) return;
+        Microbot.getRs2TileObjectCache().query().interact(CRUCIBLE, "Fill");
+        sleepUntil(() -> Rs2Widget.findWidget("What metal would you like to add?", null) != null, 5000);
+        Rs2Keyboard.keyPress(getKeyFromBar(key));
+        sleepUntil(() -> !Rs2Inventory.hasItem(barName), 5000);
+    }
+
+    private void addBarsWithInventoryUse(String barName) {
+        if (!Rs2Inventory.hasItem(barName) || canPour()) return;
+        Rs2Inventory.use(barName);
+        Microbot.getRs2TileObjectCache().query().withId(CRUCIBLE).interact();
+        sleepUntil(() -> Rs2Widget.findWidget("How many would you like to add?", null) != null, 5000);
+        sleep(600, 1200);
+
+        if (Microbot.getClient().getWidget(14352385) != null) {
+            Rs2Keyboard.keyPress('4');
+            sleepUntil(() -> !Rs2Inventory.hasItem(barName), 5000);
+        }
+    }
+
+    private void pourCrucible() {
+        Microbot.getRs2TileObjectCache().query().interact(CRUCIBLE, "Pour");
+        sleep(5000);
+        sleepUntil(() -> !canPour(), 10000);
     }
 
     public static char getKeyFromBar(SmithableBars bar) {
@@ -217,7 +249,7 @@ public class GiantsFoundryScript extends Script {
     public void pickupMould() {
         if (!canPickupMould()) return;
         if (Rs2Inventory.isEmpty() && GiantsFoundryState.getCurrentStage() == null) {
-            Rs2GameObject.interact(MOULD_JIG, "Pick-up");
+            Microbot.getRs2TileObjectCache().query().interact(MOULD_JIG, "Pick-up");
             sleepUntil(() -> !canPickupMould(), 5000);
         }
     }
@@ -261,18 +293,18 @@ public class GiantsFoundryScript extends Script {
                 boolean isAtLavaTile = Rs2Player.getWorldLocation().equals(new WorldPoint(3371, 11497, 0))
                         || Rs2Player.getWorldLocation().equals(new WorldPoint(3371, 11498, 0));
                 if (!doAction && isAtLavaTile) return;
-                Rs2GameObject.interact(LAVA_POOL, "Heat-preform");
+                Microbot.getRs2TileObjectCache().query().interact(LAVA_POOL, "Heat-preform");
                 GiantsFoundryState.heatingCoolingState.stop();
-                GiantsFoundryState.heatingCoolingState.setup(7, 0, "heats");
+                GiantsFoundryState.heatingCoolingState.setup(false, true, "heats");
                 GiantsFoundryState.heatingCoolingState.start(GiantsFoundryState.getHeatAmount());
                 sleepUntil(() -> GiantsFoundryState.heatingCoolingState.getRemainingDuration() <= 1);
                 break;
             case COOLING_DOWN:
                 boolean isAtWaterFallTile = Rs2Player.getWorldLocation().equals(new WorldPoint(3360, 11489, 0));
                 if (!doAction && isAtWaterFallTile) return;
-                Rs2GameObject.interact(WATERFALL, "Cool-preform");
+                Microbot.getRs2TileObjectCache().query().interact(WATERFALL, "Cool-preform");
                 GiantsFoundryState.heatingCoolingState.stop();
-                GiantsFoundryState.heatingCoolingState.setup(-7, 0, "cools");
+                GiantsFoundryState.heatingCoolingState.setup(false, false, "cools");
                 GiantsFoundryState.heatingCoolingState.start(GiantsFoundryState.getHeatAmount());
                 sleepUntil(() -> GiantsFoundryState.heatingCoolingState.getRemainingDuration() <= 1);
                 break;
@@ -292,14 +324,14 @@ public class GiantsFoundryScript extends Script {
     public void craftWeapon() {
         Stage stage = GiantsFoundryState.getCurrentStage();
         if (stage == null) return;
-        GameObject obj = GiantsFoundryState.getStageObject(stage);
+        Rs2TileObjectModel obj = GiantsFoundryState.getStageObject(stage);
         if (obj == null) return;
-        Rs2GameObject.interact(obj);
+        obj.click();
         Rs2Player.waitForAnimation();
     }
 
     private void handIn() {
-        Rs2Npc.interact("kovac", "Hand-in");
+        Microbot.getClientThread().invoke(() -> Microbot.getRs2NpcCache().query().withName("kovac").interact("Hand-in"));
     }
 
 }

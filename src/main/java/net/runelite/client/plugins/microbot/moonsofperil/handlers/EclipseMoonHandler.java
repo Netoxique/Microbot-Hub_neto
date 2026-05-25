@@ -12,8 +12,8 @@ import net.runelite.client.plugins.microbot.moonsofperil.enums.Widgets;
 import net.runelite.client.plugins.microbot.moonsofperil.MoonsOfPerilConfig;
 import net.runelite.client.plugins.microbot.util.Rs2InventorySetup;
 import net.runelite.client.plugins.microbot.util.coords.Rs2LocalPoint;
-import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
-import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
+import net.runelite.client.plugins.microbot.util.math.Rs2Random;
+import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
@@ -41,17 +41,19 @@ public class EclipseMoonHandler implements BaseHandler {
     private final Rs2InventorySetup equipmentNormal;
     private final Rs2InventorySetup equipmentClones;
     private final boolean enableBoss;
+    private final boolean clonerandomdelay;
     private final net.runelite.client.plugins.microbot.moonsofperil.handlers.BossHandler boss;
     private final boolean debugLogging;
 
-	public EclipseMoonHandler(MoonsOfPerilConfig cfg, Rs2InventorySetup equipmentNormal, Rs2InventorySetup equipmentClones)
-	{
-		this.equipmentNormal = equipmentNormal;
-		this.equipmentClones = equipmentClones;
-		this.enableBoss = cfg.enableEclipse();
-		this.boss = new net.runelite.client.plugins.microbot.moonsofperil.handlers.BossHandler(cfg);
-		this.debugLogging = cfg.debugLogging();
-	}
+    public EclipseMoonHandler(MoonsOfPerilConfig cfg, Rs2InventorySetup equipmentNormal, Rs2InventorySetup equipmentClones)
+    {
+        this.equipmentNormal = equipmentNormal;
+        this.equipmentClones = equipmentClones;
+        this.enableBoss = cfg.enableEclipse();
+        this.boss = new net.runelite.client.plugins.microbot.moonsofperil.handlers.BossHandler(cfg);
+        this.debugLogging = cfg.debugLogging();
+        this.clonerandomdelay = cfg.enableEclipseRandomDelay();
+    }
 
     @Override
     public boolean validate() {
@@ -71,7 +73,7 @@ public class EclipseMoonHandler implements BaseHandler {
             sleepUntil(() -> Rs2Widget.isWidgetVisible(bossHealthBarWidgetID), 5_000);
         }
         int bossNpcID = NpcID.PMOON_BOSS_ECLIPSE_MOON_VIS;
-        while (Rs2Widget.isWidgetVisible(bossHealthBarWidgetID) || Rs2Npc.getNpc(bossNpcID) != null) {
+        while (Rs2Widget.isWidgetVisible(bossHealthBarWidgetID) || Microbot.getRs2NpcCache().query().withId(bossNpcID).nearest() != null) {
             if (isSpecialAttack1Sequence()) {
                 specialAttack1Sequence();
             }
@@ -95,15 +97,17 @@ public class EclipseMoonHandler implements BaseHandler {
      * Returns True if the eclipseMoonShield NPC is found.
      */
     public boolean isSpecialAttack1Sequence() {
-        Rs2NpcModel eclipseMoonShield = Rs2Npc.getNpc(NpcID.PMOON_BOSS_ECLIPSE_MOON_SHIELD);
-        return eclipseMoonShield != null && Rs2Npc.getNpc(sigilNpcID) == null;
+        Rs2NpcModel eclipseMoonShield = Microbot.getRs2NpcCache().query().withId(NpcID.PMOON_BOSS_ECLIPSE_MOON_SHIELD).nearest();
+        return eclipseMoonShield != null && Microbot.getRs2NpcCache().query().withId(sigilNpcID).nearest() == null;
     }
 
     /**  Eclipse – Moon Shield Special-Attack Handler */
     public void specialAttack1Sequence()
     {
         Rs2Prayer.disableAllPrayers();
-        WorldPoint spawn = Rs2Npc.getNpc(NpcID.PMOON_BOSS_ECLIPSE_MOON_SHIELD).getWorldLocation();
+        var shieldNpc = Microbot.getRs2NpcCache().query().withId(NpcID.PMOON_BOSS_ECLIPSE_MOON_SHIELD).nearest();
+        if (shieldNpc == null) return;
+        WorldPoint spawn = shieldNpc.getWorldLocation();
         if (debugLogging) {Microbot.log("Exact Moonshield location = " + spawn);}
         /*if we enter arena mid attack phase, bail out*/
         if (!spawn.equals(shieldSpawnTile)) {
@@ -112,7 +116,7 @@ public class EclipseMoonHandler implements BaseHandler {
             return;
         }
 
-/*      1 ─ wait until shield starts sliding */
+        /*      1 ─ wait until shield starts sliding */
 
         if (debugLogging) {Microbot.log("Sleeping until knockback animation finishes...");}
         sleepUntil(() ->
@@ -124,12 +128,12 @@ public class EclipseMoonHandler implements BaseHandler {
         sleep(2_100);
         if (debugLogging) {Microbot.log("Commencing our walk around the lap");}
 
-/*         ───── 2. Four anchor tiles around the boss (SW → NW → NE → SE) ───── */
+        /*         ───── 2. Four anchor tiles around the boss (SW → NW → NE → SE) ───── */
         WorldPoint[] lap = {
-            new WorldPoint(1483, 9627, 0),  // SW
-            new WorldPoint(1483, 9637, 0),  // NW
-            new WorldPoint(1493, 9637, 0),  // NE
-            new WorldPoint(1493, 9627, 0)   // SE
+                new WorldPoint(1483, 9627, 0),  // SW
+                new WorldPoint(1483, 9637, 0),  // NW
+                new WorldPoint(1493, 9637, 0),  // NE
+                new WorldPoint(1493, 9627, 0)   // SE
         };
 
         for (WorldPoint p : lap) {
@@ -144,12 +148,12 @@ public class EclipseMoonHandler implements BaseHandler {
         }
         if (debugLogging) {Microbot.log("Shield lap has been completed");}
 
-/*         3 ─ run to post-phase attack tile */
+        /*         3 ─ run to post-phase attack tile */
         WorldPoint fin = Locations.ECLIPSE_ATTACK_6.getWorldPoint();
         if (debugLogging) {Microbot.log("Running to the normal attack sequence tile");}
         Rs2Walker.walkFastCanvas(fin, true);
         if (debugLogging) {Microbot.log("Sleeping until the Sigil tile spawns");}
-        sleepUntil(() -> Rs2Npc.getNpc(sigilNpcID) != null, 4_000);
+        sleepUntil(() -> Microbot.getRs2NpcCache().query().withId(sigilNpcID).nearest() != null, 4_000);
         if (debugLogging) {Microbot.log("Searing Rays phase finished");}
 
     }
@@ -165,7 +169,7 @@ public class EclipseMoonHandler implements BaseHandler {
     {
         WorldPoint center = cloneAttackTile;
         WorldPoint playerTile = Rs2Player.getWorldLocation();
-        Rs2NpcModel bossNPC = Rs2Npc.getNpc(NpcID.PMOON_BOSS_ECLIPSE_MOON_VIS);
+        Rs2NpcModel bossNPC = Microbot.getRs2NpcCache().query().withId(NpcID.PMOON_BOSS_ECLIPSE_MOON_VIS).nearest();
 
         // 1. Captures the conditions required for the start of the special attack sequence.
         if (playerTile.equals(center) && Rs2Player.getAnimation() == AnimationID.HUMAN_TROLL_FLYBACK_MERGE) {
@@ -180,7 +184,7 @@ public class EclipseMoonHandler implements BaseHandler {
         }
 
         // 2. Captures the conditions required if we spawn into the arena midway through the special attack phase.
-        if (playerTile.equals(center) && bossNPC != null && Rs2Npc.getNpc(sigilNpcID) == null && !bossNPC.getLocalLocation().equals(Rs2LocalPoint.fromWorldInstance(center))) {
+        if (playerTile.equals(center) && bossNPC != null && Microbot.getRs2NpcCache().query().withId(sigilNpcID).nearest() == null && !bossNPC.getLocalLocation().equals(Rs2LocalPoint.fromWorldInstance(center))) {
             boss.equipInventorySetup(equipmentClones);
             BossHandler.meleePrayerOn();
             return true;
@@ -203,10 +207,10 @@ public class EclipseMoonHandler implements BaseHandler {
 
 
             // 1. Look at ALL Eclipse-Moon NPCs this tick that have the specific spawn animation. Game mechanics mean this list SHOULD only return 1 NPC
-            List<Rs2NpcModel> spawningClones = Rs2Npc
-                    .getNpcs(n -> n.getId() == CLONE_NPC_ID
-                            && n.getAnimation() == CLONE_SPAWN_ANIM)
-                    .collect(Collectors.toList());
+            List<Rs2NpcModel> spawningClones = Microbot.getRs2NpcCache().query()
+                    .where(n -> n.getId() == CLONE_NPC_ID
+                            && n.getNpc().getAnimation() == CLONE_SPAWN_ANIM)
+                    .toList();
             if (debugLogging) {Microbot.log("Collected all NPCs that match NPC ID & NPC Animation. Total = " + spawningClones.size());}
 
             // 2. Find the first clone within the list that matches the filter
@@ -219,6 +223,10 @@ public class EclipseMoonHandler implements BaseHandler {
 
                 // 3. Parry / Attack the clone
                 if (debugLogging) {Microbot.log("Clone #" + (parried + 1) + " spawned at " + cloneTrueLocation + " → Parrying via " + cloneLocalLocation);}
+                if (clonerandomdelay) {
+                    int delay = Rs2Random.between(30, 150);
+                    sleep(delay);
+                }
                 Rs2Walker.walkCanvas(cloneLocalLocation);
                 parried++;
             }

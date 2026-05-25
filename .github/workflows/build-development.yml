@@ -32,13 +32,4 @@ jobs:
         run: chmod +x gradlew
 
       - name: Build JARs
-        run: ./gradlew clean build -x publish
-
-      - name: Create GitHub Release with JARs
-        uses: ncipollo/release-action@v1
-        with:
-          tag: release-${{ github.run_number }}
-          name: "Development Build #${{ github.run_number }}"
-          body: "Commit: ${{ github.sha }}"
-          allowUpdates: false
-          artifacts: "**/build/libs/*.jar"
+        run: ./gradlew clean build

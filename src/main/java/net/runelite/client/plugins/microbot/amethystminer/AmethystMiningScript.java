@@ -220,7 +220,7 @@ public class AmethystMiningScript extends Script {
     private int distanceToPlayer(WallObject wallObject) {
         WorldPoint closestWalkableNeighbour = Rs2Tile.getNearestWalkableTile(wallObject.getWorldLocation());
         if (closestWalkableNeighbour == null) return 999;
-        return Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo2D(closestWalkableNeighbour);
+        return Microbot.getClientThread().invoke(() -> Microbot.getClient().getLocalPlayer().getWorldLocation().distanceTo2D(closestWalkableNeighbour));
     }
 
     private void interactWithVein(WallObject vein) {
@@ -243,6 +243,9 @@ public class AmethystMiningScript extends Script {
 
     private void initialize() {
         Rs2Antiban.antibanSetupTemplates.applyMiningSetup();
+        itemsToKeep.clear();
+        pickAxeInInventory = "";
+        inventoryCountSinceLastGemBagCheck = 0;
         status = Status.IDLE;
         miningSpot = MiningSpot.NULL;
         oreVein = null;

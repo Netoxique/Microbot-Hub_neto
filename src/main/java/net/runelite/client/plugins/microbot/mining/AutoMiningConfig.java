@@ -6,7 +6,7 @@ import net.runelite.client.plugins.microbot.util.inventory.InteractOrder;
 
 @ConfigGroup("Mining")
 @ConfigInformation("<h2>Auto Mining</h2>" +
-        "<h3>Version: "+ AutoMiningScript.version + "</h3>" +
+        "<h3>Version: "+ AutoMiningPlugin.version + "</h3>" +
         "<p>1. <strong>Ore Selection:</strong> Choose the type of ore you wish to mine. The default ore is <em>TIN</em>.</p>" +
         "<p></p>"+
         "<p>2. <strong>Distance to Stray:</strong> Set the maximum distance in tiles that the bot can travel from its initial position. The default distance is <em>20 tiles</em>.</p>" +
@@ -52,6 +52,18 @@ public interface AutoMiningConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "progressiveMode",
+            name = "Progressive mode",
+            description = "Automatically select the best ore for our level",
+            position = 1,
+            section = generalSection
+    )
+    default boolean progressiveMode()
+    {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "DistanceToStray",
             name = "Distance to Stray",
             description = "Set how far you can travel from your initial position in tiles",
@@ -75,6 +87,17 @@ public interface AutoMiningConfig extends Config {
     }
 
     @ConfigItem(
+            keyName = "leagueMode",
+            name = "League mode (anti-AFK)",
+            description = "Periodically presses a key to reset the idle timer so you never get logged out",
+            position = 4,
+            section = generalSection
+    )
+    default boolean leagueMode() {
+        return false;
+    }
+
+    @ConfigItem(
             keyName = "UseBank",
             name = "UseBank",
             description = "Use bank and walk back to original location",
@@ -95,6 +118,17 @@ public interface AutoMiningConfig extends Config {
     )
     default String itemsToBank() {
         return "ore";
+    }
+
+    @ConfigItem(
+            keyName = "clayBracelet",
+            name = "Use Clay Bracelet",
+            description = "Withdraw and equip bracelet of clay. Start script with bracelet on.",
+            position = 2,
+            section = bankingSection
+    )
+    default boolean clayBracelet() {
+        return false;
     }
 
     @ConfigItem(

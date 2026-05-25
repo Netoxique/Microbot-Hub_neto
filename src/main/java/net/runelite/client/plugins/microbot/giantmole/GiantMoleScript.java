@@ -17,7 +17,7 @@ import net.runelite.client.plugins.microbot.util.Rs2InventorySetup;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.util.grounditem.LootingParameters;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -25,7 +25,7 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.misc.Rs2Food;
 import net.runelite.client.plugins.microbot.util.misc.Rs2Potion;
-import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
+import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.prayer.Rs2Prayer;
 import net.runelite.client.plugins.microbot.util.security.Login;
@@ -238,9 +238,9 @@ public class GiantMoleScript extends Script
     /**
      * Retrieves the Mole Hill tile object by ID.
      */
-    public TileObject getMoleHill()
+    public Rs2TileObjectModel getMoleHill()
     {
-        return Rs2GameObject.getTileObject(ObjectID.MOLE_HILL);
+        return Microbot.getRs2TileObjectCache().query().withId(ObjectID.MOLE_HILL).nearest();
     }
 
     /**
@@ -248,10 +248,10 @@ public class GiantMoleScript extends Script
      */
     public void checkWorldOccupied()
     {
-        TileObject moleHill = getMoleHill();
+        Rs2TileObjectModel moleHill = getMoleHill();
         if (moleHill != null)
         {
-            Rs2GameObject.interact(moleHill, "Look-inside");
+            moleHill.click("Look-inside");
             Global.sleepUntilTrue(() -> checkedIfWorldOccupied, 200, 7000);
         }
     }
@@ -261,7 +261,7 @@ public class GiantMoleScript extends Script
      */
     public void goInsideMoleHill()
     {
-        TileObject moleHill = getMoleHill();
+        Rs2TileObjectModel moleHill = getMoleHill();
         if (moleHill != null)
         {
             if (Rs2Walker.walkTo(moleHill.getWorldLocation(), 0))
@@ -277,11 +277,13 @@ public class GiantMoleScript extends Script
      */
     public static WorldPoint getMoleLocation()
     {
-        if (isInMoleTunnel())
+        if (!isInMoleTunnel())
         {
-            return Microbot.getClient().getHintArrowPoint();
+            return null;
         }
-        return null;
+        return Microbot.getClientThread()
+                .runOnClientThreadOptional(() -> Microbot.getClient().getHintArrowPoint())
+                .orElse(null);
     }
 
     /**
@@ -305,9 +307,15 @@ public class GiantMoleScript extends Script
     /**
      * Returns the NPC representing the Giant Mole (via hint arrow).
      */
-    public NPC getMole()
+    public Rs2NpcModel getMole()
     {
-        return Microbot.getClient().getHintArrowNpc();
+        NPC hintNpc = Microbot.getClientThread()
+                .runOnClientThreadOptional(() -> Microbot.getClient().getHintArrowNpc())
+                .orElse(null);
+        if (hintNpc == null) return null;
+        return Microbot.getRs2NpcCache().query()
+                .where(n -> n.getNpc() == hintNpc)
+                .nearest();
     }
 
     /**
@@ -350,23 +358,35 @@ public class GiantMoleScript extends Script
      */
     public void attackMole()
     {
-        var mole = getMole();
-        if (mole != null && !Rs2Combat.inCombat())
+        Rs2NpcModel mole = getMole();
+        if (mole == null || Rs2Combat.inCombat())
         {
-            // Mole's "dig" animation is 3314; if it's mid-dig or dead, skip
-            if (mole.getAnimation() == 3314 || isMoleDead())
-            {
-                return;
-            }
+            return;
+        }
 
-            // If pathfinder is active, exit it before attacking
-            if (ShortestPathPlugin.getPathfinder() != null)
-            {
-                ShortestPathPlugin.exit();
-                sleep(600, 800);
-            }
+        boolean moleIsDigging = Microbot.getClientThread()
+                .runOnClientThreadOptional(() ->
+                {
+                    NPC hintNpc = Microbot.getClient().getHintArrowNpc();
+                    return hintNpc != null && hintNpc.getAnimation() == 3314;
+                })
+                .orElse(false);
 
-            Rs2Npc.interact(mole, "Attack");
+        // Mole's "dig" animation is 3314; if it's mid-dig or dead, skip
+        if (moleIsDigging || isMoleDead())
+        {
+            return;
+        }
+
+        // If pathfinder is active, exit it before attacking
+        if (ShortestPathPlugin.getPathfinder() != null)
+        {
+            ShortestPathPlugin.exit();
+            sleep(600, 800);
+        }
+
+        if (mole.click("Attack"))
+        {
             sleep(600, 800);
         }
     }
@@ -381,7 +401,7 @@ public class GiantMoleScript extends Script
             return;
         }
 
-        boolean underAttack = Rs2Npc.getNpcsForPlayer().findAny().isPresent() || Rs2Combat.inCombat();
+        boolean underAttack = Microbot.getRs2NpcCache().query().where(Rs2NpcModel::isInteractingWithPlayer).count() > 0 || Rs2Combat.inCombat();
         Rs2Prayer.toggleQuickPrayer(!isInFalador() && underAttack);
     }
 
@@ -457,6 +477,10 @@ public class GiantMoleScript extends Script
         // (1) If inventory is full, we need to bank
         if (Rs2Inventory.isFull())
         {
+            if (config.toggleBuryBones() && buryBonesInInventory())
+            {
+                return false;
+            }
             Microbot.log("Inventory is full, banking...");
             return true;
         }
@@ -614,7 +638,24 @@ public class GiantMoleScript extends Script
             {
                 Microbot.pauseAllScripts.compareAndSet(true, false);
             }
+            buryBonesInInventory();
         }
+    }
+
+    private boolean buryBonesInInventory()
+    {
+        List<Rs2ItemModel> bones = Rs2Inventory.getBones();
+        if (bones == null || bones.isEmpty())
+        {
+            return false;
+        }
+        if (Rs2Inventory.interact(bones.get(0), "Bury"))
+        {
+            Rs2Player.waitForAnimation();
+            sleep(150, 300);
+            return true;
+        }
+        return false;
     }
 
     private void lootRunes(GiantMoleConfig config)
