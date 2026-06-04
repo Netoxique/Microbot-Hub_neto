@@ -73,8 +73,7 @@ public interface BanksBankStanderConfig extends Config {
             section = itemSection
     )
     @Range(
-            min = 1,
-            max = 28
+            min = 1
     )
 
     default int firstItemQuantity() {
@@ -101,8 +100,7 @@ public interface BanksBankStanderConfig extends Config {
             section = itemSection
     )
     @Range(
-            min = 0,
-            max = 27
+            min = 0
     )
 
     default int secondItemQuantity() {
@@ -129,8 +127,7 @@ public interface BanksBankStanderConfig extends Config {
             section = itemSection
     )
     @Range(
-            min = 0,
-            max = 27
+            min = 0
     )
 
     default int thirdItemQuantity() {
@@ -157,8 +154,7 @@ public interface BanksBankStanderConfig extends Config {
             section = itemSection
     )
     @Range(
-            min = 0,
-            max = 27
+            min = 0
     )
 
     default int fourthItemQuantity() {

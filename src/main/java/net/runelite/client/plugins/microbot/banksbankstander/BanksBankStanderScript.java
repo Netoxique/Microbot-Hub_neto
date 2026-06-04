@@ -105,29 +105,37 @@ public class BanksBankStanderScript extends Script {
         // Check first item if needed
         if (config.firstItemQuantity() > 0) {
             System.out.println("Checking first item.");
-            firstOK = Rs2Inventory.hasItem(firstItemId);
+            firstOK = hasConfiguredItemAmount(config.firstItemIdentifier(), firstItemId, config.firstItemQuantity());
         }
 
         // Check second item if needed
         if (config.secondItemQuantity() > 0) {
             System.out.println("Checking second item.");
-            secondOK = Rs2Inventory.hasItem(secondItemId);
+            secondOK = hasConfiguredItemAmount(config.secondItemIdentifier(), secondItemId, config.secondItemQuantity());
         }
 
         // Check third item if needed
         if (config.thirdItemQuantity() > 0) {
             System.out.println("Checking third item.");
-            thirdOK = Rs2Inventory.hasItem(thirdItemId);
+            thirdOK = hasConfiguredItemAmount(config.thirdItemIdentifier(), thirdItemId, config.thirdItemQuantity());
         }
 
         // Check fourth item if needed
         if (config.fourthItemQuantity() > 0) {
             System.out.println("Checking fourth item.");
-            fourthOK = Rs2Inventory.hasItem(fourthItemId);
+            fourthOK = hasConfiguredItemAmount(config.fourthItemIdentifier(), fourthItemId, config.fourthItemQuantity());
         }
 
         // Only return true if all required items were found
         return firstOK && secondOK && thirdOK && fourthOK;
+    }
+
+    private boolean hasConfiguredItemAmount(String itemIdentifier, Integer itemId, int amount) {
+        if (itemId != null) {
+            return Rs2Inventory.hasItemAmount(itemId, amount);
+        }
+
+        return Rs2Inventory.hasItemAmount(itemIdentifier, amount);
     }
 
 
