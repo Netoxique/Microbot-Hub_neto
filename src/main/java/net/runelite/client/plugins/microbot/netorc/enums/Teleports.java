@@ -11,7 +11,8 @@ public enum Teleports {
     CRAFTING_CAPE("Crafting Cape", new int[]{9780, 9781}, new Integer[]{11571}, "Teleport"),
     CONSTRUCTION_CAPE("Construction cape", new int[]{9789, 9790}, null, "Tele to POH"),
     MYTH_CAPE("Mythical cape", new int[]{ItemID.MYTHICAL_CAPE}, new Integer[]{9772}, "Teleport"),
-    FARMING_CAPE("Farming cape", new int[]{9810, 9811}, new Integer[]{4922}, "Teleport");
+    FARMING_CAPE("Farming cape", new int[]{9810, 9811}, new Integer[]{4922}, "Teleport"),
+    CASTLE_WARS("Castle Wars", new int[]{2552, 2554, 2556, 2558, 2560, 2562, 2564, 2566}, new Integer[]{9776}, "Castle Wars");
 
 
     @Getter

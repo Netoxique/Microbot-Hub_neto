@@ -34,7 +34,7 @@ import java.util.stream.Collectors;
 
 public class NetoRCScript extends Script {
     private final NetoRCPlugin plugin;
-    public static State state;
+    public static State state = State.BANKING;
 
     private int lumbyElite = -1;
 
@@ -49,6 +49,9 @@ public class NetoRCScript extends Script {
     private final WorldPoint wrathRuinsLoc = new WorldPoint(2445, 2824, 0);
 
 	private volatile boolean forceDrinkAtFerox = false;
+    private volatile boolean forceBankOnStart = true;
+    private volatile int activeRunId = 0;
+    private final ThreadLocal<Integer> scheduledRunId = new ThreadLocal<>();
 
     public static final int pureEss = 7936;
     public static final int feroxPool = 39651;
@@ -88,6 +91,11 @@ public class NetoRCScript extends Script {
     private ClientThread clientThread;
 
     public boolean run() {
+        if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
+            mainScheduledFuture.cancel(true);
+        }
+
+        int runId = startNewRun();
         Microbot.enableAutoRunOn = false;
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyRunecraftingSetup();
@@ -96,12 +104,14 @@ public class NetoRCScript extends Script {
         Rs2Camera.setPitch(305);
         Rs2Camera.setYaw(1024);
         sleepGaussian(700, 200);
-        state = State.BANKING;
         Microbot.log("Script has started");
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
+            scheduledRunId.set(runId);
             try {
+                if (!isCurrentRun(runId)) return;
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
+                if (!isCurrentRun(runId)) return;
                 if (shouldPauseForBreak()) return;
                 long startTime = System.currentTimeMillis();
 
@@ -149,6 +159,8 @@ public class NetoRCScript extends Script {
             } catch (Exception ex) {
                 Microbot.logStackTrace(this.getClass().getSimpleName(), ex);
                 Microbot.log("Error in script" + ex.getMessage());
+            } finally {
+                scheduledRunId.remove();
             }
         }, 0, 1000, TimeUnit.MILLISECONDS);
         return true;
@@ -156,10 +168,42 @@ public class NetoRCScript extends Script {
 
     @Override
     public void shutdown() {
+        invalidateCurrentRun();
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
         Microbot.log("Script has been stopped");
         //Rs2Player.logout();
+    }
+
+    public synchronized void resetToBanking() {
+        state = State.BANKING;
+        lumbyElite = -1;
+        forceDrinkAtFerox = false;
+        forceBankOnStart = true;
+    }
+
+    private synchronized int startNewRun() {
+        activeRunId++;
+        resetToBanking();
+        return activeRunId;
+    }
+
+    private synchronized void invalidateCurrentRun() {
+        activeRunId++;
+        resetToBanking();
+    }
+
+    private boolean isCurrentRun(int runId) {
+        return runId == activeRunId;
+    }
+
+    private void setState(State nextState) {
+        Integer runId = scheduledRunId.get();
+        if (runId != null && !isCurrentRun(runId)) {
+            return;
+        }
+
+        state = nextState;
     }
 
     private boolean shouldPauseForBreak() {
@@ -186,10 +230,16 @@ public class NetoRCScript extends Script {
 
     private void handleBanking() {
         int currentRegion = plugin.getMyWorldPoint().getRegionID();
-        if (!Rs2Inventory.allPouchesFull() && !Rs2Inventory.contains(pureEss)) {
-            if (!Teleports.CRAFTING_CAPE.matchesRegion(currentRegion)
-                    && !Teleports.FEROX_ENCLAVE.matchesRegion(currentRegion)
-                    && !Teleports.FARMING_CAPE.matchesRegion(currentRegion)) {
+        boolean forceBank = forceBankOnStart;
+
+        if (forceBank) {
+            if (!isBankingRegion(currentRegion)) {
+                Microbot.log("Startup banking requested, teleporting to bank");
+                handleBankTeleport();
+                return;
+            }
+        } else if (!Rs2Inventory.allPouchesFull() && !Rs2Inventory.contains(pureEss)) {
+            if (!isBankingRegion(currentRegion)) {
                 Microbot.log("Not in banking region, teleporting");
                 handleBankTeleport();
             }
@@ -211,9 +261,9 @@ public class NetoRCScript extends Script {
             checkPouches();
         }
 
-        if (Rs2Inventory.isFull() && Rs2Inventory.allPouchesFull() && Rs2Inventory.contains(pureEss)) {
+        if (!forceBank && Rs2Inventory.isFull() && Rs2Inventory.allPouchesFull() && Rs2Inventory.contains(pureEss)) {
             Microbot.log("We are full, skipping bank");
-            state = State.GOING_HOME;
+            setState(State.GOING_HOME);
             return;
         }
         if (!config.usePoh()) {
@@ -221,13 +271,15 @@ public class NetoRCScript extends Script {
         }
 
         while (!Rs2Bank.isOpen() && isRunning() && Rs2Bank.isNearBank(26) &&
-                (!Rs2Inventory.allPouchesFull()
-                        || !Rs2Inventory.contains(colossalPouch)
-                        || !Rs2Inventory.contains(pureEss))) {
+                (forceBankOnStart || needsBankingSupplies())) {
             Microbot.log("Opening bank");
             Rs2Bank.openBank();
             sleepUntil(Rs2Bank::isOpen);
             sleepGaussian(700, 200);
+        }
+
+        if (forceBankOnStart && Rs2Bank.isOpen()) {
+            forceBankOnStart = false;
         }
 
         if (config.runeType() == RuneType.WRATH) {
@@ -329,7 +381,7 @@ public class NetoRCScript extends Script {
                     handleWrathWalking();
                 }
             } else {
-                state = State.GOING_HOME;
+                setState(State.GOING_HOME);
             }
         }
     }
@@ -415,7 +467,7 @@ public class NetoRCScript extends Script {
         if (plugin.getMyWorldPoint().distanceTo(monasteryFairyRing) < 7) {
             if (fairyRing == null) {
                 Microbot.log("Unable to find fairies, resetting from bank to retry");
-                state = State.BANKING;
+                setState(State.BANKING);
                 return;
             } else {
                 Microbot.log("Interacting with fairies");
@@ -423,7 +475,7 @@ public class NetoRCScript extends Script {
                 sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
             }
         }
-        state = State.WALKING_TO;
+        setState(State.WALKING_TO);
     }
 
     private void handleFarmingCape() {
@@ -532,8 +584,21 @@ public class NetoRCScript extends Script {
                 return;
             }
 
-            state = State.CRAFTING;
+            setState(State.CRAFTING);
         }
+    }
+
+    private boolean isBankingRegion(int currentRegion) {
+        return Teleports.CRAFTING_CAPE.matchesRegion(currentRegion)
+                || Teleports.FEROX_ENCLAVE.matchesRegion(currentRegion)
+                || Teleports.FARMING_CAPE.matchesRegion(currentRegion)
+                || Teleports.CASTLE_WARS.matchesRegion(currentRegion);
+    }
+
+    private boolean needsBankingSupplies() {
+        return !Rs2Inventory.allPouchesFull()
+                || !Rs2Inventory.contains(colossalPouch)
+                || !Rs2Inventory.contains(pureEss);
     }
 
     private void handleWrathReqEquip() {
@@ -557,7 +622,7 @@ public class NetoRCScript extends Script {
         }
 
         if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() > 90) {
-            state = State.WALKING_TO;
+            setState(State.WALKING_TO);
         } else if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() < 45
                 || Rs2Player.getHealthPercentage() < 50) {
             Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
@@ -656,7 +721,7 @@ public class NetoRCScript extends Script {
             Microbot.log("Using fairy ring");
             Rs2Player.waitForAnimation(1200);
             sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing), 1200);
-            state = State.WALKING_TO;
+            setState(State.WALKING_TO);
         } else {
             List<TileObject> allGameObjects = Rs2GameObject.getAll().stream()
                     .filter(Objects::nonNull)
@@ -676,12 +741,12 @@ public class NetoRCScript extends Script {
                 sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
             } else {
                 Microbot.log("Unable to find fairy ring, resetting to banking for a retry");
-                state = State.BANKING;
+                setState(State.BANKING);
             }
         }
 
         if (Rs2Player.getWorldLocation().equals(caveFairyRing)) {
-            state = State.WALKING_TO;
+            setState(State.WALKING_TO);
         }
     }
 
@@ -730,7 +795,7 @@ public class NetoRCScript extends Script {
             if (ruins != null && plugin.getMyWorldPoint().getRegionID() == 14232
                     && !Rs2Player.isMoving() && !Rs2Player.isAnimating() &&
                     Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 18) {
-                state = State.CRAFTING;
+                setState(State.CRAFTING);
             }
         }
     }
@@ -756,7 +821,7 @@ public class NetoRCScript extends Script {
                     sleepGaussian(500, 200);
                 }
             }
-            state = State.BANKING;
+            setState(State.BANKING);
         }
 
         if (config.runeType() == RuneType.WRATH) {
@@ -773,7 +838,7 @@ public class NetoRCScript extends Script {
 			}
 		}
 
-        state = State.BANKING;
+        setState(State.BANKING);
     }
 
     private void handleEmptyPouch() {
@@ -827,7 +892,7 @@ public class NetoRCScript extends Script {
                 : Arrays.asList(
                 Teleports.CRAFTING_CAPE,
                 Teleports.FARMING_CAPE,
-                Teleports.FEROX_ENCLAVE
+                Teleports.CASTLE_WARS
         );
         boolean teleportUsed = false;
 

@@ -17,6 +17,8 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -62,7 +64,7 @@ public class NetoRCPlugin extends Plugin {
     @Getter
     private WorldPoint myWorldPoint;
     @Getter
-    public static final String version = "1.4.0";
+    public static final String version = "1.4.3";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {
@@ -103,11 +105,18 @@ public class NetoRCPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
+        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)) {
+            Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
+            Microbot.stopPlugin(this);
+            return;
+        }
+
         startTime = Instant.now();
         if (overlayManager != null) {
             overlayManager.add(netoRCOverlay);
         }
         startXp = client.getSkillExperience(Skill.RUNECRAFT);
+        netoRCScript.resetToBanking();
         netoRCScript.run();
     }
 
