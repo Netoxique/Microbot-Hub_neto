@@ -9,6 +9,7 @@ import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.GameObjectSpawned;
 import net.runelite.api.events.GameTick;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.client.plugins.Plugin;
@@ -16,7 +17,9 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
 import net.runelite.client.ui.overlay.OverlayManager;
@@ -64,7 +67,7 @@ public class NetoRCPlugin extends Plugin {
     @Getter
     private WorldPoint myWorldPoint;
     @Getter
-    public static final String version = "1.4.3";
+    public static final String version = "1.4.5";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {
@@ -105,7 +108,7 @@ public class NetoRCPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
-        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)) {
+        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR) && !hasRunecraftCape()) {
             Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
             Microbot.stopPlugin(this);
             return;
@@ -133,5 +136,10 @@ public class NetoRCPlugin extends Plugin {
 
     public boolean isBreakHandlerEnabled() {
         return Microbot.isPluginEnabled(BreakHandlerPlugin.class);
+    }
+
+    private boolean hasRunecraftCape() {
+        return Rs2Equipment.isWearing(ItemID.SKILLCAPE_RUNECRAFTING, ItemID.SKILLCAPE_RUNECRAFTING_TRIMMED)
+                || Rs2Inventory.hasItem(ItemID.SKILLCAPE_RUNECRAFTING, ItemID.SKILLCAPE_RUNECRAFTING_TRIMMED);
     }
 }

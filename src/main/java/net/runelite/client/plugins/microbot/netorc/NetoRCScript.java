@@ -356,6 +356,15 @@ public class NetoRCScript extends Script {
             }
         }
 
+        for (int sailorsAmuletId : Teleports.SAILORS_AMULET.getItemIds()) {
+            if (!Rs2Equipment.isWearing(sailorsAmuletId) && Rs2Bank.hasItem(sailorsAmuletId)) {
+                Microbot.log("Withdrawing bank teleport " + Teleports.SAILORS_AMULET.getName());
+                Rs2Bank.withdrawAndEquip(sailorsAmuletId);
+                sleepUntil(() -> Rs2Equipment.isWearing(sailorsAmuletId));
+                break;
+            }
+        }
+
         if (!Rs2Equipment.isWearing("Ring of dueling") && Rs2Bank.hasItem("Ring of dueling")) {
             Microbot.log("Withdrawing ring of dueling");
             Rs2Bank.withdrawAndEquip(2552);
@@ -592,6 +601,7 @@ public class NetoRCScript extends Script {
         return Teleports.CRAFTING_CAPE.matchesRegion(currentRegion)
                 || Teleports.FEROX_ENCLAVE.matchesRegion(currentRegion)
                 || Teleports.FARMING_CAPE.matchesRegion(currentRegion)
+                || Teleports.SAILORS_AMULET.matchesRegion(currentRegion)
                 || Teleports.CASTLE_WARS.matchesRegion(currentRegion);
     }
 
@@ -892,6 +902,7 @@ public class NetoRCScript extends Script {
                 : Arrays.asList(
                 Teleports.CRAFTING_CAPE,
                 Teleports.FARMING_CAPE,
+                Teleports.SAILORS_AMULET,
                 Teleports.CASTLE_WARS
         );
         boolean teleportUsed = false;
