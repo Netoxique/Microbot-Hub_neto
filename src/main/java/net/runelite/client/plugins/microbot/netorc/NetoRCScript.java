@@ -13,6 +13,7 @@ import net.runelite.client.plugins.microbot.netorc.enums.State;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.netorc.enums.Teleports;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
@@ -36,6 +37,14 @@ public class NetoRCScript extends Script {
     private final NetoRCPlugin plugin;
     public static State state = State.BANKING;
 
+    private enum WrathStep {
+        MYTH_CAPE,
+        MYTH_STATUE,
+        CAVE,
+        RUINS,
+        ALTAR
+    }
+
     private int lumbyElite = -1;
 
     private final WorldPoint feroxPoolWp = new WorldPoint(3129, 3636, 0);
@@ -51,6 +60,7 @@ public class NetoRCScript extends Script {
 	private volatile boolean forceDrinkAtFerox = false;
     private volatile boolean forceBankOnStart = true;
     private volatile int activeRunId = 0;
+    private WrathStep wrathStep = WrathStep.MYTH_CAPE;
     private final ThreadLocal<Integer> scheduledRunId = new ThreadLocal<>();
 
     public static final int pureEss = 7936;
@@ -99,6 +109,7 @@ public class NetoRCScript extends Script {
         Microbot.enableAutoRunOn = false;
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyRunecraftingSetup();
+        Rs2AntibanSettings.actionCooldownChance = 0;
         Rs2Antiban.setActivity(Activity.CRAFTING_BLOODS_TRUE_ALTAR);
         Rs2Camera.setZoom(100);
         Rs2Camera.setPitch(305);
@@ -180,6 +191,7 @@ public class NetoRCScript extends Script {
         lumbyElite = -1;
         forceDrinkAtFerox = false;
         forceBankOnStart = true;
+        wrathStep = WrathStep.MYTH_CAPE;
     }
 
     private synchronized int startNewRun() {
@@ -547,53 +559,52 @@ public class NetoRCScript extends Script {
 
 		if (Rs2Bank.isOpen()) { Rs2Bank.closeBank(); }
 
-        if (Rs2Inventory.contains(mythCape)) {
-
-            Rs2Inventory.interact(mythCape, "Teleport");
-            sleep(600);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-
-            sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
-            GameObject statue = Rs2GameObject.getGameObject(31626);
-			if (statue != null && !Rs2Player.isAnimating()) {
-                sleepGaussian(600, 200);
-				Rs2GameObject.interact(statue, "Teleport");
-			}
-            else {
+        switch (wrathStep) {
+            case MYTH_CAPE:
+                if (Rs2Inventory.contains(mythCape)) {
+                    Rs2Inventory.interact(mythCape, "Teleport");
+                    sleep(600);
+                    sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
+                    wrathStep = WrathStep.MYTH_STATUE;
+                }
                 return;
-            }
-
-            sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
-            GameObject cave = Rs2GameObject.getGameObject(31807);
-            if (cave != null && !Rs2Player.isAnimating()) {
-                sleepGaussian(600, 200);
-                Rs2GameObject.interact(cave, "Enter");
-            }
-            else {
+            case MYTH_STATUE:
+                GameObject statue = Rs2GameObject.getGameObject(31626);
+                if (statue != null && !Rs2Player.isAnimating()) {
+                    sleepGaussian(600, 200);
+                    Rs2GameObject.interact(statue, "Teleport");
+                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
+                    wrathStep = WrathStep.CAVE;
+                }
                 return;
-            }
-
-            sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
-            GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
-            if (ruins != null && !Rs2Player.isAnimating()) {
-                sleepGaussian(600, 200);
-                Rs2GameObject.interact(ruins, "Enter");
-            }
-            else {
+            case CAVE:
+                GameObject cave = Rs2GameObject.getGameObject(31807);
+                if (cave != null && !Rs2Player.isAnimating()) {
+                    sleepGaussian(600, 200);
+                    Rs2GameObject.interact(cave, "Enter");
+                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
+                    wrathStep = WrathStep.RUINS;
+                }
                 return;
-            }
-
-            sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
-            GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
-            if (altar != null && !Rs2Player.isAnimating()) {
-                sleepGaussian(600, 200);
-                Rs2GameObject.interact(altar, "Craft-rune");
-            }
-            else {
+            case RUINS:
+                GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
+                if (ruins != null && !Rs2Player.isAnimating()) {
+                    sleepGaussian(600, 200);
+                    Rs2GameObject.interact(ruins, "Enter");
+                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
+                    wrathStep = WrathStep.ALTAR;
+                }
                 return;
-            }
-
-            setState(State.CRAFTING);
+            case ALTAR:
+                GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
+                if (altar != null && !Rs2Player.isAnimating()) {
+                    sleepGaussian(200, 100);
+                    Rs2GameObject.interact(altar, "Craft-rune");
+                    wrathStep = WrathStep.MYTH_CAPE;
+                    setState(State.CRAFTING);
+                }
+                return;
         }
     }
 
