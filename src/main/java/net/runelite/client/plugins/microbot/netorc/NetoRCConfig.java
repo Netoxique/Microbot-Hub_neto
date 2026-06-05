@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.client.config.*;
 import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
+import net.runelite.client.plugins.microbot.netorc.enums.WorldJumpRegion;
 
 
 @ConfigGroup("Frosty")
@@ -26,6 +27,13 @@ public interface NetoRCConfig extends Config {
     )
     String settingsSection = "Settings";
 
+    @ConfigSection(
+            name = "World Jumping",
+            description = "World jumping settings",
+            position = 3
+    )
+    String worldJumpingSection = "World Jumping";
+
     @ConfigItem(
             keyName = "Use POH",
             name = "Use POH",
@@ -46,5 +54,50 @@ public interface NetoRCConfig extends Config {
     )
     default RuneType runeType() {return RuneType.BLOOD;}
 
+    @ConfigItem(
+            keyName = "enableWorldJumping",
+            name = "Enable World Jumping",
+            description = "Hop to another members world after a random number of completed trips.",
+            position = 1,
+            section = worldJumpingSection
+    )
+    default boolean enableWorldJumping() {
+        return false;
+    }
+
+    @Range(min = 1)
+    @ConfigItem(
+            keyName = "minTrips",
+            name = "Min. Trips",
+            description = "Minimum completed trips before world jumping.",
+            position = 2,
+            section = worldJumpingSection
+    )
+    default int minTrips() {
+        return 15;
+    }
+
+    @Range(min = 1)
+    @ConfigItem(
+            keyName = "maxTrips",
+            name = "Max. Trips",
+            description = "Maximum completed trips before world jumping.",
+            position = 3,
+            section = worldJumpingSection
+    )
+    default int maxTrips() {
+        return 20;
+    }
+
+    @ConfigItem(
+            keyName = "worldJumpRegion",
+            name = "Region",
+            description = "World region to jump to.",
+            position = 4,
+            section = worldJumpingSection
+    )
+    default WorldJumpRegion worldJumpRegion() {
+        return WorldJumpRegion.ALL;
+    }
 
 }
