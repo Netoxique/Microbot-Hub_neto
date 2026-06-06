@@ -164,7 +164,7 @@ public class NetoArceuusRcScript extends Script {
                 myLocation.getX(), myLocation.getY(), myLocation.getPlane(),
                 dst.getX(), dst.getY(), dst.getPlane()
         );
-        Rs2Walker.walkTo(dst, REACHED_DISTANCE);
+        Rs2Walker.walkTo(dst);
         BreakHandlerScript.setLockState(false);
     }
 

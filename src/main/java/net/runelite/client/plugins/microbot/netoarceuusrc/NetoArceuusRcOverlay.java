@@ -47,12 +47,6 @@ public class NetoArceuusRcOverlay extends OverlayPanel {
                         .left("State: " + plugin.getNetoArceuusRcScript().getState()).build()
                 );
             }
-
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Break In:").right(breakManager.getBreakInDisplay()).build());
-
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Total Breaks:").right(String.valueOf(breakManager.getTotalBreaks())).build());
         } catch (Exception ex) {
             Microbot.logStackTrace(this.getClass().getSimpleName(), ex);
         }

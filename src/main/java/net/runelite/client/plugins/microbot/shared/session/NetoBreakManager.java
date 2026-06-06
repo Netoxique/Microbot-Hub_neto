@@ -3,9 +3,11 @@ package net.runelite.client.plugins.microbot.shared.session;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.security.Login;
+import net.runelite.client.ui.ClientUI;
 
 import javax.inject.Inject;
 import javax.inject.Singleton;
+import javax.swing.*;
 import java.util.Random;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
@@ -28,6 +30,7 @@ public class NetoBreakManager {
     private boolean breakActive = false;
     private int breakWorld = -1;
     private int totalBreaks = 0;
+    private String originalTitle = "";
 
     @Inject
     public NetoBreakManager() {
@@ -36,6 +39,9 @@ public class NetoBreakManager {
     public synchronized void configure(BreakSettings settings, String logPrefix) {
         this.settings = settings;
         this.logPrefix = logPrefix == null || logPrefix.trim().isEmpty() ? "Neto" : logPrefix.trim();
+        if (this.originalTitle == null || this.originalTitle.isEmpty()) {
+            this.originalTitle = ClientUI.getFrame().getTitle();
+        }
     }
 
     public synchronized void reset() {
@@ -46,18 +52,33 @@ public class NetoBreakManager {
         breakActive = false;
         breakWorld = -1;
         totalBreaks = 0;
+        restoreTitle();
     }
 
-    public synchronized boolean updateBreakState() {
+    public boolean updateBreakState() {
         long now = System.currentTimeMillis();
+        boolean isActive;
+        long endsAt;
+        long nextLogout;
+        long nextLogin;
+        int world;
 
-        if (!breakActive) {
-            ensurePlayTimer();
-            return false;
+        synchronized (this) {
+            if (!breakActive) {
+                ensurePlayTimer();
+                return false;
+            }
+            isActive = breakActive;
+            endsAt = breakEndsAtMillis;
+            nextLogout = nextLogoutAttemptAtMillis;
+            nextLogin = nextLoginAttemptAtMillis;
+            world = breakWorld;
         }
 
-        if (now < breakEndsAtMillis) {
-            if (Microbot.isLoggedIn() && now >= nextLogoutAttemptAtMillis) {
+        updateTitle();
+
+        if (now < endsAt) {
+            if (Microbot.isLoggedIn() && now >= nextLogout) {
                 requestLogout();
             }
             return true;
@@ -69,10 +90,12 @@ public class NetoBreakManager {
             return false;
         }
 
-        if (now >= nextLoginAttemptAtMillis) {
-            nextLoginAttemptAtMillis = now + LOGIN_RETRY_DELAY_MS;
-            log("break complete, logging back into world " + breakWorld + ".");
-            new Login(breakWorld);
+        if (now >= nextLogin) {
+            synchronized (this) {
+                nextLoginAttemptAtMillis = now + LOGIN_RETRY_DELAY_MS;
+            }
+            log("break complete, logging back into world " + world + ".");
+            new Login(world);
             if (sleepUntil(Microbot::isLoggedIn, LOGIN_TIMEOUT_MS)) {
                 finishBreak();
             }
@@ -81,23 +104,29 @@ public class NetoBreakManager {
         return true;
     }
 
-    public synchronized boolean tryStartBreakAtSafePoint() {
-        ensurePlayTimer();
+    public boolean tryStartBreakAtSafePoint() {
+        int durationMinutes;
+        int world;
         long now = System.currentTimeMillis();
 
-        if (!isEnabled() || breakActive || nextBreakAtMillis <= 0 || now < nextBreakAtMillis) {
-            return false;
+        synchronized (this) {
+            ensurePlayTimer();
+            if (!isEnabled() || breakActive || nextBreakAtMillis <= 0 || now < nextBreakAtMillis) {
+                return false;
+            }
+
+            durationMinutes = randomBetween(settings.minBreak(), settings.maxBreak());
+            world = Rs2Player.getWorld();
+            breakWorld = world;
+            breakEndsAtMillis = now + (long) durationMinutes * MINUTE_MILLIS;
+            nextLogoutAttemptAtMillis = 0;
+            nextLoginAttemptAtMillis = 0;
+            breakActive = true;
+            totalBreaks++;
         }
 
-        int durationMinutes = randomBetween(settings.minBreak(), settings.maxBreak());
-        breakWorld = Rs2Player.getWorld();
-        breakEndsAtMillis = now + durationMinutes * MINUTE_MILLIS;
-        nextLogoutAttemptAtMillis = 0;
-        nextLoginAttemptAtMillis = 0;
-        breakActive = true;
-        totalBreaks++;
-
-        log("starting logout break for " + durationMinutes + " minutes on world " + breakWorld + ".");
+        log("starting logout break for " + durationMinutes + " minutes on world " + world + ".");
+        updateTitle();
         requestLogout();
         return true;
     }
@@ -136,16 +165,21 @@ public class NetoBreakManager {
 
     private void finishBreak() {
         log("break finished. Scheduling next playtime.");
-        breakActive = false;
-        breakEndsAtMillis = 0;
-        breakWorld = -1;
-        nextLogoutAttemptAtMillis = 0;
-        nextLoginAttemptAtMillis = 0;
-        scheduleNextPlayTimer();
+        synchronized (this) {
+            breakActive = false;
+            breakEndsAtMillis = 0;
+            breakWorld = -1;
+            nextLogoutAttemptAtMillis = 0;
+            nextLoginAttemptAtMillis = 0;
+            scheduleNextPlayTimer();
+        }
+        restoreTitle();
     }
 
     private void requestLogout() {
-        nextLogoutAttemptAtMillis = System.currentTimeMillis() + LOGOUT_RETRY_DELAY_MS;
+        synchronized (this) {
+            nextLogoutAttemptAtMillis = System.currentTimeMillis() + LOGOUT_RETRY_DELAY_MS;
+        }
 
         try {
             Rs2Player.logout();
@@ -203,5 +237,30 @@ public class NetoBreakManager {
 
     private void log(String message) {
         Microbot.log(logPrefix + " " + message);
+    }
+
+    private void updateTitle() {
+        String remaining;
+        synchronized (this) {
+            if (!breakActive) return;
+            remaining = formatRemaining(breakEndsAtMillis - System.currentTimeMillis());
+        }
+        String title = String.format("[BREAK: %s] %s", remaining, originalTitle);
+        SwingUtilities.invokeLater(() -> {
+            try {
+                ClientUI.getFrame().setTitle(title);
+            } catch (Exception ignored) {
+            }
+        });
+    }
+
+    private void restoreTitle() {
+        if (originalTitle == null || originalTitle.isEmpty()) return;
+        SwingUtilities.invokeLater(() -> {
+            try {
+                ClientUI.getFrame().setTitle(originalTitle);
+            } catch (Exception ignored) {
+            }
+        });
     }
 }

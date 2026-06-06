@@ -53,12 +53,6 @@ public class NetoRCOverlay extends OverlayPanel {
                             Instant.now())).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Break In:").right(breakManager.getBreakInDisplay()).build());
-
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Total Breaks:").right(String.valueOf(breakManager.getTotalBreaks())).build());
-
-            panelComponent.getChildren().add(LineComponent.builder()
                     .left("Status:").right(Microbot.status).build());
         } catch (
                 Exception ex) {
