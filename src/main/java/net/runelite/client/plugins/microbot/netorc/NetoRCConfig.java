@@ -34,6 +34,13 @@ public interface NetoRCConfig extends Config {
     )
     String worldJumpingSection = "World Jumping";
 
+    @ConfigSection(
+            name = "Breaks",
+            description = "Break settings",
+            position = 4
+    )
+    String breaksSection = "Breaks";
+
     @ConfigItem(
             keyName = "Use POH",
             name = "Use POH",
@@ -100,4 +107,62 @@ public interface NetoRCConfig extends Config {
         return WorldJumpRegion.ALL;
     }
 
+    @ConfigItem(
+            keyName = "enableBreaks",
+            name = "Enable",
+            description = "Enable logout breaks.",
+            position = 1,
+            section = breaksSection
+    )
+    default boolean enableBreaks() {
+        return false;
+    }
+
+    @Range(min = 1)
+    @ConfigItem(
+            keyName = "minPlaytime",
+            name = "Min. Playtime",
+            description = "Minimum playtime before a break, in minutes.",
+            position = 2,
+            section = breaksSection
+    )
+    default int minPlaytime() {
+        return 60;
+    }
+
+    @Range(min = 1)
+    @ConfigItem(
+            keyName = "maxPlaytime",
+            name = "Max. Playtime",
+            description = "Maximum playtime before a break, in minutes.",
+            position = 3,
+            section = breaksSection
+    )
+    default int maxPlaytime() {
+        return 90;
+    }
+
+    @Range(min = 1)
+    @ConfigItem(
+            keyName = "minBreak",
+            name = "Min. Break",
+            description = "Minimum break duration, in minutes.",
+            position = 4,
+            section = breaksSection
+    )
+    default int minBreak() {
+        return 10;
+    }
+
+    @Range(min = 1)
+    @ConfigItem(
+            keyName = "maxBreak",
+            name = "Max. Break",
+            description = "Maximum break duration, in minutes.",
+            position = 5,
+            section = breaksSection
+    )
+    default int maxBreak() {
+        return 15;
+    }
 }

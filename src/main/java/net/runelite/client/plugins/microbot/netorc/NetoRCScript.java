@@ -106,6 +106,8 @@ public class NetoRCScript extends Script {
     private Client client;
     @Inject
     private ClientThread clientThread;
+    @Inject
+    private NetoRCBreakManager breakManager;
 
     public boolean run() {
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
@@ -127,10 +129,10 @@ public class NetoRCScript extends Script {
             scheduledRunId.set(runId);
             try {
                 if (!isCurrentRun(runId)) return;
+                if (breakManager.updateBreakState()) return;
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
                 if (!isCurrentRun(runId)) return;
-                if (shouldPauseForBreak()) return;
                 long startTime = System.currentTimeMillis();
 
                 if (lumbyElite == -1) {
@@ -201,6 +203,7 @@ public class NetoRCScript extends Script {
         wrathStep = WrathStep.MYTH_CAPE;
         currentTrips = 0;
         jumpAt = calculateJumpAt();
+        breakManager.reset();
     }
 
     private synchronized int startNewRun() {
@@ -225,23 +228,6 @@ public class NetoRCScript extends Script {
         }
 
         state = nextState;
-    }
-
-    private boolean shouldPauseForBreak() {
-        if (!plugin.isBreakHandlerEnabled()) {
-            return false;
-        }
-
-        if (BreakHandlerScript.isBreakActive()) {
-            return true;
-        }
-
-        if (BreakHandlerScript.breakIn <= 0) {
-            BreakHandlerScript.setLockState(false);
-            return true;
-        }
-
-        return false;
     }
 
     private void checkPouches() {
@@ -677,7 +663,8 @@ public class NetoRCScript extends Script {
                 return;
             case CAVE:
                 GameObject cave = Rs2GameObject.getGameObject(31807);
-                if (cave != null && !Rs2Player.isAnimating()) {
+//                if (cave != null && !Rs2Player.isAnimating()) {
+                if (cave != null) {
                     sleepGaussian(150, 25);
                     Rs2GameObject.interact(cave, "Enter");
                     sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
@@ -686,7 +673,8 @@ public class NetoRCScript extends Script {
                 return;
             case RUINS:
                 GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
-                if (ruins != null && !Rs2Player.isAnimating()) {
+//                if (ruins != null && !Rs2Player.isAnimating()) {
+                if (ruins != null) {
                     sleepGaussian(300, 80);
                     Rs2GameObject.interact(ruins, "Enter");
                     sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
@@ -695,7 +683,7 @@ public class NetoRCScript extends Script {
                 return;
             case ALTAR:
                 GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
-                if (altar != null && !Rs2Player.isAnimating()) {
+                if (altar != null) {
 //                    sleepGaussian(150, 25);
                     Rs2GameObject.interact(altar, "Craft-rune");
                     wrathStep = WrathStep.MYTH_CAPE;
@@ -949,16 +937,42 @@ public class NetoRCScript extends Script {
 
         incrementTripCount();
 
-		handleFeroxRunEnergy();
-
-		if (plugin.isBreakHandlerEnabled()) {
-			BreakHandlerScript.setLockState(false);
-			if (BreakHandlerScript.isBreakActive() || BreakHandlerScript.breakIn <= 0) {
-				return;
-			}
-		}
+        if (pauseForBreakAfterCrafting()) {
+            setState(State.BANKING);
+            return;
+        }
 
         setState(State.BANKING);
+    }
+
+    private boolean pauseForBreakAfterCrafting() {
+        if (!isBankingRegion(plugin.getMyWorldPoint().getRegionID())) {
+            handleBankTeleport();
+            sleepUntil(() -> isBankingRegion(plugin.getMyWorldPoint().getRegionID()), 5000);
+        }
+
+        if (!isBankingRegion(plugin.getMyWorldPoint().getRegionID())) {
+            if (plugin.isBreakHandlerEnabled()) {
+                BreakHandlerScript.setLockState(true);
+            }
+            return false;
+        }
+
+        if (breakManager.tryStartBreakAtBank()) {
+            return true;
+        }
+
+        if (!plugin.isBreakHandlerEnabled()) {
+            return false;
+        }
+
+        BreakHandlerScript.setLockState(false);
+        if (BreakHandlerScript.isBreakActive() || BreakHandlerScript.breakIn <= 0) {
+            return true;
+        }
+
+        BreakHandlerScript.setLockState(true);
+        return false;
     }
 
     private void handleEmptyPouch() {

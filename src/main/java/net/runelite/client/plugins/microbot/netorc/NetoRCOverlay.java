@@ -28,13 +28,15 @@ public class NetoRCOverlay extends OverlayPanel {
     }
     @Inject
     private ItemManager itemManager;
+    @Inject
+    private NetoRCBreakManager breakManager;
 
     @Override
     public Dimension render(Graphics2D graphics) {
         try {
             panelComponent.getChildren().clear();
 
-            panelComponent.setPreferredSize(new Dimension(200, 275));
+            panelComponent.setPreferredSize(new Dimension(200, 315));
 
             //BufferedImage bloodRuneImage = itemManager.getImage(ItemID.BLOODRUNE);
             //panelComponent.getChildren().add(new ImageComponent(bloodRuneImage));
@@ -48,6 +50,12 @@ public class NetoRCOverlay extends OverlayPanel {
             panelComponent.getChildren().add(LineComponent.builder().left("Time ran:")
                     .right(TimeUtils.getFormattedDurationBetween(plugin.getStartTime(),
                             Instant.now())).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Break In:").right(breakManager.getBreakInDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Total Breaks:").right(String.valueOf(breakManager.getTotalBreaks())).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Status:").right(Microbot.status).build());

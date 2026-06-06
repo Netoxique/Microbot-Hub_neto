@@ -67,7 +67,7 @@ public class NetoRCPlugin extends Plugin {
     @Getter
     private WorldPoint myWorldPoint;
     @Getter
-    public static final String version = "1.4.9";
+    public static final String version = "1.4.12";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {
@@ -79,8 +79,8 @@ public class NetoRCPlugin extends Plugin {
             if (portalComposition.getImpostorIds() != null) {
                 portalComposition = portalComposition.getImpostor();
             }
-            String name = portalComposition.getName().toLowerCase();
-            if (name.contains("portal") && Rs2GameObject.isReachable(pohPortal)) {
+            String name = getObjectName(portalComposition);
+            if (name.contains("portal") && isReachable(pohPortal)) {
                 this.pohPortal = pohPortal;
             }
         }
@@ -92,10 +92,22 @@ public class NetoRCPlugin extends Plugin {
             if(poolComposition.getImpostorIds() != null) {
                 poolComposition = poolComposition.getImpostor();
             }
-            String name = poolComposition.getName().toLowerCase();
-            if (name.contains("pool") && Rs2GameObject.isReachable(pool)) {
+            String name = getObjectName(poolComposition);
+            if (name.contains("pool") && isReachable(pool)) {
                 this.pool = pool;
             }
+        }
+    }
+
+    private String getObjectName(ObjectComposition objectComposition) {
+        return objectComposition.getName() == null ? "" : objectComposition.getName().toLowerCase();
+    }
+
+    private boolean isReachable(GameObject gameObject) {
+        try {
+            return Rs2GameObject.isReachable(gameObject);
+        } catch (Exception ex) {
+            return false;
         }
     }
 
