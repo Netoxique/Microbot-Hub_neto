@@ -3,6 +3,8 @@ package net.runelite.client.plugins.microbot.netoarceuusrc;
 
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
+import net.runelite.client.plugins.microbot.util.misc.TimeUtils;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
@@ -10,12 +12,15 @@ import net.runelite.client.ui.overlay.components.TitleComponent;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.time.Instant;
 
 public class NetoArceuusRcOverlay extends OverlayPanel {
 
     private final NetoArceuusRcPlugin plugin;
     @Inject
     private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
 
     @Inject
     NetoArceuusRcOverlay(NetoArceuusRcPlugin plugin) {
@@ -47,6 +52,16 @@ public class NetoArceuusRcOverlay extends OverlayPanel {
                         .left("State: " + plugin.getNetoArceuusRcScript().getState()).build()
                 );
             }
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Trips:").right(worldHopManager.getTripsDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Break In:").right(breakManager.getBreakInDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Time Running:").right(TimeUtils.getFormattedDurationBetween(plugin.getStartTime(), Instant.now())).build());
+
         } catch (Exception ex) {
             Microbot.logStackTrace(this.getClass().getSimpleName(), ex);
         }

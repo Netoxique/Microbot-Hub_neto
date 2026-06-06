@@ -11,6 +11,7 @@ import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
+import java.time.Instant;
 
 @PluginDescriptor(
         name = "Neto Arceuus RC",
@@ -42,11 +43,14 @@ public class NetoArceuusRcPlugin extends Plugin {
     @Inject
     private NetoArceuusRcOverlay netoArceuusRcOverlay;
     @Getter
+    private Instant startTime;
+    @Getter
     @Inject
     NetoArceuusRcScript netoArceuusRcScript;
 
     @Override
     protected void startUp() {
+        startTime = Instant.now();
         if (overlayManager != null) {
             overlayManager.add(netoArceuusRcOverlay);
         }
@@ -54,6 +58,7 @@ public class NetoArceuusRcPlugin extends Plugin {
     }
 
     protected void shutDown() {
+        startTime = null;
         netoArceuusRcScript.shutdown();
         overlayManager.remove(netoArceuusRcOverlay);
     }

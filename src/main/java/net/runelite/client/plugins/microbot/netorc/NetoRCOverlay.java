@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.netorc;
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.misc.TimeUtils;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -31,6 +32,8 @@ public class NetoRCOverlay extends OverlayPanel {
     private ItemManager itemManager;
     @Inject
     private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
 
     @Override
     public Dimension render(Graphics2D graphics) {
@@ -39,18 +42,20 @@ public class NetoRCOverlay extends OverlayPanel {
 
             panelComponent.setPreferredSize(new Dimension(200, 315));
 
-            //BufferedImage bloodRuneImage = itemManager.getImage(ItemID.BLOODRUNE);
-            //panelComponent.getChildren().add(new ImageComponent(bloodRuneImage));
-
             panelComponent.getChildren().add(TitleComponent.builder()
                     .text("NetoRC " + NetoRCPlugin.getVersion()).color((Color.cyan)).build());
 
             panelComponent.getChildren().add(LineComponent.builder().left("Xp gained:")
                     .right(String.valueOf(plugin.getTotalXpGained())).build());
 
-            panelComponent.getChildren().add(LineComponent.builder().left("Time ran:")
-                    .right(TimeUtils.getFormattedDurationBetween(plugin.getStartTime(),
-                            Instant.now())).build());
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Trips:").right(worldHopManager.getTripsDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Break In:").right(breakManager.getBreakInDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Time Running:").right(TimeUtils.getFormattedDurationBetween(plugin.getStartTime(), Instant.now())).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Status:").right(Microbot.status).build());
@@ -61,5 +66,3 @@ public class NetoRCOverlay extends OverlayPanel {
         return super.render(graphics);
     }
 }
-
-

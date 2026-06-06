@@ -50,6 +50,13 @@ public class NetoWorldHopManager {
         return isEnabled() && hopAtTrips > 0 && completedTrips >= hopAtTrips;
     }
 
+    public synchronized String getTripsDisplay() {
+        if (!isEnabled()) {
+            return "Disabled";
+        }
+        return completedTrips + "/" + hopAtTrips;
+    }
+
     public WorldHopResult tryHopIfDue(BooleanSupplier keepRunning) {
         WorldHopSettings activeSettings;
         int tripsBeforeHop;
