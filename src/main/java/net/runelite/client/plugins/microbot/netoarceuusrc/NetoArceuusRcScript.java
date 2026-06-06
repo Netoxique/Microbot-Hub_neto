@@ -12,6 +12,7 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.netoarceuusrc.enums.Altar;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -43,10 +44,12 @@ public class NetoArceuusRcScript extends Script {
 
     private static final WorldPoint ARCEUUS_BLOOD_ALTAR = new WorldPoint(1720, 3828, 0);
     private static final WorldPoint ARCEUUS_SOUL_ALTAR = new WorldPoint(1815, 3856, 0);
-    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1718, 3880, 0);
-    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1760, 3853, 0);
+    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1718, 3882, 0);
+//    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1760, 3853, 0);
+    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1762, 3855, 0);
 
-    private static final int REACHED_DISTANCE = 5;
+//    private static final int REACHED_DISTANCE = 5;
+    private static final int REACHED_DISTANCE = 8;
     private static final int ESSENCE_SLOT = 26;
     private static final int CHISEL_SLOT = 27;
     private static final int CHIP_CLICK_DELAY_MIN = 100;
@@ -59,13 +62,17 @@ public class NetoArceuusRcScript extends Script {
     private NetoBreakManager breakManager;
     @Inject
     private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
 
     public boolean run(NetoArceuusRcConfig config) {
         NetoArceuusRcScript.config = config;
         breakManager.configure(config, "Neto Arceuus RC");
         worldHopManager.configure(config, "Neto Arceuus RC");
+        runtimeDisable.configure(config, "Neto Arceuus RC");
         breakManager.reset();
         worldHopManager.reset();
+        runtimeDisable.reset();
         Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
         hasChippedEssence = false;
         if(Microbot.isLoggedIn()) {
@@ -164,21 +171,22 @@ public class NetoArceuusRcScript extends Script {
                 myLocation.getX(), myLocation.getY(), myLocation.getPlane(),
                 dst.getX(), dst.getY(), dst.getPlane()
         );
-        Rs2Walker.walkTo(dst);
+        Rs2Walker.walkTo(dst, REACHED_DISTANCE);
         BreakHandlerScript.setLockState(false);
     }
 
     private void executeTask() {
         try {
+            if (!Microbot.isLoggedIn()) {
+                state = "Disabled";
+                return;
+            }
+            if (runtimeDisable.updateRuntime(NetoArceuusRcPlugin.class)) return;
             if (!super.run()) {
                 state = "Disabled";
                 return;
             }
             if (breakManager.updateBreakState()) return;
-            if (!Microbot.isLoggedIn()) {
-                state = "Disabled";
-                return;
-            }
 
             State state = getCurrentState();
             log.debug("Current State={}", state);

@@ -4,6 +4,7 @@ import net.runelite.client.config.*;
 import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
 import net.runelite.client.plugins.microbot.shared.session.BreakSettings;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopRegion;
+import net.runelite.client.plugins.microbot.shared.session.RuntimeSettings;
 import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
 
 
@@ -21,7 +22,7 @@ import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
         "• Start at Crafting guild or Ferox Enclave lobby <br />"
 
 )
-public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings {
+public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, RuntimeSettings {
     @ConfigSection(
             name = "Settings",
             description = "Settings",
@@ -42,6 +43,13 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings {
             position = 4
     )
     String breaksSection = "Breaks";
+
+    @ConfigSection(
+            name = "Runtime",
+            description = "Runtime disable settings",
+            position = 5
+    )
+    String runtimeSection = "Runtime";
 
     @ConfigItem(
             keyName = "Use POH",
@@ -166,5 +174,16 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings {
     )
     default int maxBreak() {
         return 15;
+    }
+
+    @ConfigItem(
+            keyName = "showUpdateMessage",
+            name = "Show Update Message",
+            description = "Shows the update message in the chat console",
+            position = 1,
+            section = settingsSection
+    )
+    default boolean showUpdateMessage() {
+        return true;
     }
 }

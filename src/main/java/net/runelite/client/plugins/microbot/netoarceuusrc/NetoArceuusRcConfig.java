@@ -4,6 +4,7 @@ import net.runelite.client.config.*;
 import net.runelite.client.plugins.microbot.netoarceuusrc.enums.Altar;
 import net.runelite.client.plugins.microbot.shared.session.BreakSettings;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopRegion;
+import net.runelite.client.plugins.microbot.shared.session.RuntimeSettings;
 import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
 
 @ConfigGroup("netoArceuusRc")
@@ -12,7 +13,7 @@ import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
         + "<p>Start the plugin near the <strong>Dense runestone pillars</strong>.</p><br />"
         + "<p>You only need a <strong>pickaxe</strong> and a <strong>chisel</strong> in your inventory.</p> <br />"
         + "</div>")
-public interface NetoArceuusRcConfig extends Config, BreakSettings, WorldHopSettings {
+public interface NetoArceuusRcConfig extends Config, BreakSettings, WorldHopSettings, RuntimeSettings {
     @ConfigSection(
             name = "Settings",
             description = "Settings",
@@ -33,6 +34,13 @@ public interface NetoArceuusRcConfig extends Config, BreakSettings, WorldHopSett
             position = 3
     )
     String breaksSection = "Breaks";
+
+    @ConfigSection(
+            name = "Runtime",
+            description = "Runtime disable settings",
+            position = 4
+    )
+    String runtimeSection = "Runtime";
 
     @ConfigItem(
             keyName = "altar",

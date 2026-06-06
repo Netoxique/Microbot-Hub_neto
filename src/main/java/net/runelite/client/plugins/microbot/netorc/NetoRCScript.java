@@ -13,6 +13,7 @@ import net.runelite.client.plugins.microbot.netorc.enums.State;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.netorc.enums.Teleports;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
@@ -105,6 +106,8 @@ public class NetoRCScript extends Script {
     private NetoBreakManager breakManager;
     @Inject
     private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
 
     public boolean run() {
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
@@ -126,8 +129,9 @@ public class NetoRCScript extends Script {
             scheduledRunId.set(runId);
             try {
                 if (!isCurrentRun(runId)) return;
-                if (breakManager.updateBreakState()) return;
                 if (!Microbot.isLoggedIn()) return;
+                if (runtimeDisable.updateRuntime(NetoRCPlugin.class)) return;
+                if (breakManager.updateBreakState()) return;
                 if (!super.run()) return;
                 if (!isCurrentRun(runId)) return;
                 long startTime = System.currentTimeMillis();
@@ -200,8 +204,10 @@ public class NetoRCScript extends Script {
         wrathStep = WrathStep.MYTH_CAPE;
         breakManager.configure(config, "Neto RC");
         worldHopManager.configure(config, "Neto RC");
+        runtimeDisable.configure(config, "Neto RC");
         breakManager.reset();
         worldHopManager.reset();
+        runtimeDisable.reset();
     }
 
     private synchronized int startNewRun() {
@@ -592,7 +598,7 @@ public class NetoRCScript extends Script {
                     sleepGaussian(300, 80);
                     Rs2GameObject.interact(ruins, "Enter");
                     sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
-                    wrathStep = WrathStep.ALTAR;
+                    wrathStep = WrathStep.RUINS;
                 }
                 return;
             case ALTAR:
@@ -964,6 +970,3 @@ public class NetoRCScript extends Script {
         }
     }
 }
-
-
-

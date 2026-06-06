@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.netoarceuusrc;
 
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.misc.TimeUtils;
 import net.runelite.client.ui.overlay.OverlayPanel;
@@ -21,6 +22,8 @@ public class NetoArceuusRcOverlay extends OverlayPanel {
     private NetoBreakManager breakManager;
     @Inject
     private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
 
     @Inject
     NetoArceuusRcOverlay(NetoArceuusRcPlugin plugin) {
@@ -58,6 +61,9 @@ public class NetoArceuusRcOverlay extends OverlayPanel {
 
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Break In:").right(breakManager.getBreakInDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Shutdown in:").right(runtimeDisable.getShutdownInDisplay()).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Time Running:").right(TimeUtils.getFormattedDurationBetween(plugin.getStartTime(), Instant.now())).build());
