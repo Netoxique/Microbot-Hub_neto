@@ -5,7 +5,9 @@ import lombok.Getter;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -24,7 +26,7 @@ import javax.inject.Inject;
 )
 public class NetoArceuusRcPlugin extends Plugin {
 
-    public static final String version = "1.0.3";
+    public static final String version = "1.0.4";
 
     @Getter
     @Inject
@@ -54,5 +56,9 @@ public class NetoArceuusRcPlugin extends Plugin {
     protected void shutDown() {
         netoArceuusRcScript.shutdown();
         overlayManager.remove(netoArceuusRcOverlay);
+    }
+
+    public boolean isBreakHandlerEnabled() {
+        return Microbot.isPluginEnabled(BreakHandlerPlugin.class);
     }
 }

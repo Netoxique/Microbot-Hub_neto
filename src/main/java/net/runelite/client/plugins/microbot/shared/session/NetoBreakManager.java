@@ -102,6 +102,12 @@ public class NetoBreakManager {
         return true;
     }
 
+    public synchronized boolean shouldStartBreakAtSafePoint() {
+        ensurePlayTimer();
+        long now = System.currentTimeMillis();
+        return isEnabled() && !breakActive && nextBreakAtMillis > 0 && now >= nextBreakAtMillis;
+    }
+
     public synchronized String getBreakInDisplay() {
         ensurePlayTimer();
 

@@ -10,6 +10,8 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.netoarceuusrc.enums.Altar;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
@@ -17,6 +19,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import org.apache.commons.lang3.NotImplementedException;
 
+import javax.inject.Inject;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -47,9 +50,17 @@ public class NetoArceuusRcScript extends Script {
     @Getter
     private String state = "Unknown";
     private boolean hasChippedEssence = false;
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
 
     public boolean run(NetoArceuusRcConfig config) {
         NetoArceuusRcScript.config = config;
+        breakManager.configure(config, "Neto Arceuus RC");
+        worldHopManager.configure(config, "Neto Arceuus RC");
+        breakManager.reset();
+        worldHopManager.reset();
         Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
         hasChippedEssence = false;
         if(Microbot.isLoggedIn()) {
@@ -154,7 +165,12 @@ public class NetoArceuusRcScript extends Script {
 
     private void executeTask() {
         try {
-            if (!super.run() || !Microbot.isLoggedIn()) {
+            if (!super.run()) {
+                state = "Disabled";
+                return;
+            }
+            if (breakManager.updateBreakState()) return;
+            if (!Microbot.isLoggedIn()) {
                 state = "Disabled";
                 return;
             }
@@ -225,6 +241,23 @@ public class NetoArceuusRcScript extends Script {
         if (altar != null) {
             if (altar.click("Bind")) Rs2Inventory.waitForInventoryChanges(6_000);
             hasChippedEssence = Rs2Inventory.hasItem(DARK_ESSENCE_FRAGMENTS);
+            if (!hasChippedEssence) {
+                handleCompletedTrip();
+            }
+        }
+    }
+
+    private void handleCompletedTrip() {
+        worldHopManager.recordCompletedTrip();
+
+        boolean breakDue = breakManager.shouldStartBreakAtSafePoint();
+        boolean worldHopAttempted = worldHopManager.tryHopIfDue(this::isRunning).isAttempted();
+        if (worldHopAttempted && breakDue) {
+            sleep(6_000);
+        }
+
+        if (breakDue) {
+            breakManager.tryStartBreakAtSafePoint();
         }
     }
 

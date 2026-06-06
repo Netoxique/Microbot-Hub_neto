@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.netoarceuusrc;
 
 
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
@@ -13,6 +14,8 @@ import java.awt.*;
 public class NetoArceuusRcOverlay extends OverlayPanel {
 
     private final NetoArceuusRcPlugin plugin;
+    @Inject
+    private NetoBreakManager breakManager;
 
     @Inject
     NetoArceuusRcOverlay(NetoArceuusRcPlugin plugin) {
@@ -25,6 +28,7 @@ public class NetoArceuusRcOverlay extends OverlayPanel {
     @Override
     public Dimension render(Graphics2D graphics) {
         try {
+            panelComponent.getChildren().clear();
             panelComponent.setPreferredSize(new Dimension(200, 300));
 
             panelComponent.getChildren().add(TitleComponent.builder()
@@ -43,6 +47,12 @@ public class NetoArceuusRcOverlay extends OverlayPanel {
                         .left("State: " + plugin.getNetoArceuusRcScript().getState()).build()
                 );
             }
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Break In:").right(breakManager.getBreakInDisplay()).build());
+
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Total Breaks:").right(String.valueOf(breakManager.getTotalBreaks())).build());
         } catch (Exception ex) {
             Microbot.logStackTrace(this.getClass().getSimpleName(), ex);
         }
