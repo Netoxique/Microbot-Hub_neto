@@ -177,6 +177,28 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, R
     }
 
     @ConfigItem(
+            keyName = "minRuntime",
+            name = "Min. Runtime",
+            description = "Minimum runtime before stopping the plugin (in minutes). 0 to disable.",
+            position = 1,
+            section = runtimeSection
+    )
+    default int minRuntime() {
+        return 360;
+    }
+
+    @ConfigItem(
+            keyName = "maxRuntime",
+            name = "Max. Runtime",
+            description = "Maximum runtime before stopping the plugin (in minutes). 0 to disable.",
+            position = 2,
+            section = runtimeSection
+    )
+    default int maxRuntime() {
+        return 480;
+    }
+
+    @ConfigItem(
             keyName = "showUpdateMessage",
             name = "Show Update Message",
             description = "Shows the update message in the chat console",

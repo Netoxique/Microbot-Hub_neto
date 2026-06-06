@@ -179,4 +179,26 @@ public interface NetoArceuusRcConfig extends Config, BreakSettings, WorldHopSett
     default int maxBreak() {
         return 15;
     }
+
+    @ConfigItem(
+            keyName = "minRuntime",
+            name = "Min. Runtime",
+            description = "Minimum runtime before stopping the plugin (in minutes). 0 to disable.",
+            position = 1,
+            section = runtimeSection
+    )
+    default int minRuntime() {
+        return 360;
+    }
+
+    @ConfigItem(
+            keyName = "maxRuntime",
+            name = "Max. Runtime",
+            description = "Maximum runtime before stopping the plugin (in minutes). 0 to disable.",
+            position = 2,
+            section = runtimeSection
+    )
+    default int maxRuntime() {
+        return 480;
+    }
 }
