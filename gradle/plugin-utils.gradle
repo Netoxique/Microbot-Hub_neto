@@ -6,10 +6,16 @@ import java.security.MessageDigest
 ext {
     // Common plugin discovery and validation
     discoverPlugins = { pluginsDir ->
+        def ignoredPluginDirs = ['shared'] as Set
         def pluginDirs = pluginsDir.listFiles()?.findAll { it.isDirectory() } ?: []
         def validPlugins = []
 
         pluginDirs.each { pluginDir ->
+            if (ignoredPluginDirs.contains(pluginDir.name)) {
+                logger.info("Skipping shared/non-plugin directory: ${pluginDir.name}")
+                return
+            }
+
             def pluginJavaFile = pluginDir.listFiles()?.find { file ->
                 file.name.endsWith("Plugin.java")
             }
@@ -37,6 +43,7 @@ ext {
                     srcDirs = ["src/main/java"]
                     include "${project.ext.getPluginsIncludePath()}/PluginConstants.java"
                     include "${project.ext.getPluginsIncludePath()}/Rs2Leprechaun.java"
+                    include "${project.ext.getPluginsIncludePath()}/shared/**"
                     include "${project.ext.getPluginsIncludePath()}/${plugin.dir.name}/**"
                 }
                 resources {
@@ -243,6 +250,7 @@ ext {
                 if (pluginRelativePath) {
                     def relativePath = pluginRelativePath.toPath().relativize(plugin.dir.toPath()).toString().replace('\\', '/')
                     include "${relativePath}/**"
+                    include "${project.ext.getPluginsIncludePath()}/shared/**"
                     println "Including classes from path: ${relativePath}/**"
                 } else {
                     // Fallback: include by plugin name pattern if directory structure doesn't match
