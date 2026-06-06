@@ -2,7 +2,9 @@ package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.client.config.*;
 import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
-import net.runelite.client.plugins.microbot.netorc.enums.WorldJumpRegion;
+import net.runelite.client.plugins.microbot.shared.session.BreakSettings;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopRegion;
+import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
 
 
 @ConfigGroup("Frosty")
@@ -19,7 +21,7 @@ import net.runelite.client.plugins.microbot.netorc.enums.WorldJumpRegion;
         "• Start at Crafting guild or Ferox Enclave lobby <br />"
 
 )
-public interface NetoRCConfig extends Config {
+public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings {
     @ConfigSection(
             name = "Settings",
             description = "Settings",
@@ -103,8 +105,8 @@ public interface NetoRCConfig extends Config {
             position = 4,
             section = worldJumpingSection
     )
-    default WorldJumpRegion worldJumpRegion() {
-        return WorldJumpRegion.ALL;
+    default NetoWorldHopRegion worldJumpRegion() {
+        return NetoWorldHopRegion.ALL;
     }
 
     @ConfigItem(

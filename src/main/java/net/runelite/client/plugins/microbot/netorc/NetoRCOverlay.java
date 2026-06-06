@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.client.game.ItemManager;
 import net.runelite.client.plugins.microbot.Microbot;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
 import net.runelite.client.plugins.microbot.util.misc.TimeUtils;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
@@ -29,7 +30,7 @@ public class NetoRCOverlay extends OverlayPanel {
     @Inject
     private ItemManager itemManager;
     @Inject
-    private NetoRCBreakManager breakManager;
+    private NetoBreakManager breakManager;
 
     @Override
     public Dimension render(Graphics2D graphics) {

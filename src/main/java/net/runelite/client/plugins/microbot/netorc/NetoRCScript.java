@@ -12,7 +12,8 @@ import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
 import net.runelite.client.plugins.microbot.netorc.enums.State;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.netorc.enums.Teleports;
-import net.runelite.client.plugins.microbot.netorc.enums.WorldJumpRegion;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
@@ -24,11 +25,9 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-import net.runelite.client.plugins.microbot.util.security.Login;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
-import net.runelite.http.api.worlds.WorldRegion;
 
 import javax.inject.Inject;
 import java.awt.event.KeyEvent;
@@ -64,8 +63,6 @@ public class NetoRCScript extends Script {
     private volatile boolean forceBankOnStart = true;
     private volatile int activeRunId = 0;
     private WrathStep wrathStep = WrathStep.MYTH_CAPE;
-    private int currentTrips = 0;
-    private int jumpAt = 0;
     private final ThreadLocal<Integer> scheduledRunId = new ThreadLocal<>();
 
     public static final int pureEss = 7936;
@@ -74,8 +71,6 @@ public class NetoRCScript extends Script {
     public static final int bloodAltarRegion = 12875;
     public static final int mythicStatueRegion = 9772;
     public static final int wrathAltarRegion = 9291;
-    private static final int WORLD_HOP_MAX_ATTEMPTS = 3;
-    private static final int WORLD_HOP_CONFIRM_TIMEOUT_MS = 15000;
 
     public static final int guildSpiritTree = ObjectID.FARMING_SPIRIT_TREE_PATCH_5;
     private final WorldPoint guildSpiritTreeLoc = new WorldPoint(1252, 3749, 0);
@@ -107,7 +102,9 @@ public class NetoRCScript extends Script {
     @Inject
     private ClientThread clientThread;
     @Inject
-    private NetoRCBreakManager breakManager;
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
 
     public boolean run() {
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
@@ -201,9 +198,10 @@ public class NetoRCScript extends Script {
         forceDrinkAtFerox = false;
         forceBankOnStart = true;
         wrathStep = WrathStep.MYTH_CAPE;
-        currentTrips = 0;
-        jumpAt = calculateJumpAt();
+        breakManager.configure(config, "Neto RC");
+        worldHopManager.configure(config, "Neto RC");
         breakManager.reset();
+        worldHopManager.reset();
     }
 
     private synchronized int startNewRun() {
@@ -392,7 +390,7 @@ public class NetoRCScript extends Script {
                 }
             }
 
-            if (shouldJumpWorld()) {
+            if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
                 return;
             }
 
@@ -404,90 +402,6 @@ public class NetoRCScript extends Script {
                 setState(State.GOING_HOME);
             }
         }
-    }
-
-    private int calculateJumpAt() {
-        int minTrips = Math.max(1, config.minTrips());
-        int maxTrips = Math.max(minTrips, config.maxTrips());
-        return minTrips + new Random().nextInt(maxTrips - minTrips + 1);
-    }
-
-    private void incrementTripCount() {
-        if (!config.enableWorldJumping()) {
-            return;
-        }
-
-        currentTrips++;
-        Microbot.log("Neto RC world jump trips: " + currentTrips + "/" + jumpAt);
-    }
-
-    private boolean shouldJumpWorld() {
-        if (!config.enableWorldJumping() || currentTrips < jumpAt) {
-            return false;
-        }
-
-        if (Rs2Bank.isOpen()) {
-            Rs2Bank.closeBank();
-            sleepUntil(() -> !Rs2Bank.isOpen(), 1200);
-        }
-        sleepGaussian(3500, 250);
-
-        WorldJumpRegion jumpRegion = config.worldJumpRegion();
-        WorldRegion worldRegion = jumpRegion == WorldJumpRegion.ALL ? null : jumpRegion.getWorldRegion();
-
-        if (attemptWorldJump(worldRegion)) {
-            Microbot.log("Neto RC confirmed world jump after " + currentTrips + " trips.");
-            currentTrips = 0;
-            jumpAt = calculateJumpAt();
-        } else {
-            Microbot.log("Neto RC world jump failed after " + WORLD_HOP_MAX_ATTEMPTS
-                    + " attempts. Keeping trip counter at " + currentTrips + "/" + jumpAt + ".");
-        }
-        return true;
-    }
-
-    private boolean attemptWorldJump(WorldRegion worldRegion) {
-        int originalWorld = Rs2Player.getWorld();
-
-        for (int attempt = 1; attempt <= WORLD_HOP_MAX_ATTEMPTS && isRunning(); attempt++) {
-            if (Microbot.isLoggedIn() && Rs2Player.getWorld() != originalWorld) {
-                Microbot.log("Neto RC world jump confirmed: " + originalWorld + " -> " + Rs2Player.getWorld() + ".");
-                return true;
-            }
-
-            int currentWorld = Rs2Player.getWorld();
-            int targetWorld = getRandomMemberWorld(worldRegion, currentWorld);
-
-            Microbot.log("Neto RC world jump attempt " + attempt + "/" + WORLD_HOP_MAX_ATTEMPTS
-                    + ": requesting members world " + targetWorld + " from world " + originalWorld + ".");
-
-            try {
-                Microbot.hopToWorld(targetWorld);
-            } catch (Exception ex) {
-                Microbot.log("Neto RC world jump attempt failed to start: " + ex.getMessage());
-            }
-
-            if (sleepUntil(() -> Microbot.isLoggedIn() && Rs2Player.getWorld() != originalWorld,
-                    WORLD_HOP_CONFIRM_TIMEOUT_MS)) {
-                Microbot.log("Neto RC world jump confirmed: " + originalWorld + " -> " + Rs2Player.getWorld() + ".");
-                return true;
-            }
-
-            Microbot.log("Neto RC world jump attempt " + attempt + "/" + WORLD_HOP_MAX_ATTEMPTS
-                    + " did not confirm a world change.");
-        }
-
-        return false;
-    }
-
-    private int getRandomMemberWorld(WorldRegion worldRegion, int currentWorld) {
-        int targetWorld = Login.getRandomWorld(true, worldRegion);
-
-        for (int reroll = 0; reroll < WORLD_HOP_MAX_ATTEMPTS && targetWorld == currentWorld; reroll++) {
-            targetWorld = Login.getRandomWorld(true, worldRegion);
-        }
-
-        return targetWorld;
     }
 
     private void handleFillPouch() {
@@ -935,7 +849,7 @@ public class NetoRCScript extends Script {
             handleEmptyPouch();
         }
 
-        incrementTripCount();
+        worldHopManager.recordCompletedTrip();
 
         if (pauseForBreakAfterCrafting()) {
             setState(State.BANKING);
@@ -958,7 +872,7 @@ public class NetoRCScript extends Script {
             return false;
         }
 
-        if (breakManager.tryStartBreakAtBank()) {
+        if (breakManager.tryStartBreakAtSafePoint()) {
             return true;
         }
 
