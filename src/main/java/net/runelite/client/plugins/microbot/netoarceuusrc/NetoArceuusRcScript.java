@@ -6,6 +6,7 @@ import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldArea;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.netoarceuusrc.enums.Altar;
@@ -16,8 +17,8 @@ import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-import org.apache.commons.lang3.NotImplementedException;
 
 import javax.inject.Inject;
 import java.util.concurrent.TimeUnit;
@@ -46,6 +47,10 @@ public class NetoArceuusRcScript extends Script {
     private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1760, 3853, 0);
 
     private static final int REACHED_DISTANCE = 5;
+    private static final int ESSENCE_SLOT = 26;
+    private static final int CHISEL_SLOT = 27;
+    private static final int CHIP_CLICK_DELAY_MIN = 100;
+    private static final int CHIP_CLICK_DELAY_MAX = 200;
 
     @Getter
     private String state = "Unknown";
@@ -262,15 +267,15 @@ public class NetoArceuusRcScript extends Script {
     }
 
     public boolean moveChisel() {
-        if (Rs2Inventory.slotContains(27, ItemID.CHISEL)) return true;
+        if (Rs2Inventory.slotContains(CHISEL_SLOT, ItemID.CHISEL)) return true;
         final Rs2ItemModel chisel = Rs2Inventory.get(ItemID.CHISEL);
         if (chisel == null) {
             Microbot.log("No chisel found in inventory");
             return false;
         }
-        if (Rs2Inventory.moveItemToSlot(chisel,27)) {
-            if (!sleepUntil(() -> Rs2Inventory.slotContains(27, ItemID.CHISEL),6_000)) {
-                Microbot.log("Failed to move chisel to slot 27");
+        if (Rs2Inventory.moveItemToSlot(chisel, CHISEL_SLOT)) {
+            if (!sleepUntil(() -> Rs2Inventory.slotContains(CHISEL_SLOT, ItemID.CHISEL),6_000)) {
+                Microbot.log("Failed to move chisel to slot " + CHISEL_SLOT);
                 return false;
             }
         }
@@ -303,25 +308,41 @@ public class NetoArceuusRcScript extends Script {
         return false;
     }
 
-    private void reverse(int[] ints) {
-        if (ints.length != 2) throw new NotImplementedException("reverse does not support length != 2");
-        final int tmp = ints[0];
-        ints[0] = ints[1];
-        ints[1] = tmp;
+    private boolean clickInventorySlot(int slot) {
+        Widget inventory = Rs2Inventory.getInventory();
+        if (inventory == null) {
+            Rs2Tab.switchToInventoryTab();
+            if (!sleepUntil(() -> Rs2Inventory.getInventory() != null, 1_000)) return false;
+            inventory = Rs2Inventory.getInventory();
+        }
+        if (inventory == null || inventory.getDynamicChildren() == null) return false;
+
+        for (Widget child : inventory.getDynamicChildren()) {
+            if (child != null && child.getIndex() == slot) {
+                if (child.getBounds() == null) return false;
+                Microbot.click(child.getBounds());
+                return true;
+            }
+        }
+        return false;
     }
 
     public boolean chipEssenceFast() {
-        final int[] ids = {ItemID.CHISEL, DARK_ESSENCE_BLOCK};
         long lastUpdate = System.currentTimeMillis();
         int blocks = Rs2Inventory.count(DARK_ESSENCE_BLOCK);
         while (Rs2Inventory.hasItem(ItemID.CHISEL) && blocks > 0) {
-            if (!Rs2Inventory.combineClosest(ids[0], ids[1])) {
-                Microbot.log("Failed to combine closest chisel & dark essence block");
+            if (!clickInventorySlot(CHISEL_SLOT)) {
+                Microbot.log("Failed to click chisel slot");
                 return false;
             }
-            reverse(ids);
+            sleep(CHIP_CLICK_DELAY_MIN, CHIP_CLICK_DELAY_MAX);
+            if (!clickInventorySlot(ESSENCE_SLOT)) {
+                Microbot.log("Failed to click dark essence block slot");
+                return false;
+            }
+            sleep(CHIP_CLICK_DELAY_MIN, CHIP_CLICK_DELAY_MAX);
             if (System.currentTimeMillis()-lastUpdate > 3_000) {
-                log.warn("Probably have max essence stopping combine");
+                log.warn("Probably have max essence stopping slot clicks");
                 return true;
             }
             final int newBlocks = Rs2Inventory.count(DARK_ESSENCE_BLOCK);

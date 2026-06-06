@@ -26,7 +26,7 @@ import javax.inject.Inject;
 )
 public class NetoArceuusRcPlugin extends Plugin {
 
-    public static final String version = "1.0.4";
+    public static final String version = "1.0.5";
 
     @Getter
     @Inject
