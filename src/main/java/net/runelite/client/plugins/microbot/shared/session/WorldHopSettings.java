@@ -28,6 +28,6 @@ public interface WorldHopSettings {
             hidden = true
     )
     default int worldHopConfirmTimeoutMs() {
-        return 15_000;
+        return 5_000;
     }
 }

@@ -105,9 +105,10 @@ public class LunarPlankMakeScript extends Script {
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
-                if (!super.run() || !Microbot.isLoggedIn()) return;
+                if (!super.run()) return;
                 if (runtimeDisable.updateRuntime(LunarPlankMakePlugin.class)) return;
                 if (breakManager.updateBreakState()) return;
+                if (!Microbot.isLoggedIn()) return;
 
                 switch (currentState) {
                     case PLANKING:
@@ -136,6 +137,7 @@ public class LunarPlankMakeScript extends Script {
         if (!Rs2Inventory.hasItem(logId)) {
             if (inventoryStarted) {
                 worldHopManager.recordCompletedTrip();
+                inventoryStarted = false;
                 if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
                     return;
                 }

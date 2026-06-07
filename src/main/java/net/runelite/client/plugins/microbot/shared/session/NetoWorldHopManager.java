@@ -122,8 +122,22 @@ public class NetoWorldHopManager {
                 log("world jump attempt failed to start: " + ex.getMessage());
             }
 
-            if (sleepUntil(() -> Microbot.isLoggedIn() && Rs2Player.getWorld() != originalWorld,
-                    confirmTimeoutMs)) {
+            long startTime = System.currentTimeMillis();
+            boolean confirmed = false;
+
+            while (keepRunning.getAsBoolean() && (System.currentTimeMillis() - startTime) < confirmTimeoutMs) {
+                if (Microbot.isLoggedIn() && Rs2Player.getWorld() != originalWorld) {
+                    confirmed = true;
+                    break;
+                }
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    break;
+                }
+            }
+
+            if (confirmed) {
                 int finalWorld = Rs2Player.getWorld();
                 log("world jump confirmed: " + originalWorld + " -> " + finalWorld + ".");
                 return WorldHopResult.confirmed(originalWorld, targetWorld, finalWorld);

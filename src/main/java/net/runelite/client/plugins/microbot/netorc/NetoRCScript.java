@@ -129,9 +129,9 @@ public class NetoRCScript extends Script {
             scheduledRunId.set(runId);
             try {
                 if (!isCurrentRun(runId)) return;
-                if (!Microbot.isLoggedIn()) return;
                 if (runtimeDisable.updateRuntime(NetoRCPlugin.class)) return;
                 if (breakManager.updateBreakState()) return;
+                if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
                 if (!isCurrentRun(runId)) return;
                 long startTime = System.currentTimeMillis();

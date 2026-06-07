@@ -177,16 +177,17 @@ public class NetoArceuusRcScript extends Script {
 
     private void executeTask() {
         try {
+            if (runtimeDisable.updateRuntime(NetoArceuusRcPlugin.class)) return;
+            if (breakManager.updateBreakState()) return;
+
             if (!Microbot.isLoggedIn()) {
                 state = "Disabled";
                 return;
             }
-            if (runtimeDisable.updateRuntime(NetoArceuusRcPlugin.class)) return;
             if (!super.run()) {
                 state = "Disabled";
                 return;
             }
-            if (breakManager.updateBreakState()) return;
 
             State state = getCurrentState();
             log.debug("Current State={}", state);
