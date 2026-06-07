@@ -44,7 +44,8 @@ public class NetoArceuusRcScript extends Script {
 
     private static final WorldPoint ARCEUUS_BLOOD_ALTAR = new WorldPoint(1720, 3828, 0);
     private static final WorldPoint ARCEUUS_SOUL_ALTAR = new WorldPoint(1815, 3856, 0);
-    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1718, 3882, 0);
+//    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1718, 3882, 0);
+    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1726, 3879, 0);
 //    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1760, 3853, 0);
     private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1762, 3855, 0);
 
@@ -255,7 +256,7 @@ public class NetoArceuusRcScript extends Script {
         if (altar != null) {
             if (altar.click("Bind")) Rs2Inventory.waitForInventoryChanges(6_000);
             hasChippedEssence = Rs2Inventory.hasItem(DARK_ESSENCE_FRAGMENTS);
-            if (!hasChippedEssence) {
+            if (!hasChippedEssence && !Rs2Inventory.hasItem(DARK_ESSENCE_BLOCK)) {
                 handleCompletedTrip();
             }
         }
