@@ -45,12 +45,11 @@ public class NetoArceuusRcScript extends Script {
     private static final WorldPoint ARCEUUS_BLOOD_ALTAR = new WorldPoint(1720, 3828, 0);
     private static final WorldPoint ARCEUUS_SOUL_ALTAR = new WorldPoint(1815, 3856, 0);
 //    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1718, 3882, 0);
-    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1726, 3879, 0);
-//    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1760, 3853, 0);
-    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1762, 3855, 0);
+    private static final WorldPoint ARCEUUS_DARK_ALTAR = new WorldPoint(1718, 3882, 0);
+    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1760, 3853, 0);
+//    private static final WorldPoint DENSE_RUNESTONE = new WorldPoint(1762, 3855, 0); // Literal
 
-//    private static final int REACHED_DISTANCE = 5;
-    private static final int REACHED_DISTANCE = 8;
+    private static final int REACHED_DISTANCE = 10;
     private static final int ESSENCE_SLOT = 26;
     private static final int CHISEL_SLOT = 27;
     private static final int CHIP_CLICK_DELAY_MIN = 100;
@@ -172,7 +171,18 @@ public class NetoArceuusRcScript extends Script {
                 myLocation.getX(), myLocation.getY(), myLocation.getPlane(),
                 dst.getX(), dst.getY(), dst.getPlane()
         );
-        Rs2Walker.walkTo(dst, REACHED_DISTANCE);
+
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+
+        while (!future.isDone()) {
+            if (Rs2Player.getWorldLocation().distanceTo(dst) <= REACHED_DISTANCE) {
+                Rs2Walker.setTarget(null);
+                future.cancel(true);
+                break;
+            }
+            sleep(100);
+        }
+
         BreakHandlerScript.setLockState(false);
     }
 
