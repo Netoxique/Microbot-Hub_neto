@@ -3,6 +3,12 @@ package net.runelite.client.plugins.microbot.lunarplankmake;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.lunarplankmake.enums.Logs;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -14,6 +20,7 @@ import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.util.QuantityFormatter;
 
+import javax.inject.Inject;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -31,6 +38,14 @@ public class LunarPlankMakeScript extends Script {
 
     private boolean useVouchers;
     private boolean lazyMode;
+    private boolean inventoryStarted = false;
+
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
 
     private enum State {
         PLANKING,
@@ -76,6 +91,13 @@ public class LunarPlankMakeScript extends Script {
         useVouchers = config.useSawmillVouchers();
         lazyMode = config.lazyMode();
 
+        worldHopManager.configure(config, "Lunar Plank Make");
+        breakManager.configure(config, "Lunar Plank Make");
+        runtimeDisable.configure(config, "Lunar Plank Make");
+        worldHopManager.reset();
+        breakManager.reset();
+        runtimeDisable.reset();
+
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyCookingSetup();
         Rs2Antiban.setActivity(Activity.CASTING_PLANK_MAKE);
@@ -84,6 +106,8 @@ public class LunarPlankMakeScript extends Script {
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!super.run() || !Microbot.isLoggedIn()) return;
+                if (runtimeDisable.updateRuntime(LunarPlankMakePlugin.class)) return;
+                if (breakManager.updateBreakState()) return;
 
                 switch (currentState) {
                     case PLANKING:
@@ -110,6 +134,15 @@ public class LunarPlankMakeScript extends Script {
     private void plankItems(LunarPlankMakeConfig config) {
         int logId = config.ITEM().getLogItemId();
         if (!Rs2Inventory.hasItem(logId)) {
+            if (inventoryStarted) {
+                worldHopManager.recordCompletedTrip();
+                if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+                    return;
+                }
+                if (breakManager.tryStartBreakAtSafePoint()) {
+                    return;
+                }
+            }
             currentState = State.BANKING;
             return;
         }
@@ -122,6 +155,7 @@ public class LunarPlankMakeScript extends Script {
             Rs2Magic.cast(MagicAction.PLANK_MAKE);
             addDelay();
             Rs2Inventory.interact(logId);
+            inventoryStarted = true;
             if (waitUntilNoLogsRemaining(config, initialLogQuantity)) {
                 int plankMadeThisBatch = Rs2Inventory.count(plankId) - initialPlankCount;
                 plankMade += plankMadeThisBatch;
@@ -136,6 +170,7 @@ public class LunarPlankMakeScript extends Script {
         Rs2Magic.cast(MagicAction.PLANK_MAKE);
         addDelay();
         Rs2Inventory.interact(logId);
+        inventoryStarted = true;
 
         if (waitForInventoryChange(plankId, initialPlankCount)) {
             int plankMadeThisAction = Rs2Inventory.count(plankId) - initialPlankCount;
@@ -204,6 +239,7 @@ public class LunarPlankMakeScript extends Script {
         if (logsInInventory >= logsToWithdraw) {
             Rs2Bank.closeBank();
             currentState = State.PLANKING;
+        inventoryStarted = false;
             calculateProfitAndDisplay(config);
             return;
         }
@@ -220,6 +256,7 @@ public class LunarPlankMakeScript extends Script {
 
         Rs2Bank.closeBank();
         currentState = State.PLANKING;
+        inventoryStarted = false;
     }
 
     private boolean isPrepared() {
@@ -387,9 +424,37 @@ public class LunarPlankMakeScript extends Script {
         return Rs2Inventory.hasItem(logName);
     }
 
+
+    private void prep() {
+        if (!Rs2Bank.openBank()) {
+            return;
+        }
+
+        if (!ensureEarthStaffEquipped()) {
+            return;
+        }
+
+        if (!ensureRuneSupplies()) {
+            return;
+        }
+
+        if (!ensureCoinsAvailable()) {
+            return;
+        }
+
+        if (!withdrawLogsForPlanking()) {
+            return;
+        }
+
+        Rs2Bank.closeBank();
+        currentState = State.PLANKING;
+        inventoryStarted = false;
+    }
+
     private void waitUntilReady() {
         sleep(500);
         currentState = State.PLANKING;
+        inventoryStarted = false;
     }
 
     private void refreshProfitPerPlank(LunarPlankMakeConfig config) {
@@ -451,5 +516,6 @@ public class LunarPlankMakeScript extends Script {
         plankMade = 0;
         combinedMessage = "";
         currentState = State.PLANKING;
+        inventoryStarted = false;
     }
 }
