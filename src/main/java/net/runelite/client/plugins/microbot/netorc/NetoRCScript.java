@@ -2,6 +2,7 @@ package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -290,7 +291,7 @@ public class NetoRCScript extends Script {
             Microbot.log("Opening bank");
             Rs2Bank.openBank();
             sleepUntil(Rs2Bank::isOpen);
-            sleepGaussian(700, 200);
+            sleepGaussian(700, 125);
         }
 
         if (forceBankOnStart && Rs2Bank.isOpen()) {
@@ -299,7 +300,7 @@ public class NetoRCScript extends Script {
 
         if (config.runeType() == RuneType.WRATH) {
             handleWrathReqEquip();
-            sleepGaussian(600, 200);
+            sleepGaussian(600, 125);
         }
 
         if (config.runeType() == RuneType.BLOOD) {
@@ -574,7 +575,7 @@ public class NetoRCScript extends Script {
                 case MYTH_CAPE:
                     if (Rs2Inventory.contains(mythCape)) {
                         Rs2Inventory.interact(mythCape, "Teleport");
-                        sleepGaussian(700, 50);
+                        sleepGaussian(700, 50); // 600 to 800 ms
                         sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
                         sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
                         wrathStep = WrathStep.MYTH_STATUE;
@@ -583,7 +584,7 @@ public class NetoRCScript extends Script {
                 case MYTH_STATUE:
                     GameObject statue = Rs2GameObject.getGameObject(31626);
                     if (statue != null && !Rs2Player.isAnimating()) {
-                        sleepGaussian(150, 25);
+                        sleepGaussian(150, 25); // 100 to 200 ms
                         Rs2GameObject.interact(statue, "Teleport");
                         sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
                         wrathStep = WrathStep.CAVE;
@@ -591,9 +592,8 @@ public class NetoRCScript extends Script {
                     break;
                 case CAVE:
                     GameObject cave = Rs2GameObject.getGameObject(31807);
-//                if (cave != null && !Rs2Player.isAnimating()) {
                     if (cave != null) {
-                        sleepGaussian(150, 25);
+                        sleepGaussian(150, 25); // 100 to 200 ms
                         Rs2GameObject.interact(cave, "Enter");
                         sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
                         wrathStep = WrathStep.RUINS;
@@ -601,9 +601,8 @@ public class NetoRCScript extends Script {
                     break;
                 case RUINS:
                     GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
-//                if (ruins != null && !Rs2Player.isAnimating()) {
                     if (ruins != null) {
-                        sleepGaussian(300, 80);
+                        sleepGaussian(1250, 250); // 500 to 2000 ms
                         Rs2GameObject.interact(ruins, "Enter");
                         sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
                         wrathStep = WrathStep.ALTAR;
@@ -612,7 +611,7 @@ public class NetoRCScript extends Script {
                 case ALTAR:
                     GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
                     if (altar != null) {
-//                    sleepGaussian(150, 25);
+                    sleepGaussian(150, 25); // 100 to 200 ms
                         Rs2GameObject.interact(altar, "Craft-rune");
                         wrathStep = WrathStep.MYTH_CAPE;
                         setState(State.CRAFTING);
