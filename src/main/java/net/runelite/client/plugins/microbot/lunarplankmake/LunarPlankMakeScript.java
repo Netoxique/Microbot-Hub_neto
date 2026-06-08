@@ -261,12 +261,6 @@ public class LunarPlankMakeScript extends Script {
         inventoryStarted = false;
     }
 
-    private boolean isPrepared() {
-        return Rs2Equipment.isWearing(EARTH_STAFF_NAMES)
-                && hasRunesForPlankMake()
-                && Rs2Inventory.hasItem("coins");
-    }
-
     private boolean hasRunesForPlankMake() {
         int natureRequired = RUNES_PER_CAST.getOrDefault(Runes.NATURE, 0);
         int astralRequired = RUNES_PER_CAST.getOrDefault(Runes.ASTRAL, 0);
