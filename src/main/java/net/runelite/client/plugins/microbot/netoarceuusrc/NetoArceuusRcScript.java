@@ -262,7 +262,7 @@ public class NetoArceuusRcScript extends Script {
     }
 
     public void useAltar() {
-        var altar = Microbot.getRs2TileObjectCache().query().withName(getAltarName()).within(11).nearestOnClientThread();
+        var altar = Microbot.getRs2TileObjectCache().query().withName(getAltarName()).within(20).nearestOnClientThread();
         if (altar != null) {
             if (altar.click("Bind")) Rs2Inventory.waitForInventoryChanges(6_000);
             hasChippedEssence = Rs2Inventory.hasItem(DARK_ESSENCE_FRAGMENTS);
@@ -375,7 +375,7 @@ public class NetoArceuusRcScript extends Script {
     }
 
     public void useDarkAltar() {
-        var darkAltar = Microbot.getRs2TileObjectCache().query().withName(DARK_ALTAR).within(11).nearestOnClientThread();
+        var darkAltar = Microbot.getRs2TileObjectCache().query().withName(DARK_ALTAR).within(20).nearestOnClientThread();
         if (darkAltar == null) return;
 
         darkAltar.click("Venerate");
@@ -386,7 +386,7 @@ public class NetoArceuusRcScript extends Script {
         if(getAltar() == Altar.BLOOD && !Rs2Inventory.hasItem(BLOOD_ESSENCE_ACTIVE)){
             Rs2Inventory.interact(BLOOD_ESSENCE, "Activate");
         }
-        var runeStone = Microbot.getRs2TileObjectCache().query().withName(STR_DENSE_RUNESTONE).within(11).nearestOnClientThread();
+        var runeStone = Microbot.getRs2TileObjectCache().query().withName(STR_DENSE_RUNESTONE).within(15).nearestOnClientThread();
         if (runeStone == null) {
             Microbot.log("Cannot find runestone");
             return;
