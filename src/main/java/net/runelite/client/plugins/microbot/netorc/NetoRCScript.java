@@ -19,6 +19,7 @@ import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
@@ -234,6 +235,12 @@ public class NetoRCScript extends Script {
         Integer runId = scheduledRunId.get();
         if (runId != null && !isCurrentRun(runId)) {
             return;
+        }
+
+        if (nextState == State.CRAFTING) {
+            Rs2Antiban.setActivityIntensity(ActivityIntensity.HIGH);
+        } else {
+            Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
         }
 
         state = nextState;
