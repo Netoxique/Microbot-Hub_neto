@@ -1,9 +1,7 @@
 package net.runelite.client.plugins.microbot.netogemstones;
 
-import net.runelite.api.GameObject;
 import net.runelite.api.ItemID;
 import net.runelite.api.Skill;
-import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
@@ -11,11 +9,12 @@ import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.http.api.worlds.WorldRegion;
 
 import java.util.concurrent.TimeUnit;
@@ -70,12 +69,12 @@ public class NetoGemstonesScript extends Script {
         }
 
         while (!Rs2Inventory.isFull() && isRunning()) {
-            GameObject gemRock = Rs2GameObject.getGameObject("Gem rocks");
+            var gemRock = new Rs2TileObjectQueryable().withName("Gem rocks").first();
             if (gemRock == null) {
                 break;
             }
 
-            if (Rs2GameObject.interact(gemRock, "Mine")) {
+            if (gemRock.click("Mine")) {
                 handlePickaxeSpec();
                 Rs2Player.waitForXpDrop(Skill.MINING, 8000);
                 if (!isRunning()) {
@@ -110,9 +109,9 @@ public class NetoGemstonesScript extends Script {
             return;
         }
 
-        GameObject depositChest = Rs2GameObject.getGameObject(BANK_DEPOSIT_CHEST);
+        var depositChest = new Rs2TileObjectQueryable().withId(BANK_DEPOSIT_CHEST).first();
         if (depositChest != null) {
-            if (Rs2GameObject.interact(depositChest, "Deposit")) {
+            if (depositChest.click("Deposit")) {
                 if (sleepUntil(() -> Rs2Widget.hasWidget("Deposit Box"))) {
                     if (Rs2Inventory.hasItem("Open gem bag")) {
                         Rs2Bank.emptyGemBag();

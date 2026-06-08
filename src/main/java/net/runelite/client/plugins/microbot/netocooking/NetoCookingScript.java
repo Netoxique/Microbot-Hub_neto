@@ -1,6 +1,5 @@
 package net.runelite.client.plugins.microbot.netocooking;
 
-import net.runelite.api.GameObject;
 import net.runelite.api.ItemID;
 import net.runelite.api.ObjectID;
 import net.runelite.api.Skill;
@@ -15,11 +14,12 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
+import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 
 import java.awt.*;
 import java.awt.event.KeyEvent;
@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class NetoCookingScript extends Script {
 
-    private GameObject currentRange;
+    private Rs2TileObjectModel currentRange;
 
     public boolean run() {
         Microbot.enableAutoRunOn = false;
@@ -105,7 +105,7 @@ public class NetoCookingScript extends Script {
         sleepUntil(() -> Rs2Inventory.hasItem(ItemID.RAW_KARAMBWAN), 3000);
         sleepGaussian(300,150);
 
-        GameObject range = currentRange;
+        var range = currentRange;
         if (!isRangeValid(range)) {
             range = findRange();
             if (range == null) {
@@ -135,7 +135,7 @@ public class NetoCookingScript extends Script {
         Rs2ItemModel lastKarambwan;
         while ((lastKarambwan = Rs2Inventory.getLast(ItemID.RAW_KARAMBWAN)) != null) {
             Rs2Inventory.interact(lastKarambwan, "Use");
-            Rs2GameObject.interact(range, "Use");
+            range.click("Use");
             sleepGaussian(400,100);
         }
         Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
@@ -149,7 +149,7 @@ public class NetoCookingScript extends Script {
         Rs2Keyboard.keyRelease(KeyEvent.VK_SPACE);
     }
 
-    private GameObject findRange() {
+    private Rs2TileObjectModel findRange() {
         int[] rangeIds = new int[]{
                 ObjectID.CLAY_OVEN_21302, // Hosidius / Generic
                 ObjectID.FIRE_43475, // Rogue's Den
@@ -157,27 +157,14 @@ public class NetoCookingScript extends Script {
                 31631, // Myth's Guild
         };
 
-        List<GameObject> objects = Rs2GameObject.getGameObjects();
-        for (GameObject obj : objects) {
-            if (Arrays.stream(rangeIds).anyMatch(id -> id == obj.getId())) {
-                return obj;
-            }
-        }
-        return null;
+        return new Rs2TileObjectQueryable().withIds(rangeIds).first();
     }
 
-    private boolean isRangeValid(GameObject range) {
+    private boolean isRangeValid(Rs2TileObjectModel range) {
         if (range == null || range.getWorldLocation() == null) {
             return false;
         }
 
-        for (GameObject obj : Rs2GameObject.getGameObjects()) {
-            if (obj != null
-                    && obj.getId() == range.getId()
-                    && obj.getWorldLocation().equals(range.getWorldLocation())) {
-                return true;
-            }
-        }
-        return false;
+        return new Rs2TileObjectQueryable().withId(range.getId()).where(obj -> obj.getWorldLocation().equals(range.getWorldLocation())).first() != null;
     }
 }

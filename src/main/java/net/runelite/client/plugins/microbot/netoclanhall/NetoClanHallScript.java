@@ -2,10 +2,10 @@ package net.runelite.client.plugins.microbot.netoclanhall;
 
 import java.util.concurrent.TimeUnit;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.TileObject;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 @Slf4j
@@ -45,13 +45,13 @@ public class NetoClanHallScript extends Script
             }
 
 
-            TileObject clanHallPortal = Rs2GameObject.getGameObject(CLAN_HALL_PORTAL_ID);
+            var clanHallPortal = new Rs2TileObjectQueryable().withId(CLAN_HALL_PORTAL_ID).first();
             if (clanHallPortal == null)
             {
                 return;
             }
 
-            if (Rs2GameObject.interact(clanHallPortal, ENTER_MEMBER_OPTION))
+            if (clanHallPortal.click(ENTER_MEMBER_OPTION))
             {
                 lastInteractionTimestamp = now;
                 sleep(3000, 4000);

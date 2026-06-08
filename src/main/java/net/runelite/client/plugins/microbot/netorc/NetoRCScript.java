@@ -2,13 +2,13 @@ package net.runelite.client.plugins.microbot.netorc;
 
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
-import net.runelite.api.widgets.ComponentID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.ObjectID;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
 import net.runelite.client.plugins.microbot.netorc.enums.State;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
@@ -23,7 +23,6 @@ import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
-import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
@@ -31,12 +30,13 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 
 import javax.inject.Inject;
 import java.awt.event.KeyEvent;
 import java.util.*;
 import java.util.concurrent.TimeUnit;
-import java.util.stream.Collectors;
 
 public class NetoRCScript extends Script {
     private final NetoRCPlugin plugin;
@@ -59,8 +59,6 @@ public class NetoRCScript extends Script {
     private final WorldPoint outsideBloodRuins74 = new WorldPoint(3555, 9783, 0);
     private final WorldPoint outsideBloodRuins93 = new WorldPoint(3543, 9772, 0);
     private final WorldPoint outsideBloodRuins73 = new WorldPoint(3558, 9779, 0);
-    private final WorldPoint outsideWrathRuins = new WorldPoint(2445, 2818, 0);
-    private final WorldPoint wrathRuinsLoc = new WorldPoint(2445, 2824, 0);
 
 	private volatile boolean forceDrinkAtFerox = false;
     private volatile boolean forceBankOnStart = true;
@@ -72,8 +70,6 @@ public class NetoRCScript extends Script {
     public static final int feroxPool = 39651;
     public static final int monasteryRegion = 10290;
     public static final int bloodAltarRegion = 12875;
-    public static final int mythicStatueRegion = 9772;
-    public static final int wrathAltarRegion = 9291;
 
     public static final int guildSpiritTree = ObjectID.FARMING_SPIRIT_TREE_PATCH_5;
     private final WorldPoint guildSpiritTreeLoc = new WorldPoint(1252, 3749, 0);
@@ -110,6 +106,14 @@ public class NetoRCScript extends Script {
     private NetoWorldHopManager worldHopManager;
     @Inject
     private NetoRuntimeDisable runtimeDisable;
+
+    private Rs2TileObjectModel findObject(int id) {
+        return new Rs2TileObjectQueryable().withId(id).first();
+    }
+
+    private boolean interactObject(int id, String action) {
+        return new Rs2TileObjectQueryable().interact(id, action);
+    }
 
     public boolean run() {
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
@@ -272,7 +276,7 @@ public class NetoRCScript extends Script {
 			BreakHandlerScript.setLockState(true);
 		}
 
-        Rs2Tab.switchToInventoryTab();
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
 
 		if (Rs2Inventory.hasDegradedPouch()) {
 			Rs2Magic.repairPouchesWithLunar();
@@ -458,7 +462,7 @@ public class NetoRCScript extends Script {
 
             if (plugin.getMyWorldPoint().distanceTo(feroxPoolWp) < 5) {
                 Microbot.log("Interacting with the Ferox pool");
-                Rs2GameObject.interact(feroxPool, "Drink");
+                interactObject(feroxPool, "Drink");
             }
             sleepUntil(() -> (!Rs2Player.isInteracting()) && !Rs2Player.isAnimating() && Rs2Player.getRunEnergy() > 90);
             sleepGaussian(1100, 200);
@@ -490,15 +494,7 @@ public class NetoRCScript extends Script {
             sleepGaussian(900, 200);
         }
 
-        TileObject fairyRing = Rs2GameObject.getAll().stream()
-                .filter(Objects::nonNull)
-                .filter(obj -> obj.getLocalLocation().distanceTo(Microbot.getClient().getLocalPlayer().getLocalLocation()) < 5000)
-                .filter(obj -> {
-                    ObjectComposition composition = Rs2GameObject.getObjectComposition(obj.getId());
-                    if (composition == null) return false;
-                    return composition.getName().toLowerCase().contains("fairy");
-                })
-                .findFirst().orElse(null);
+        var fairyRing = new Rs2TileObjectQueryable().withNameContains("fairy").first();
 
         if (plugin.getMyWorldPoint().distanceTo(monasteryFairyRing) < 7) {
             if (fairyRing == null) {
@@ -507,7 +503,7 @@ public class NetoRCScript extends Script {
                 return;
             } else {
                 Microbot.log("Interacting with fairies");
-                Rs2GameObject.interact(fairyRing, "Last-destination (DLS)");
+                interactObject(fairyRing.getId(), "Last-destination (DLS)");
                 sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
             }
         }
@@ -527,7 +523,7 @@ public class NetoRCScript extends Script {
                 if (plugin.getMyWorldPoint().distanceTo(guildSpiritTreeLoc) > 10) {
                     Rs2Walker.walkTo(guildSpiritTreeLoc);
                 } else {
-                    Rs2GameObject.interact(guildSpiritTree, "Travel");
+                    interactObject(guildSpiritTree, "Travel");
                     sleepUntil(() -> Rs2Widget.isWidgetVisible(187, 3), 10000);
                     sleepGaussian(1100, 200);
 
@@ -548,9 +544,9 @@ public class NetoRCScript extends Script {
                         sleepGaussian(700, 200);
                         Microbot.log("We are thirsty..let us Drink");
                         List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-                        poolObjectIds.stream().filter(Rs2GameObject::exists).findFirst()
+                        poolObjectIds.stream().filter(id -> findObject(id) != null).findFirst()
                                 .ifPresent(objectId -> {
-                                    Rs2GameObject.interact(objectId, "Drink");
+                                    interactObject(objectId, "Drink");
                                     sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
                                 });
                     }
@@ -584,42 +580,42 @@ public class NetoRCScript extends Script {
                         Rs2Inventory.interact(mythCape, "Teleport");
                         sleepGaussian(700, 50); // 600 to 800 ms
                         sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
+                        sleepUntilOnClientThread(() -> findObject(31626) != null, 5000); // Wait for Myth Statue
                         wrathStep = WrathStep.MYTH_STATUE;
                     }
                     break;
                 case MYTH_STATUE:
-                    GameObject statue = Rs2GameObject.getGameObject(31626);
+                    var statue = findObject(31626);
                     if (statue != null && !Rs2Player.isAnimating()) {
                         sleepGaussian(150, 25); // 100 to 200 ms
-                        Rs2GameObject.interact(statue, "Teleport");
-                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
+                        interactObject(statue.getId(), "Teleport");
+                        sleepUntilOnClientThread(() -> findObject(31807) != null, 5000); // Wait for Cave
                         wrathStep = WrathStep.CAVE;
                     }
                     break;
                 case CAVE:
-                    GameObject cave = Rs2GameObject.getGameObject(31807);
+                    var cave = findObject(31807);
                     if (cave != null) {
                         sleepGaussian(150, 25); // 100 to 200 ms
-                        Rs2GameObject.interact(cave, "Enter");
-                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
+                        interactObject(cave.getId(), "Enter");
+                        sleepUntilOnClientThread(() -> findObject(wrathRuins) != null, 20000); // Wait for Ruins
                         wrathStep = WrathStep.RUINS;
                     }
                     break;
                 case RUINS:
-                    GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
+                    var ruins = findObject(wrathRuins);
                     if (ruins != null) {
                         sleepGaussian(1250, 250); // 500 to 2000 ms
-                        Rs2GameObject.interact(ruins, "Enter");
-                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
+                        interactObject(ruins.getId(), "Enter");
+                        sleepUntilOnClientThread(() -> findObject(wrathAltar) != null, 5000); // Wait for Altar
                         wrathStep = WrathStep.ALTAR;
                     }
                     break;
                 case ALTAR:
-                    GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
+                    var altar = findObject(wrathAltar);
                     if (altar != null) {
                     sleepGaussian(150, 25); // 100 to 200 ms
-                        Rs2GameObject.interact(altar, "Craft-rune");
+                        interactObject(altar.getId(), "Craft-rune");
                         wrathStep = WrathStep.MYTH_CAPE;
                         setState(State.CRAFTING);
                         return;
@@ -694,9 +690,9 @@ public class NetoRCScript extends Script {
                 sleepGaussian(700, 200);
                 Microbot.log("We are thirsty..let us Drink");
                 List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-                poolObjectIds.stream().filter(Rs2GameObject::exists).findFirst()
+                poolObjectIds.stream().filter(id -> findObject(id) != null).findFirst()
                         .ifPresent(objectId -> {
-                            Rs2GameObject.interact(objectId, "Drink");
+                            interactObject(objectId, "Drink");
                             sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
                         });
             }
@@ -741,9 +737,9 @@ public class NetoRCScript extends Script {
                 sleepGaussian(700, 200);
                 Microbot.log("We are thirsty..let us Drink");
                 List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-                poolObjectIds.stream().filter(Rs2GameObject::exists).findFirst()
+                poolObjectIds.stream().filter(id -> findObject(id) != null).findFirst()
                         .ifPresent(objectId -> {
-                            Rs2GameObject.interact(objectId, "Drink");
+                            interactObject(objectId, "Drink");
                             sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
                         });
             }
@@ -758,26 +754,16 @@ public class NetoRCScript extends Script {
     }
 
     private void handlePohFairyRing() {
-        if (Rs2GameObject.findObjectById(ObjectID.POH_FAIRY_RING) != null) {
-            Rs2GameObject.interact(ObjectID.POH_FAIRY_RING, "Last-destination (DLS)");
+        if (findObject(ObjectID.POH_FAIRY_RING) != null) {
+            interactObject(ObjectID.POH_FAIRY_RING, "Last-destination (DLS)");
             Microbot.log("Using fairy ring");
             Rs2Player.waitForAnimation(1200);
             sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing), 1200);
             setState(State.WALKING_TO);
         } else {
-            List<TileObject> allGameObjects = Rs2GameObject.getAll().stream()
-                    .filter(Objects::nonNull)
-                    .filter(obj -> obj.getLocalLocation().distanceTo(Microbot.getClient().getLocalPlayer().getLocalLocation()) < 5000)
-                    .collect(Collectors.toList());
-
-            TileObject pohTreeRing = allGameObjects.stream()
-                    .filter(obj -> {
-                        ObjectComposition composition = Rs2GameObject.getObjectComposition(obj.getId());
-                        return composition != null && composition.getName().toLowerCase().contains("spirit");
-                    })
-                    .findFirst().orElse(null);
+            var pohTreeRing = new Rs2TileObjectQueryable().withNameContains("spirit").first();
             if (pohTreeRing != null) {
-                Rs2GameObject.interact(pohTreeRing, "Ring-last-destination (DLS)");
+                interactObject(pohTreeRing.getId(), "Ring-last-destination (DLS)");
                 Microbot.log("Using fairy tree");
                 Rs2Player.waitForAnimation();
                 sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
@@ -806,7 +792,7 @@ public class NetoRCScript extends Script {
             Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
             if (plugin.getMyWorldPoint().equals(caveFairyRing)) {
                 sleepGaussian(900, 200);
-                Rs2GameObject.interact(16308, "Enter");
+                interactObject(16308, "Enter");
                 sleepUntil(() -> Rs2Player.getWorldLocation().equals(firstCaveExit), 1200);
                 sleepGaussian(900, 200);
             }
@@ -826,7 +812,7 @@ public class NetoRCScript extends Script {
                 sleepUntil(() -> plugin.getMyWorldPoint().equals(outsideBloodRuins74), 1200);
             }
 
-            TileObject ruins = Rs2GameObject.findObjectById(bloodRuins);
+            var ruins = findObject(bloodRuins);
 
             if (plugin.getMyWorldPoint().equals(firstCaveExit) && Rs2Player.getRealSkillLevel(Skill.AGILITY) < 74) {
                 Microbot.log("Walking to ruins: " + outsideBloodRuins73);
@@ -848,10 +834,10 @@ public class NetoRCScript extends Script {
         }
 
         if (config.runeType() == RuneType.BLOOD) {
-            Rs2GameObject.interact(bloodRuins, "Enter");
+            interactObject(bloodRuins, "Enter");
             sleepUntil(() -> !Rs2Player.isAnimating() && plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion);
             sleepGaussian(700, 200);
-            Rs2GameObject.interact(bloodAltar, "Craft-rune");
+            interactObject(bloodAltar, "Craft-rune");
             Rs2Player.waitForXpDrop(Skill.RUNECRAFT);
             plugin.updateXpGained();
             handleEmptyPouch();
@@ -917,9 +903,9 @@ public class NetoRCScript extends Script {
             Rs2Inventory.emptyPouches();
 
 //            // Determine the altar to interact with and hover the mouse over it
-//            GameObject altar = config.runeType() == RuneType.BLOOD
-//                    ? Rs2GameObject.getGameObject(bloodAltar)
-//                    : Rs2GameObject.getGameObject(wrathAltar);
+//            var altar = config.runeType() == RuneType.BLOOD
+//                    ? findObject(bloodAltar)
+//                    : findObject(wrathAltar);
 //            if (altar != null) {
 //                Rs2GameObject.hoverOverObject(altar);
 //            }
@@ -927,10 +913,10 @@ public class NetoRCScript extends Script {
             sleepUntil(() -> Rs2Inventory.contains(pureEss));
 
             if (config.runeType() == RuneType.BLOOD) {
-                Rs2GameObject.interact(bloodAltar, "Craft-rune");
+                interactObject(bloodAltar, "Craft-rune");
             }
             if (config.runeType() == RuneType.WRATH) {
-                Rs2GameObject.interact(wrathAltar, "Craft-rune");
+                interactObject(wrathAltar, "Craft-rune");
             }
             Rs2Player.waitForXpDrop(Skill.RUNECRAFT);
             plugin.updateXpGained();
@@ -952,7 +938,7 @@ public class NetoRCScript extends Script {
             }
         }
 
-        Rs2Tab.switchToEquipmentTab();
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
         sleepGaussian(1300, 200);
         List<Teleports> bankTeleport = needRefill
                 ? Arrays.asList(
