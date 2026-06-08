@@ -152,26 +152,30 @@ public class NetoRCScript extends Script {
                     return;
                 }
 
-                switch (state) {
-                    case BANKING:
-                        handleBanking();
-                        break;
-                    case GOING_HOME:
-                        if (config.usePoh()) {
-                            handleGoingHome();
-                        } else if (config.runeType() == RuneType.BLOOD && !config.usePoh()) {
-                            handleArdyCloak();
-                        } else if (config.runeType() == RuneType.WRATH) {
-                            handleWrathWalking();
+                State initialState;
+                do {
+                    initialState = state;
+                    switch (state) {
+                        case BANKING:
+                            handleBanking();
                             break;
-                        }
-                    case WALKING_TO:
-                        handleWalking();
-                        break;
-                    case CRAFTING:
-                        handleCrafting();
-                        return;
-                }
+                        case GOING_HOME:
+                            if (config.usePoh()) {
+                                handleGoingHome();
+                            } else if (config.runeType() == RuneType.BLOOD && !config.usePoh()) {
+                                handleArdyCloak();
+                            } else if (config.runeType() == RuneType.WRATH) {
+                                handleWrathWalking();
+                                break;
+                            }
+                        case WALKING_TO:
+                            handleWalking();
+                            break;
+                        case CRAFTING:
+                            handleCrafting();
+                            break;
+                    }
+                } while (state != initialState && isCurrentRun(runId) && Microbot.isLoggedIn());
 
                 long endTime = System.currentTimeMillis();
                 long totalTime = endTime - startTime;
@@ -556,61 +560,67 @@ public class NetoRCScript extends Script {
 
     private void handleWrathWalking() {
         if (plugin.isBreakHandlerEnabled()) {
-
             BreakHandlerScript.setLockState(true);
         }
 
-		if (Rs2Bank.isOpen()) { Rs2Bank.closeBank(); }
-
-        switch (wrathStep) {
-            case MYTH_CAPE:
-                if (Rs2Inventory.contains(mythCape)) {
-                    Rs2Inventory.interact(mythCape, "Teleport");
-                    sleepGaussian(700, 50);
-                    sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
-                    wrathStep = WrathStep.MYTH_STATUE;
-                }
-                return;
-            case MYTH_STATUE:
-                GameObject statue = Rs2GameObject.getGameObject(31626);
-                if (statue != null && !Rs2Player.isAnimating()) {
-                    sleepGaussian(150, 25);
-                    Rs2GameObject.interact(statue, "Teleport");
-                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
-                    wrathStep = WrathStep.CAVE;
-                }
-                return;
-            case CAVE:
-                GameObject cave = Rs2GameObject.getGameObject(31807);
-//                if (cave != null && !Rs2Player.isAnimating()) {
-                if (cave != null) {
-                    sleepGaussian(150, 25);
-                    Rs2GameObject.interact(cave, "Enter");
-                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
-                    wrathStep = WrathStep.RUINS;
-                }
-                return;
-            case RUINS:
-                GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
-//                if (ruins != null && !Rs2Player.isAnimating()) {
-                if (ruins != null) {
-                    sleepGaussian(300, 80);
-                    Rs2GameObject.interact(ruins, "Enter");
-                    sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
-                    wrathStep = WrathStep.RUINS;
-                }
-                return;
-            case ALTAR:
-                GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
-                if (altar != null) {
-//                    sleepGaussian(150, 25);
-                    Rs2GameObject.interact(altar, "Craft-rune");
-                    wrathStep = WrathStep.MYTH_CAPE;
-                    setState(State.CRAFTING);
-                }
-                return;
+        if (Rs2Bank.isOpen()) {
+            Rs2Bank.closeBank();
         }
+
+        WrathStep initialStep;
+        do {
+            initialStep = wrathStep;
+            switch (wrathStep) {
+                case MYTH_CAPE:
+                    if (Rs2Inventory.contains(mythCape)) {
+                        Rs2Inventory.interact(mythCape, "Teleport");
+                        sleepGaussian(700, 50);
+                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31626) != null, 5000); // Wait for Myth Statue
+                        wrathStep = WrathStep.MYTH_STATUE;
+                    }
+                    break;
+                case MYTH_STATUE:
+                    GameObject statue = Rs2GameObject.getGameObject(31626);
+                    if (statue != null && !Rs2Player.isAnimating()) {
+                        sleepGaussian(150, 25);
+                        Rs2GameObject.interact(statue, "Teleport");
+                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(31807) != null, 5000); // Wait for Cave
+                        wrathStep = WrathStep.CAVE;
+                    }
+                    break;
+                case CAVE:
+                    GameObject cave = Rs2GameObject.getGameObject(31807);
+//                if (cave != null && !Rs2Player.isAnimating()) {
+                    if (cave != null) {
+                        sleepGaussian(150, 25);
+                        Rs2GameObject.interact(cave, "Enter");
+                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathRuins) != null, 20000); // Wait for Ruins
+                        wrathStep = WrathStep.RUINS;
+                    }
+                    break;
+                case RUINS:
+                    GameObject ruins = Rs2GameObject.getGameObject(wrathRuins);
+//                if (ruins != null && !Rs2Player.isAnimating()) {
+                    if (ruins != null) {
+                        sleepGaussian(300, 80);
+                        Rs2GameObject.interact(ruins, "Enter");
+                        sleepUntilOnClientThread(() -> Rs2GameObject.getGameObject(wrathAltar) != null, 5000); // Wait for Altar
+                        wrathStep = WrathStep.ALTAR;
+                    }
+                    break;
+                case ALTAR:
+                    GameObject altar = Rs2GameObject.getGameObject(wrathAltar);
+                    if (altar != null) {
+//                    sleepGaussian(150, 25);
+                        Rs2GameObject.interact(altar, "Craft-rune");
+                        wrathStep = WrathStep.MYTH_CAPE;
+                        setState(State.CRAFTING);
+                        return;
+                    }
+                    break;
+            }
+        } while (wrathStep != initialStep);
     }
 
     private boolean isBankingRegion(int currentRegion) {
