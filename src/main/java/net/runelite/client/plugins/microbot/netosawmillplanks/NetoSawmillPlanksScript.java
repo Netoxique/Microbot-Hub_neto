@@ -16,7 +16,8 @@ import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import java.util.concurrent.TimeUnit;
 
 public class NetoSawmillPlanksScript extends Script {
-    public static final int LOG_BASKET = 28386;
+//    public static final int LOG_BASKET = 28386;
+    public static final String LOG_BASKET = "Log basket"; // Item name
     private static final WorldPoint EARTH_ALTAR_TELEPORT = new WorldPoint(3288, 3467, 0);
     State state = State.BANKING;
     boolean hasPerformedInitialCleanup = false;
@@ -182,11 +183,14 @@ public class NetoSawmillPlanksScript extends Script {
 
         // Walk to sawmill
         WorldPoint sawmillPoint = new WorldPoint(3302, 3491, 0);
-        if (Rs2Player.getWorldLocation().distanceTo(sawmillPoint) > 15) {
-            logWalk(sawmillPoint);
-        } else {
-            state = State.BUYING;
-        }
+        logWalk(sawmillPoint);
+        state = State.BUYING;
+
+//        if (Rs2Player.getWorldLocation().distanceTo(sawmillPoint) > 15) {
+//            logWalk(sawmillPoint);
+//        } else {
+//            state = State.BUYING;
+//        }
     }
 
     private void logWalk(WorldPoint dst) {
@@ -210,47 +214,43 @@ public class NetoSawmillPlanksScript extends Script {
     }
 
     private void handleBuying() {
-        // 2. First Sawmill Interaction
+        // Sawmill Interaction
         NPC sawmillOperator = Rs2Npc.getNpc("Sawmill operator");
         if (sawmillOperator != null) {
             Rs2Npc.interact(sawmillOperator, "Buy-Plank");
-            sleepUntil(() -> Rs2Widget.findWidget("Buy All") != null, 5000);
+            sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 5000);
         }
 
-        // 3. Buy First Batch
-        if (Rs2Widget.findWidget("Buy All") != null) {
-            Rs2Widget.clickWidget("Buy All");
-            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 3000);
+        // Buy First Batch
+        if (Rs2Widget.findWidget("Mahogany - 1,500gp") != null) {
+            Rs2Widget.clickWidget("Mahogany - 1,500gp");
+            sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany logs"), 3000); // Wait for Mahogany logs to be spent
         }
 
-        // 4. Fill Sack
-        if (Rs2Inventory.hasItem("Mahogany plank")) {
-            Rs2Inventory.combine("Mahogany plank", "Plank sack");
-            sleepUntil(() -> !Rs2Inventory.isFull(), 3000);
-        }
+//        // Planks automatically go into the sack, no need to manually fill them
+//        // Fill Sack
+//        if (Rs2Inventory.hasItem("Mahogany plank")) {
+//            Rs2Inventory.combine("Mahogany plank", "Plank sack");
+//            sleepUntil(() -> !Rs2Inventory.isFull(), 3000);
+//        }
 
-        // 5. Empty Basket
-        if (Rs2Inventory.hasItem(LOG_BASKET)) {
-            Rs2Inventory.interact(LOG_BASKET, "Empty");
-            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
-        }
+        // Empty Basket
+        Rs2Inventory.interact(LOG_BASKET, "Empty");
+        sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
+//        if (Rs2Inventory.hasItem(LOG_BASKET)) {
+//            Rs2Inventory.interact(LOG_BASKET, "Empty");
+//            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
+//        }
 
-        // 6. Second Sawmill Interaction
-        if (Rs2Inventory.hasItem("Mahogany logs")) {
-            sawmillOperator = Rs2Npc.getNpc("Sawmill operator");
-            if (sawmillOperator != null) {
-                Rs2Npc.interact(sawmillOperator, "Buy-Plank");
-                sleepUntil(() -> Rs2Widget.findWidget("Buy All") != null, 5000);
-            }
-        }
+        // Second Sawmill Interaction
+        Rs2Npc.interact(sawmillOperator, "Buy-Plank");
+        sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 5000);
 
-        // 7. Buy Second Batch
-        if (Rs2Widget.findWidget("Buy All") != null) {
-            Rs2Widget.clickWidget("Buy All");
-            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 3000);
-        }
+        // Buy Second Batch
+        Rs2Widget.clickWidget("Mahogany - 1,500gp");
+        sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 3000);
 
-        // 8. Transition
+        // Transition
         state = State.BANKING;
     }
 
