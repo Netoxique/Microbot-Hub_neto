@@ -113,15 +113,19 @@ public class NetoSawmillPlanksScript extends Script {
                 "Sailors' amulet"
         );
 
+        // Make sure no planks in inventory
+        sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany plank"), 5000);
+
         // Deposit Excess
         if (Rs2Inventory.hasItem("Plank sack")) {
             Rs2Inventory.interact("Plank sack", "Empty");
-            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"));
+            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 5000);
             sleepGaussian(150, 25);
         }
 
         if (Rs2Inventory.hasItem("Mahogany plank")) {
             Rs2Bank.depositAll("Mahogany plank");
+            sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany plank"), 5000);
             sleepGaussian(400, 50);
         }
 
