@@ -5,6 +5,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.*;
@@ -23,13 +24,25 @@ public class NetoSawmillPlanksPlugin extends Plugin {
     @Inject
     private NetoSawmillPlanksScript netoSawmillPlanksScript;
 
+    @Inject
+    private OverlayManager overlayManager;
+    @Inject
+    private NetoSawmillPlanksOverlay netoSawmillPlanksOverlay;
+
+    @Provides
+    NetoSawmillPlanksConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(NetoSawmillPlanksConfig.class);
+    }
+
     @Override
     protected void startUp() throws Exception {
+        overlayManager.add(netoSawmillPlanksOverlay);
         netoSawmillPlanksScript.run();
     }
 
     @Override
     protected void shutDown() throws Exception {
+        overlayManager.remove(netoSawmillPlanksOverlay);
         netoSawmillPlanksScript.shutdown();
     }
 }

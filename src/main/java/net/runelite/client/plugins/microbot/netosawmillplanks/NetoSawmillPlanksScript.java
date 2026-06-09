@@ -4,6 +4,9 @@ import net.runelite.api.NPC;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
@@ -12,7 +15,11 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
+import javax.inject.Inject;
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
+
+import lombok.Getter;
 
 public class NetoSawmillPlanksScript extends Script {
 
@@ -20,15 +27,38 @@ public class NetoSawmillPlanksScript extends Script {
     public static final int SAWMILL_OPERATOR_ID = 3101;
     private static final WorldPoint EARTH_ALTAR_TELEPORT = new WorldPoint(3288, 3467, 0);
 
+    @Inject
+    private NetoSawmillPlanksConfig config;
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
+
+    @Getter
+    private int logsLeft = 0;
+    @Getter
+    private Instant startTime;
+
     State state = State.BANKING;
     boolean hasPerformedInitialCleanup = false;
 
     public boolean run() {
+        startTime = Instant.now();
+        breakManager.configure(config, "Neto Sawmill Planks");
+        worldHopManager.configure(config, "Neto Sawmill Planks");
+        worldHopManager.reset();
+        runtimeDisable.configure(config, "Neto Sawmill Planks");
+        runtimeDisable.reset();
         hasPerformedInitialCleanup = false;
         state = State.BANKING;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!super.run()) return;
+                if (runtimeDisable.updateRuntime(NetoSawmillPlanksPlugin.class)) return;
+                if (breakManager.updateBreakState()) return;
+
                 switch (state) {
                     case BANKING:
                         handleBanking();
@@ -77,6 +107,14 @@ public class NetoSawmillPlanksScript extends Script {
             } else {
                 Rs2Bank.walkToBankAndUseBank(nearestBank);
             }
+            return;
+        }
+
+        logsLeft = Rs2Bank.count("Mahogany logs");
+
+        if (!Rs2Bank.hasItem("Mahogany logs")) {
+            Microbot.showMessage("No more logs available in bank.");
+            shutdown();
             return;
         }
 
@@ -194,7 +232,10 @@ public class NetoSawmillPlanksScript extends Script {
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
         sleepGaussian(150, 25);
-        
+
+        worldHopManager.recordCompletedTrip();
+        worldHopManager.tryHopIfDue(this::isRunning);
+
         state = State.WALKING_TO_SAWMILL;
     }
 
