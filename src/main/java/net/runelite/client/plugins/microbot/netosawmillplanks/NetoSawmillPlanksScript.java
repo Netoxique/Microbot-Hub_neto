@@ -48,6 +48,26 @@ public class NetoSawmillPlanksScript extends Script {
         return true;
     }
 
+    private void logWalk(WorldPoint dst) {
+        WorldPoint myLocation = Rs2Player.getWorldLocation();
+        if (myLocation == null) {
+            Microbot.log("MyLocation is null");
+            return;
+        }
+        Microbot.log("Walking from (" + myLocation.getX() + "," + myLocation.getY() + "," + myLocation.getPlane() + ") to (" + dst.getX() + "," + dst.getY() + "," + dst.getPlane() + ")");
+
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+
+        while (!future.isDone()) {
+            if (Rs2Player.getWorldLocation().distanceTo(dst) <= 7) {
+                Rs2Walker.setTarget(null);
+                future.cancel(true);
+                break;
+            }
+            sleep(50);
+        }
+    }
+
     private void handleBanking() {
         // 1. Bank Open/Proximity
         if (!Rs2Bank.isOpen()) {
@@ -192,51 +212,35 @@ public class NetoSawmillPlanksScript extends Script {
         state = State.BUYING;
     }
 
-    private void logWalk(WorldPoint dst) {
-        WorldPoint myLocation = Rs2Player.getWorldLocation();
-        if (myLocation == null) {
-            Microbot.log("MyLocation is null");
-            return;
-        }
-        Microbot.log("Walking from (" + myLocation.getX() + "," + myLocation.getY() + "," + myLocation.getPlane() + ") to (" + dst.getX() + "," + dst.getY() + "," + dst.getPlane() + ")");
-
-        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
-
-        while (!future.isDone()) {
-            if (Rs2Player.getWorldLocation().distanceTo(dst) <= 7) {
-                Rs2Walker.setTarget(null);
-                future.cancel(true);
-                break;
-            }
-            sleep(50);
-        }
-    }
-
     private void handleBuying() {
         // Sawmill Interaction
+//        sleepUntil(() -> Rs2Npc.getNpc("Sawmill operator") != null, 3000);
+
         NPC sawmillOperator = Rs2Npc.getNpc("Sawmill operator");
-        if (sawmillOperator != null) {
-            Rs2Npc.interact(sawmillOperator, "Buy-Plank");
-            sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 5000);
-        }
+        if (sawmillOperator == null) return;
+
+//        if (sawmillOperator != null) {
+        Rs2Npc.interact(sawmillOperator, "Buy-Plank");
+        sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 10000);
+//        }
 
         // Buy First Batch
         if (Rs2Widget.findWidget("Mahogany - 1,500gp") != null) {
             Rs2Widget.clickWidget("Mahogany - 1,500gp");
-            sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany logs"), 3000); // Wait for Mahogany logs to be spent
+            sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany logs"), 10000); // Wait for Mahogany logs to be spent
         }
 
         // Empty Basket
         Rs2Inventory.interact(LOG_BASKET, "Empty");
-        sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
+        sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 10000);
 
         // Second Sawmill Interaction
         Rs2Npc.interact(sawmillOperator, "Buy-Plank");
-        sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 5000);
+        sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 10000);
 
         // Buy Second Batch
         Rs2Widget.clickWidget("Mahogany - 1,500gp");
-        sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 3000);
+        sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 10000);
 
         teleportToBank();
 
