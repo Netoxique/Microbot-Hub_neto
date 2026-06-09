@@ -73,7 +73,7 @@ public class NetoSawmillPlanksScript extends Script {
         // 3. Deposit Excess
         if (Rs2Inventory.hasItem("Plank sack")) {
             Rs2Inventory.interact("Plank sack", "Empty");
-            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 3000);
+            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"));
             sleepGaussian(150, 25);
         }
 
