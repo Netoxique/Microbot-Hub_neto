@@ -204,7 +204,7 @@ public class NetoSawmillPlanksScript extends Script {
         var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
 
         while (!future.isDone()) {
-            if (Rs2Player.getWorldLocation().distanceTo(dst) <= 15) {
+            if (Rs2Player.getWorldLocation().distanceTo(dst) <= 10) {
                 Rs2Walker.setTarget(null);
                 future.cancel(true);
                 break;
