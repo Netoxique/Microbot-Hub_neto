@@ -52,15 +52,16 @@ public class NetoSawmillPlanksScript extends Script {
         // 1. Bank Open/Proximity
         if (!Rs2Bank.isOpen()) {
             BankLocation nearestBank = Rs2Bank.getNearestBank();
-            if (Rs2Bank.isNearBank(nearestBank, 10)) {
+            if (Rs2Bank.isNearBank(nearestBank, 15)) {
                 Rs2Bank.openBank();
+                sleepUntil(Rs2Bank::isOpen);
             } else {
                 Rs2Bank.walkToBankAndUseBank(nearestBank);
             }
             return;
         }
 
-        // 2. Stamina Check
+        // Stamina Check
         if (Rs2Player.getRunEnergy() < 10) {
             if (Rs2Bank.hasItem("Stamina potion")) {
                 Rs2Bank.withdrawItem(false, "Stamina potion");
@@ -70,31 +71,7 @@ public class NetoSawmillPlanksScript extends Script {
             }
         }
 
-        // 3. Deposit Excess
-        if (Rs2Inventory.hasItem("Plank sack")) {
-            Rs2Inventory.interact("Plank sack", "Empty");
-            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"));
-            sleepGaussian(150, 25);
-        }
-
-        if (Rs2Inventory.hasItem("Mahogany plank")) {
-            Rs2Bank.depositAll("Mahogany plank");
-            sleepGaussian(400, 50);
-        }
-        
-        // Deposit anything that's not allowed
-        Rs2Bank.depositAllExcept(
-                "Plank sack",
-                "Log basket",
-                "Coins",
-                "Ring of dueling",
-                "Ring of the elements",
-                "Crafting cape",
-                "Farming cape",
-                "Sailors' amulet"
-        );
-        
-        // 4. Required Items Check
+        // Required Items Check
         if (!Rs2Equipment.isWearing("Ring of the elements")) {
             if (Rs2Inventory.hasItem("Ring of the elements")) {
                 Rs2Inventory.interact("Ring of the elements", "Wear");
@@ -116,7 +93,7 @@ public class NetoSawmillPlanksScript extends Script {
             sleepGaussian(400, 50);
         }
 
-        // 4.5 Initial Cleanup
+        // Initial Cleanup
         if (!hasPerformedInitialCleanup) {
             sleepUntil(() -> Rs2Inventory.hasItem(LOG_BASKET), 3000);
             Rs2Inventory.interact(LOG_BASKET, "Empty to bank");
@@ -124,7 +101,31 @@ public class NetoSawmillPlanksScript extends Script {
             hasPerformedInitialCleanup = true;
         }
 
-        // 5. Teleport Items Check
+        // Deposit anything that's not allowed
+        Rs2Bank.depositAllExcept(
+                "Plank sack",
+                "Log basket",
+                "Coins",
+                "Ring of dueling",
+                "Ring of the elements",
+                "Crafting cape",
+                "Farming cape",
+                "Sailors' amulet"
+        );
+
+        // Deposit Excess
+        if (Rs2Inventory.hasItem("Plank sack")) {
+            Rs2Inventory.interact("Plank sack", "Empty");
+            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"));
+            sleepGaussian(150, 25);
+        }
+
+        if (Rs2Inventory.hasItem("Mahogany plank")) {
+            Rs2Bank.depositAll("Mahogany plank");
+            sleepGaussian(400, 50);
+        }
+
+        // Teleport Items Check
         boolean hasTeleport = Rs2Equipment.isWearing("Crafting cape") || Rs2Equipment.isWearing("Farming cape") || 
                              Rs2Equipment.isWearing("Sailors' amulet") || Rs2Equipment.isWearing("Ring of dueling") ||
                              Rs2Inventory.hasItem("Crafting cape") || Rs2Inventory.hasItem("Farming cape") || 
@@ -142,31 +143,31 @@ public class NetoSawmillPlanksScript extends Script {
         if (Rs2Inventory.hasItem("Farming cape")) { Rs2Inventory.interact("Farming cape", "Wear"); return; }
         if (Rs2Inventory.hasItem("Sailors' amulet")) { Rs2Inventory.interact("Sailors' amulet", "Wear"); return; }
 
-        // 6. Withdraw Logs
+        // Withdraw Logs
         if (!Rs2Inventory.isFull()) {
             Rs2Bank.withdrawAll("Mahogany logs");
             sleepGaussian(400, 50);
         }
 
-        // 7. Close Bank
+        // Close Bank
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
 
-        // 8. Fill Basket
+        // Fill Basket
         sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
         sleepGaussian(150, 25);
         Rs2Inventory.interact(LOG_BASKET, "Fill");
         sleepGaussian(400, 50);
 
-        // 9. Open Bank
+        // Open Bank
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
 
-        // 10. Withdraw logs again
+        // Withdraw logs again
         sleepGaussian(400, 50);
         Rs2Bank.withdrawAll("Mahogany logs");
 
-        // 11. Close Bank
+        // Close Bank
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
         sleepGaussian(150, 25);
@@ -185,12 +186,6 @@ public class NetoSawmillPlanksScript extends Script {
         WorldPoint sawmillPoint = new WorldPoint(3302, 3491, 0);
         logWalk(sawmillPoint);
         state = State.BUYING;
-
-//        if (Rs2Player.getWorldLocation().distanceTo(sawmillPoint) > 15) {
-//            logWalk(sawmillPoint);
-//        } else {
-//            state = State.BUYING;
-//        }
     }
 
     private void logWalk(WorldPoint dst) {
@@ -204,7 +199,7 @@ public class NetoSawmillPlanksScript extends Script {
         var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
 
         while (!future.isDone()) {
-            if (Rs2Player.getWorldLocation().distanceTo(dst) <= 10) {
+            if (Rs2Player.getWorldLocation().distanceTo(dst) <= 7) {
                 Rs2Walker.setTarget(null);
                 future.cancel(true);
                 break;
@@ -227,20 +222,9 @@ public class NetoSawmillPlanksScript extends Script {
             sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany logs"), 3000); // Wait for Mahogany logs to be spent
         }
 
-//        // Planks automatically go into the sack, no need to manually fill them
-//        // Fill Sack
-//        if (Rs2Inventory.hasItem("Mahogany plank")) {
-//            Rs2Inventory.combine("Mahogany plank", "Plank sack");
-//            sleepUntil(() -> !Rs2Inventory.isFull(), 3000);
-//        }
-
         // Empty Basket
         Rs2Inventory.interact(LOG_BASKET, "Empty");
         sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
-//        if (Rs2Inventory.hasItem(LOG_BASKET)) {
-//            Rs2Inventory.interact(LOG_BASKET, "Empty");
-//            sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
-//        }
 
         // Second Sawmill Interaction
         Rs2Npc.interact(sawmillOperator, "Buy-Plank");
@@ -250,8 +234,32 @@ public class NetoSawmillPlanksScript extends Script {
         Rs2Widget.clickWidget("Mahogany - 1,500gp");
         sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 3000);
 
+        teleportToBank();
+
         // Transition
         state = State.BANKING;
+    }
+
+    private void teleportToBank() {
+        if (Rs2Equipment.isWearing("Crafting cape")) {
+            Rs2Equipment.interact("Crafting cape", "Teleport");
+        } else if (Rs2Inventory.hasItem("Crafting cape")) {
+            Rs2Inventory.interact("Crafting cape", "Teleport");
+        } else if (Rs2Equipment.isWearing("Farming cape")) {
+            Rs2Equipment.interact("Farming cape", "Teleport");
+        } else if (Rs2Inventory.hasItem("Farming cape")) {
+            Rs2Inventory.interact("Farming cape", "Teleport");
+        } else if (Rs2Equipment.isWearing("Sailors' amulet")) {
+            Rs2Equipment.interact("Sailors' amulet", "Deepfin Point");
+        } else if (Rs2Inventory.hasItem("Sailors' amulet")) {
+            Rs2Inventory.interact("Sailors' amulet", "Deepfin Point");
+        } else if (Rs2Equipment.isWearing("Ring of dueling")) {
+            Rs2Equipment.interact("Ring of dueling", "Castle Wars");
+        } else if (Rs2Inventory.hasItem("Ring of dueling")) {
+            Rs2Inventory.interact("Ring of dueling", "Castle Wars");
+        }
+        sleepUntil(Rs2Player::isAnimating, 2000);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 8000);
     }
 
     @Override
