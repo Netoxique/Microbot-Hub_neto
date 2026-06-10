@@ -1,6 +1,6 @@
 package net.runelite.client.plugins.microbot.netosawmillplanks;
 
-import net.runelite.api.NPC;
+import net.runelite.api.ItemID;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
@@ -14,6 +14,8 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 
 import javax.inject.Inject;
 import java.time.Instant;
@@ -61,12 +63,15 @@ public class NetoSawmillPlanksScript extends Script {
 
                 switch (state) {
                     case BANKING:
+                        Rs2Antiban.setActivityIntensity(ActivityIntensity.HIGH);
                         handleBanking();
                         break;
                     case WALKING_TO_SAWMILL:
+                        Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
                         handleWalking();
                         break;
                     case BUYING:
+                        Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
                         handleBuying();
                         break;
                 }
@@ -110,10 +115,14 @@ public class NetoSawmillPlanksScript extends Script {
             return;
         }
 
-        logsLeft = Rs2Bank.count("Mahogany logs");
+        logsLeft = Rs2Bank.count(ItemID.MAHOGANY_LOGS);
 
-        if (!Rs2Bank.hasItem("Mahogany logs")) {
-            Microbot.showMessage("No more logs available in bank.");
+        if (logsLeft == 0 && Rs2Bank.hasItem(ItemID.MAHOGANY_LOGS)) {
+            sleep(100);
+            logsLeft = Rs2Bank.count(ItemID.MAHOGANY_LOGS);
+        }
+
+        if (logsLeft == 0) {
             shutdown();
             return;
         }
@@ -123,7 +132,7 @@ public class NetoSawmillPlanksScript extends Script {
             if (Rs2Bank.hasItem("Stamina potion")) {
                 Rs2Bank.withdrawItem(false, "Stamina potion");
                 sleepUntil(() -> Rs2Inventory.hasItem("Stamina potion"), 3000);
-                sleepGaussian(400, 50);
+                sleepGaussian(400, 50); // 300 to 500 ms
                 Rs2Inventory.interact("Stamina potion", "Drink");
             }
         }
@@ -135,19 +144,19 @@ public class NetoSawmillPlanksScript extends Script {
             } else {
                 Rs2Bank.withdrawAndEquip("Ring of the elements");
             }
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
         if (!Rs2Inventory.hasItem("Coins")) {
             Rs2Bank.withdrawAll("Coins");
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
         if (!Rs2Inventory.hasItem("Plank sack")) {
             Rs2Bank.withdrawItem("Plank sack");
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
         if (!Rs2Inventory.hasItem(LOG_BASKET)) {
             Rs2Bank.withdrawItem(LOG_BASKET);
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
 
         // Cleanup once per run
@@ -177,13 +186,13 @@ public class NetoSawmillPlanksScript extends Script {
         if (Rs2Inventory.hasItem("Plank sack")) {
             Rs2Inventory.interact("Plank sack", "Empty");
             sleepUntil(() -> Rs2Inventory.hasItem("Mahogany plank"), 5000);
-            sleepGaussian(150, 25);
+            sleepGaussian(150, 25); // 100 to 200 ms
         }
 
         if (Rs2Inventory.hasItem("Mahogany plank")) {
             Rs2Bank.depositAll("Mahogany plank");
             sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany plank"), 5000);
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
 
         // Teleport Items Check
@@ -197,7 +206,7 @@ public class NetoSawmillPlanksScript extends Script {
             else if (Rs2Bank.hasItem("Farming cape")) Rs2Bank.withdrawAndEquip("Farming cape");
             else if (Rs2Bank.hasItem("Sailors' amulet")) Rs2Bank.withdrawAndEquip("Sailors' amulet");
             else Rs2Bank.withdrawItem(true, "Ring of dueling");
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
         
         if (Rs2Inventory.hasItem("Crafting cape")) { Rs2Inventory.interact("Crafting cape", "Wear"); return; }
@@ -207,7 +216,7 @@ public class NetoSawmillPlanksScript extends Script {
         // Withdraw Logs
         if (!Rs2Inventory.isFull()) {
             Rs2Bank.withdrawAll("Mahogany logs");
-            sleepGaussian(400, 50);
+            sleepGaussian(400, 50); // 300 to 500 ms
         }
 
         // Close Bank
@@ -216,22 +225,22 @@ public class NetoSawmillPlanksScript extends Script {
 
         // Fill Basket
         sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 3000);
-        sleepGaussian(150, 25);
+        sleepGaussian(150, 25); // 100 to 200 ms
         Rs2Inventory.interact(LOG_BASKET, "Fill");
-        sleepGaussian(400, 50);
+        sleepGaussian(400, 50); // 300 to 500 ms
 
         // Open Bank
         Rs2Bank.openBank();
         sleepUntil(Rs2Bank::isOpen);
 
         // Withdraw logs again
-        sleepGaussian(400, 50);
+        sleepGaussian(400, 50); // 300 to 500 ms
         Rs2Bank.withdrawAll("Mahogany logs");
 
         // Close Bank
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
-        sleepGaussian(150, 25);
+        sleepGaussian(150, 25); // 100 to 200 ms
 
         worldHopManager.recordCompletedTrip();
         worldHopManager.tryHopIfDue(this::isRunning);
@@ -257,22 +266,27 @@ public class NetoSawmillPlanksScript extends Script {
         sleepUntil(() -> Microbot.getRs2NpcCache().query().withId(SAWMILL_OPERATOR_ID).nearest() != null, 5000);
         npc_interact(SAWMILL_OPERATOR_ID, "Buy-Plank");
         sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 5000);
+        sleepGaussian(150, 25); // 100 to 200 ms
 
         // Buy First Batch
         Rs2Widget.clickWidget("Mahogany - 1,500gp");
         sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany logs"), 5000);
+        sleepGaussian(150, 25); // 100 to 200 ms
 
         // Empty Basket
         Rs2Inventory.interact(LOG_BASKET, "Empty");
         sleepUntil(() -> Rs2Inventory.hasItem("Mahogany logs"), 5000);
+        sleepGaussian(150, 25); // 100 to 200 ms
 
         // Second Sawmill Interaction
         npc_interact(SAWMILL_OPERATOR_ID, "Buy-Plank");
         sleepUntil(() -> Rs2Widget.findWidget("Mahogany - 1,500gp") != null, 5000);
+        sleepGaussian(150, 25); // 100 to 200 ms
 
         // Buy Second Batch
         Rs2Widget.clickWidget("Mahogany - 1,500gp");
         sleepUntil(() -> !Rs2Inventory.hasItem("Mahogany logs"), 5000);
+        sleepGaussian(400, 50); // 300 to 500 ms
 
         teleportToBank();
 

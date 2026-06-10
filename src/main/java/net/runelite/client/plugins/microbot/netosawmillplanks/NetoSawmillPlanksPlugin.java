@@ -11,7 +11,7 @@ import javax.inject.Inject;
 import java.awt.*;
 
 @PluginDescriptor(
-        name = PluginConstants.DEFAULT_PREFIX + "Neto Sawmill Planks",
+        name = "Neto Sawmill Planks",
         description = "Automates mahogany planks at the Earth Altar sawmill",
         tags = {"sawmill", "planks", "mahogany"},
         version = NetoSawmillPlanksPlugin.version,
