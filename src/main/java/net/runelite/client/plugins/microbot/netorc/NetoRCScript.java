@@ -661,8 +661,11 @@ public class NetoRCScript extends Script {
 
         if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() > 90) {
             setState(State.WALKING_TO);
-        } else if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() < 45
+        }
+        else if (config.runeType() == RuneType.WRATH
+                && Rs2Player.getRunEnergy() < 45
                 || Rs2Player.getHealthPercentage() < 50) {
+
             Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
             GameObject pohPortal = plugin.getPohPortal();
 
