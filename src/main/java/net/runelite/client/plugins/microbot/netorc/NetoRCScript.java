@@ -200,6 +200,7 @@ public class NetoRCScript extends Script {
     @Override
     public void shutdown() {
         invalidateCurrentRun();
+        breakManager.reset();
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
         Microbot.log("Script has been stopped");

@@ -326,6 +326,7 @@ public class NetoSawmillPlanksScript extends Script {
 
     @Override
     public void shutdown() {
+        breakManager.reset();
         super.shutdown();
     }
 }

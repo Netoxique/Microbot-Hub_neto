@@ -508,6 +508,7 @@ public class LunarPlankMakeScript extends Script {
 
     @Override
     public void shutdown() {
+        breakManager.reset();
         super.shutdown();
         plankMade = 0;
         combinedMessage = "";
