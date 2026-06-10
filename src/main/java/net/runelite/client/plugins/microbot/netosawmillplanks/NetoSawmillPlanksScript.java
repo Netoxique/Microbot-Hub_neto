@@ -117,12 +117,18 @@ public class NetoSawmillPlanksScript extends Script {
 
         logsLeft = Rs2Bank.count(ItemID.MAHOGANY_LOGS);
 
+        // Force Overlay refresh (not working)
         if (logsLeft == 0 && Rs2Bank.hasItem(ItemID.MAHOGANY_LOGS)) {
             sleep(100);
             logsLeft = Rs2Bank.count(ItemID.MAHOGANY_LOGS);
         }
 
+        // Log out if logs empty
         if (logsLeft == 0) {
+            Rs2Bank.closeBank();
+            sleepUntil(() -> !Rs2Bank.isOpen());
+            sleepGaussian(600, 50); // 300 to 500 ms
+            Rs2Player.logout();
             shutdown();
             return;
         }
@@ -243,7 +249,9 @@ public class NetoSawmillPlanksScript extends Script {
         sleepGaussian(150, 25); // 100 to 200 ms
 
         worldHopManager.recordCompletedTrip();
-        worldHopManager.tryHopIfDue(this::isRunning);
+        if (!breakManager.tryStartBreakAtSafePoint()) {
+            worldHopManager.tryHopIfDue(this::isRunning);
+        }
 
         state = State.WALKING_TO_SAWMILL;
     }
