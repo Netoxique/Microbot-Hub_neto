@@ -120,10 +120,12 @@ public class NetoRCPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
-        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR) && !hasRunecraftCape()) {
-            Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
-            Microbot.stopPlugin(this);
-            return;
+        if (Microbot.isLoggedIn()) {
+            if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR) && !hasRunecraftCape()) {
+                Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
+                Microbot.stopPlugin(this);
+                return;
+            }
         }
 
         startTime = Instant.now();

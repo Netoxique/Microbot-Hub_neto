@@ -505,7 +505,7 @@ public class NetoRCScript extends Script {
                 return;
             } else {
                 Microbot.log("Interacting with fairies");
-                interactObject(fairyRing.getId(), "Last-destination (DLS)");
+                interactObject(fairyRing.getId(), "Last-destination");
                 sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
             }
         }
@@ -564,68 +564,6 @@ public class NetoRCScript extends Script {
         }
     }
 
-    private void handleWrathWalking() {
-        if (plugin.isBreakHandlerEnabled()) {
-            BreakHandlerScript.setLockState(true);
-        }
-
-        if (Rs2Bank.isOpen()) {
-            Rs2Bank.closeBank();
-        }
-
-        WrathStep initialStep;
-        do {
-            initialStep = wrathStep;
-            switch (wrathStep) {
-                case MYTH_CAPE:
-                    if (Rs2Inventory.contains(mythCape)) {
-                        Rs2Inventory.interact(mythCape, "Teleport");
-                        sleepGaussian(700, 50); // 600 to 800 ms
-                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                        sleepUntilOnClientThread(() -> findObject(31626) != null, 5000); // Wait for Myth Statue
-                        wrathStep = WrathStep.MYTH_STATUE;
-                    }
-                    break;
-                case MYTH_STATUE:
-                    var statue = findObject(31626);
-                    if (statue != null && !Rs2Player.isAnimating()) {
-                        sleepGaussian(150, 25); // 100 to 200 ms
-                        interactObject(statue.getId(), "Teleport");
-                        sleepUntilOnClientThread(() -> findObject(31807) != null, 5000); // Wait for Cave
-                        wrathStep = WrathStep.CAVE;
-                    }
-                    break;
-                case CAVE:
-                    var cave = findObject(31807);
-                    if (cave != null) {
-                        sleepGaussian(150, 25); // 100 to 200 ms
-                        interactObject(cave.getId(), "Enter");
-                        sleepUntilOnClientThread(() -> findObject(wrathRuins) != null, 20000); // Wait for Ruins
-                        wrathStep = WrathStep.RUINS;
-                    }
-                    break;
-                case RUINS:
-                    var ruins = findObject(wrathRuins);
-                    if (ruins != null) {
-                        sleepGaussian(1250, 250); // 500 to 2000 ms
-                        interactObject(ruins.getId(), "Enter");
-                        sleepUntilOnClientThread(() -> findObject(wrathAltar) != null, 5000); // Wait for Altar
-                        wrathStep = WrathStep.ALTAR;
-                    }
-                    break;
-                case ALTAR:
-                    var altar = findObject(wrathAltar);
-                    if (altar != null) {
-                    sleepGaussian(150, 25); // 100 to 200 ms
-                        interactObject(altar.getId(), "Craft-rune");
-                        wrathStep = WrathStep.MYTH_CAPE;
-                        setState(State.CRAFTING);
-                        return;
-                    }
-                    break;
-            }
-        } while (wrathStep != initialStep);
-    }
 
     private boolean isBankingRegion(int currentRegion) {
         return Teleports.CRAFTING_CAPE.matchesRegion(currentRegion)
@@ -790,18 +728,21 @@ public class NetoRCScript extends Script {
 
     private void handlePohFairyRing() {
         if (findObject(ObjectID.POH_FAIRY_RING) != null) {
-            interactObject(ObjectID.POH_FAIRY_RING, "Last-destination (DLS)");
+            interactObject(ObjectID.POH_FAIRY_RING, "Last-destination");
             Microbot.log("Using fairy ring");
-            Rs2Player.waitForAnimation(1200);
-            sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing), 1200);
+//            sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing), 1200);
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
             setState(State.WALKING_TO);
         } else {
             var pohTreeRing = new Rs2TileObjectQueryable().withNameContains("spirit").first();
             if (pohTreeRing != null) {
-                interactObject(pohTreeRing.getId(), "Ring-last-destination (DLS)");
+                interactObject(pohTreeRing.getId(), "Ring-last-destination");
                 Microbot.log("Using fairy tree");
                 Rs2Player.waitForAnimation();
-                sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
+//                sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
+                sleepUntil(Rs2Player::isAnimating, 5000);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
             } else {
                 Microbot.log("Unable to find fairy ring, resetting to banking for a retry");
                 setState(State.BANKING);
@@ -821,76 +762,168 @@ public class NetoRCScript extends Script {
 
         if (config.runeType() == RuneType.WRATH) {
             handleWrathWalking();
+        } else if (config.runeType() == RuneType.BLOOD) {
+            handleBloodWalking();
+        }
+    }
+
+
+    private void handleBloodWalking() {
+        Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
+
+        sleepUntil(() -> findObject(16308) != null, 5000); // Wait for Cave 1
+        interactObject(16308, "Enter");
+        sleepUntil(Rs2Player::isAnimating, 5000);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+        sleepGaussian(150, 25); // 100 to 200 ms
+
+        sleepUntil(() -> findObject(5046) != null, 5000); // Wait for Cave 2
+        interactObject(5046, "Enter");
+        sleepUntil(Rs2Player::isAnimating, 5000);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+        sleepGaussian(150, 25); // 100 to 200 ms
+
+        int agilityLevel = Rs2Player.getRealSkillLevel(Skill.AGILITY);
+        if (agilityLevel >= 93) {
+            sleepUntil(() -> findObject(43759) != null, 5000); // Wait for Cave 3 (lvl 93 Agi)
+            interactObject(43759, "Enter");
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            sleepGaussian(150, 25); // 100 to 200 ms
+
+            sleepUntil(() -> findObject(43762) != null, 5000); // Wait for Cave 4 (lvl 93 Agi)
+            interactObject(43762, "Enter");
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            sleepGaussian(150, 25); // 100 to 200 ms
+
+            interactObject(bloodRuins, "Enter");
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+
+            sleepUntil(() -> findObject(bloodAltar) != null, 5000); // Wait for Altar
+            interactObject(bloodAltar, "Craft-rune");
+
+            setState(State.CRAFTING);
         }
 
-        if (config.runeType() == RuneType.BLOOD) {
-            Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
-            if (plugin.getMyWorldPoint().equals(caveFairyRing)) {
-                sleepGaussian(900, 200);
-                interactObject(16308, "Enter");
-                sleepUntil(() -> Rs2Player.getWorldLocation().equals(firstCaveExit), 1200);
-                sleepGaussian(900, 200);
-            }
-
-            if (plugin.getMyWorldPoint().equals(firstCaveExit) &&
-                    Rs2Player.getRealSkillLevel(Skill.AGILITY) >= 93) {
-                Microbot.log("Walking to blood ruins " +
-                        outsideBloodRuins93);
+        if (plugin.getMyWorldPoint().equals(firstCaveExit)) {
+            if (agilityLevel >= 93) {
+                Microbot.log("Walking to blood ruins " + outsideBloodRuins93);
                 Rs2Walker.walkTo(outsideBloodRuins93);
-                sleepUntil(() -> Rs2Player.getWorldLocation().equals(outsideBloodRuins93), 1200);
-            }
-
-            if (plugin.getMyWorldPoint().equals(firstCaveExit) &&
-                    Rs2Player.getRealSkillLevel(Skill.AGILITY) < 93 && Rs2Player.getRealSkillLevel(Skill.AGILITY) >= 74) {
+//                sleepUntil(() -> Rs2Player.getWorldLocation().equals(outsideBloodRuins93), 1200);
+                sleepUntil(Rs2Player::isAnimating, 5000);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            } else if (agilityLevel >= 74) {
                 Microbot.log("Walking to ruins: " + outsideBloodRuins74);
                 Rs2Walker.walkTo(outsideBloodRuins74);
-                sleepUntil(() -> plugin.getMyWorldPoint().equals(outsideBloodRuins74), 1200);
-            }
-
-            var ruins = findObject(bloodRuins);
-
-            if (plugin.getMyWorldPoint().equals(firstCaveExit) && Rs2Player.getRealSkillLevel(Skill.AGILITY) < 74) {
+//                sleepUntil(() -> plugin.getMyWorldPoint().equals(outsideBloodRuins74), 1200);
+                sleepUntil(Rs2Player::isAnimating, 5000);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            } else {
                 Microbot.log("Walking to ruins: " + outsideBloodRuins73);
                 Rs2Walker.walkTo(outsideBloodRuins73);
                 sleepUntil(() -> Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 5);
             }
+        }
 
-            if (ruins != null && plugin.getMyWorldPoint().getRegionID() == 14232
-                    && !Rs2Player.isMoving() && !Rs2Player.isAnimating() &&
-                    Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 18) {
+        if (plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion) {
+            var altar = findObject(bloodAltar);
+            if (altar != null) {
+                sleepGaussian(150, 25);
+                interactObject(bloodAltar, "Craft-rune");
                 setState(State.CRAFTING);
             }
         }
+        else {
+            var ruins = findObject(bloodRuins);
+            if (ruins != null && plugin.getMyWorldPoint().getRegionID() == 14232
+                    && !Rs2Player.isMoving() && !Rs2Player.isAnimating() &&
+                    Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 18) {
+                interactObject(bloodRuins, "Enter");
+//                sleepUntil(() -> !Rs2Player.isAnimating() && plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion, 5000);
+                sleepUntil(Rs2Player::isAnimating, 5000);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+                sleepGaussian(150, 25);
+            }
+        }
     }
+
+
+    private void handleWrathWalking() {
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(true);
+        }
+
+        if (Rs2Bank.isOpen()) {
+            Rs2Bank.closeBank();
+        }
+
+        WrathStep initialStep;
+        do {
+            initialStep = wrathStep;
+            switch (wrathStep) {
+                case MYTH_CAPE:
+                    if (Rs2Inventory.contains(mythCape)) {
+                        Rs2Inventory.interact(mythCape, "Teleport");
+                        sleepGaussian(700, 50); // 600 to 800 ms
+                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                        sleepUntilOnClientThread(() -> findObject(31626) != null, 5000); // Wait for Myth Statue
+                        wrathStep = WrathStep.MYTH_STATUE;
+                    }
+                    break;
+                case MYTH_STATUE:
+                    var statue = findObject(31626);
+                    if (statue != null && !Rs2Player.isAnimating()) {
+                        sleepGaussian(150, 25); // 100 to 200 ms
+                        interactObject(statue.getId(), "Teleport");
+                        sleepUntilOnClientThread(() -> findObject(31807) != null, 5000); // Wait for Cave
+                        wrathStep = WrathStep.CAVE;
+                    }
+                    break;
+                case CAVE:
+                    var cave = findObject(31807);
+                    if (cave != null) {
+                        sleepGaussian(150, 25); // 100 to 200 ms
+                        interactObject(cave.getId(), "Enter");
+                        sleepUntilOnClientThread(() -> findObject(wrathRuins) != null, 20000); // Wait for Ruins
+                        wrathStep = WrathStep.RUINS;
+                    }
+                    break;
+                case RUINS:
+                    var ruins = findObject(wrathRuins);
+                    if (ruins != null) {
+                        sleepGaussian(1250, 250); // 500 to 2000 ms
+                        interactObject(ruins.getId(), "Enter");
+                        sleepUntilOnClientThread(() -> findObject(wrathAltar) != null, 5000); // Wait for Altar
+                        wrathStep = WrathStep.ALTAR;
+                    }
+                    break;
+                case ALTAR:
+                    var altar = findObject(wrathAltar);
+                    if (altar != null) {
+                        sleepGaussian(150, 25); // 100 to 200 ms
+                        interactObject(altar.getId(), "Craft-rune");
+                        wrathStep = WrathStep.MYTH_CAPE;
+                        setState(State.CRAFTING);
+                        return;
+                    }
+                    break;
+            }
+        } while (wrathStep != initialStep);
+    }
+
 
     private void handleCrafting() {
         if (plugin.isBreakHandlerEnabled()) {
             BreakHandlerScript.setLockState(true);
         }
 
-        if (config.runeType() == RuneType.BLOOD) {
-            interactObject(bloodRuins, "Enter");
-            sleepUntil(() -> !Rs2Player.isAnimating() && plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion);
-            sleepGaussian(700, 200);
-            interactObject(bloodAltar, "Craft-rune");
-            Rs2Player.waitForXpDrop(Skill.RUNECRAFT);
-            plugin.updateXpGained();
-            handleEmptyPouch();
-
-            while (plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion && isRunning()) {
-                if (Rs2Inventory.allPouchesEmpty() && !Rs2Inventory.contains("Pure essence")) {
-                    Microbot.log("We are in altar region and out of p ess, banking...");
-                    handleBankTeleport();
-                    sleepGaussian(500, 200);
-                }
-            }
-            setState(State.BANKING);
-        }
-
-        if (config.runeType() == RuneType.WRATH) {
-            sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(ItemID.WRATHRUNE));
-            handleEmptyPouch();
-        }
+        int runeId = config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune;
+        sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(runeId));
+        
+        plugin.updateXpGained();
+        handleEmptyPouch();
 
         worldHopManager.recordCompletedTrip();
 
@@ -936,14 +969,6 @@ public class NetoRCScript extends Script {
         while (!Rs2Inventory.allPouchesEmpty() && isRunning()) {
             Microbot.log("Pouches are not empty. Crafting more");
             Rs2Inventory.emptyPouches();
-
-//            // Determine the altar to interact with and hover the mouse over it
-//            var altar = config.runeType() == RuneType.BLOOD
-//                    ? findObject(bloodAltar)
-//                    : findObject(wrathAltar);
-//            if (altar != null) {
-//                Rs2GameObject.hoverOverObject(altar);
-//            }
 
             sleepUntil(() -> Rs2Inventory.contains(pureEss));
 
