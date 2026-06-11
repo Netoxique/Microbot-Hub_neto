@@ -805,26 +805,7 @@ public class NetoRCScript extends Script {
             interactObject(bloodAltar, "Craft-rune");
 
             setState(State.CRAFTING);
-        }
-
-        if (plugin.getMyWorldPoint().equals(firstCaveExit)) {
-            if (agilityLevel >= 93) {
-                Microbot.log("Walking to blood ruins " + outsideBloodRuins93);
-                Rs2Walker.walkTo(outsideBloodRuins93);
-//                sleepUntil(() -> Rs2Player.getWorldLocation().equals(outsideBloodRuins93), 1200);
-                sleepUntil(Rs2Player::isAnimating, 5000);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            } else if (agilityLevel >= 74) {
-                Microbot.log("Walking to ruins: " + outsideBloodRuins74);
-                Rs2Walker.walkTo(outsideBloodRuins74);
-//                sleepUntil(() -> plugin.getMyWorldPoint().equals(outsideBloodRuins74), 1200);
-                sleepUntil(Rs2Player::isAnimating, 5000);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            } else {
-                Microbot.log("Walking to ruins: " + outsideBloodRuins73);
-                Rs2Walker.walkTo(outsideBloodRuins73);
-                sleepUntil(() -> Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 5);
-            }
+            return;
         }
 
         if (plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion) {
@@ -833,9 +814,23 @@ public class NetoRCScript extends Script {
                 sleepGaussian(150, 25);
                 interactObject(bloodAltar, "Craft-rune");
                 setState(State.CRAFTING);
+                return;
             }
         }
-        else {
+
+        if (agilityLevel >= 74) {
+            Microbot.log("Walking to ruins: " + outsideBloodRuins74);
+            Rs2Walker.walkTo(outsideBloodRuins74);
+//            sleepUntil(() -> plugin.getMyWorldPoint().equals(outsideBloodRuins74), 1200);
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+        } else {
+            Microbot.log("Walking to ruins: " + outsideBloodRuins73);
+            Rs2Walker.walkTo(outsideBloodRuins73);
+            sleepUntil(() -> Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 5);
+        }
+
+        if (plugin.getMyWorldPoint().getRegionID() != bloodAltarRegion) {
             var ruins = findObject(bloodRuins);
             if (ruins != null && plugin.getMyWorldPoint().getRegionID() == 14232
                     && !Rs2Player.isMoving() && !Rs2Player.isAnimating() &&
@@ -920,7 +915,8 @@ public class NetoRCScript extends Script {
         }
 
         int runeId = config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune;
-        sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(runeId));
+        // Wait for first batch to be crafted
+        sleepUntilOnClientThread(() -> !Rs2Inventory.contains(pureEss), 15000);
         
         plugin.updateXpGained();
         handleEmptyPouch();
@@ -977,8 +973,8 @@ public class NetoRCScript extends Script {
             if (config.runeType() == RuneType.WRATH) {
                 interactObject(wrathAltar, "Craft-rune");
             }
-            Rs2Player.waitForXpDrop(Skill.RUNECRAFT);
-            plugin.updateXpGained();
+//            Rs2Player.waitForXpDrop(Skill.RUNECRAFT);
+//            plugin.updateXpGained();
         }
     }
 
