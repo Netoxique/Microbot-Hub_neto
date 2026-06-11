@@ -410,6 +410,7 @@ public class NetoRCScript extends Script {
             Microbot.log("We are full, lets go");
             Rs2Bank.closeBank();
             sleepUntil(() -> !Rs2Bank.isOpen(), 1200);
+
             if (config.runeType() == RuneType.BLOOD) {
                 if (Rs2Inventory.contains(inactiveBloodEssence)) {
                     Rs2Inventory.interact(inactiveBloodEssence, "Activate");
@@ -438,11 +439,11 @@ public class NetoRCScript extends Script {
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
                     Rs2Bank.depositAll(bloodRune);
-                    sleepGaussian(300, 100);
+                    sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
                     Rs2Bank.depositAll(wrathRune);
-                    sleepGaussian(300, 100);
+                    sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 Rs2Bank.withdrawAll(pureEss);
                 sleepUntil(Rs2Inventory::isFull);
@@ -965,10 +966,9 @@ public class NetoRCScript extends Script {
     }
 
     private void handleEmptyPouch() {
-        while (!Rs2Inventory.allPouchesEmpty() && isRunning()) {
+        while (!Rs2Inventory.allPouchesEmpty()) {
             Microbot.log("Pouches are not empty. Crafting more");
-            Rs2Inventory.emptyPouches();
-
+            Rs2Inventory.interact("Colossal Pouch", "Empty");
             sleepUntil(() -> Rs2Inventory.contains(pureEss));
 
             if (config.runeType() == RuneType.BLOOD) {
