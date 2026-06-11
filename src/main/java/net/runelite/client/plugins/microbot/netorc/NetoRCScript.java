@@ -26,6 +26,7 @@ import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
@@ -350,40 +351,40 @@ public class NetoRCScript extends Script {
                 Rs2Bank.withdrawAndEquip("Runecraft cape");
                 sleepGaussian(700, 200);
             }
+        }
+
+        // Handle POH Teleports
+        if (config.usePoh()) {
+            boolean hasPohTeleport = Rs2Equipment.isWearing(Teleports.CONSTRUCTION_CAPE.getItemIds())
+                    || Rs2Inventory.contains(Teleports.CONSTRUCTION_CAPE.getItemIds())
+                    || Rs2Inventory.contains(Teleports.HOUSE_TAB.getItemIds())
+                    || (Rs2Inventory.hasRunePouch() && runecraftLevel >= 99);
+
+            if (!hasPohTeleport) {
+                if (Rs2Bank.hasItem(Teleports.CONSTRUCTION_CAPE.getItemIds())) {
+                    if (runecraftLevel >= 99) {
+                        Rs2Bank.withdrawItem(Teleports.CONSTRUCTION_CAPE.getItemIds()[0]);
+                        sleepUntil(() -> Rs2Inventory.contains(Teleports.CONSTRUCTION_CAPE.getItemIds()));
+                    } else {
+                        Rs2Bank.withdrawAndEquip(Teleports.CONSTRUCTION_CAPE.getItemIds()[0]);
+                        sleepUntil(() -> Rs2Equipment.isWearing(Teleports.CONSTRUCTION_CAPE.getItemIds()));
+                    }
+                } else if (runecraftLevel >= 99 && Rs2Bank.hasRunePouch()) {
+                    Rs2Bank.withdrawRunePouch();
+                    sleepUntil(Rs2Inventory::hasRunePouch);
+                } else if (Rs2Bank.hasItem(Teleports.HOUSE_TAB.getItemIds())) {
+                    Rs2Bank.withdrawAll(Teleports.HOUSE_TAB.getItemIds()[0]);
+                    sleepUntil(() -> Rs2Inventory.contains(Teleports.HOUSE_TAB.getItemIds()));
+                }
+            }
         } else {
-            if (!Rs2Inventory.hasRunePouch()) {
+            if (runecraftLevel < 99 && !Rs2Inventory.hasRunePouch()) {
                 Rs2Bank.withdrawRunePouch();
                 sleepGaussian(700, 200);
             }
         }
 
-        if (config.usePoh()) {
-            List<Teleports> bankTeleports = Arrays.asList(Teleports.CRAFTING_CAPE,
-                    Teleports.FARMING_CAPE);
-            boolean hasBankTeleport = false;
-            for (Teleports bankTeleport : bankTeleports) {
-                for (Integer bankTeleportID : bankTeleport.getItemIds()) {
-                    if (Rs2Equipment.isWearing(bankTeleportID) || Rs2Inventory.contains(Teleports.HOUSE_TAB.getItemIds())) {
-                        hasBankTeleport = true;
-                        break;
-                    } else if (!Rs2Equipment.isWearing(bankTeleportID) && Rs2Bank.hasItem(bankTeleportID)) {
-                        Microbot.log("Withdrawing bank teleport " + bankTeleport.getName());
-                        Rs2Bank.withdrawAndEquip(bankTeleportID);
-                        sleepUntil(() -> Rs2Equipment.isWearing(bankTeleportID), 2400);
-                        if (!Rs2Bank.hasItem(bankTeleportID)) {
-                            Microbot.log("Withdrawing all house tabs");
-                            Rs2Bank.withdrawAll(Arrays.toString(Teleports.HOUSE_TAB.getItemIds()));
-                            sleepUntil(() -> Rs2Inventory.contains(Teleports.HOUSE_TAB.getItemIds()), 2400);
-                        }
-                    }
-                }
-                if (hasBankTeleport) {
-                    Microbot.log("We have a bank teleport: " + bankTeleport.getName());
-                    break;
-                }
-            }
-        }
-
+        // Get sailor's amulet
         for (int sailorsAmuletId : Teleports.SAILORS_AMULET.getItemIds()) {
             if (!Rs2Equipment.isWearing(sailorsAmuletId) && Rs2Bank.hasItem(sailorsAmuletId)) {
                 Microbot.log("Withdrawing bank teleport " + Teleports.SAILORS_AMULET.getName());
@@ -667,26 +668,41 @@ public class NetoRCScript extends Script {
                 && Rs2Player.getRunEnergy() < 45
                 || Rs2Player.getHealthPercentage() < 50) {
 
-            Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
             GameObject pohPortal = plugin.getPohPortal();
 
-            if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
-                Microbot.log("Con cape not found");
-                homeTeleports = Teleports.HOUSE_TAB;
-            }
-            for (Integer itemId : homeTeleports.getItemIds()) {
-                if (Rs2Inventory.contains(itemId)) {
-                    Microbot.log("Using " + homeTeleports.getName());
-                    Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
-                    sleepGaussian(1100, 200);
-                    sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                    sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                    sleepGaussian(1300, 200);
+            if (client.getRealSkillLevel(Skill.RUNECRAFT) >= 99 && Rs2Inventory.hasRunePouch()) {
+                Microbot.log("Using Teleport to House spell");
+                Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
+                sleepGaussian(1100, 200);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+                sleepGaussian(1300, 200);
 
-                    if (pohPortal != null) {
-                        Microbot.log("Poh portal found, we are home");
+                if (pohPortal != null) {
+                    Microbot.log("Poh portal found, we are home");
+                }
+                Microbot.log("We should be in poh fully loaded");
+            } else {
+                Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
+
+                if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
+                    Microbot.log("Con cape not found");
+                    homeTeleports = Teleports.HOUSE_TAB;
+                }
+                for (Integer itemId : homeTeleports.getItemIds()) {
+                    if (Rs2Inventory.contains(itemId)) {
+                        Microbot.log("Using " + homeTeleports.getName());
+                        Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
+                        sleepGaussian(1100, 200);
+                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                        sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+                        sleepGaussian(1300, 200);
+
+                        if (pohPortal != null) {
+                            Microbot.log("Poh portal found, we are home");
+                        }
+                        Microbot.log("We should be in poh fully loaded");
                     }
-                    Microbot.log("We should be in poh fully loaded");
                 }
             }
 
@@ -714,26 +730,41 @@ public class NetoRCScript extends Script {
             if (Rs2Equipment.isWearing(Arrays.toString(Teleports.FARMING_CAPE.getItemIds()))) {
                 handleFarmingCape();
             }
-            Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
             GameObject pohPortal = plugin.getPohPortal();
 
-            if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
-                Microbot.log("Con cape not found");
-                homeTeleports = Teleports.HOUSE_TAB;
-            }
-            for (Integer itemId : homeTeleports.getItemIds()) {
-                if (Rs2Inventory.contains(itemId)) {
-                    Microbot.log("Using " + homeTeleports.getName());
-                    Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
-                    sleepGaussian(1100, 200);
-                    sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                    sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                    sleepGaussian(1300, 200);
+            if (client.getRealSkillLevel(Skill.RUNECRAFT) >= 99 && Rs2Inventory.hasRunePouch()) {
+                Microbot.log("Using Teleport to House spell");
+                Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
+                sleepGaussian(1100, 200);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+                sleepGaussian(1300, 200);
 
-                    if (pohPortal != null) {
-                        Microbot.log("Poh portal found, we are home");
+                if (pohPortal != null) {
+                    Microbot.log("Poh portal found, we are home");
+                }
+                Microbot.log("We should be in poh fully loaded");
+            } else {
+                Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
+
+                if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
+                    Microbot.log("Con cape not found");
+                    homeTeleports = Teleports.HOUSE_TAB;
+                }
+                for (Integer itemId : homeTeleports.getItemIds()) {
+                    if (Rs2Inventory.contains(itemId)) {
+                        Microbot.log("Using " + homeTeleports.getName());
+                        Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
+                        sleepGaussian(1100, 200);
+                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                        sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+                        sleepGaussian(1300, 200);
+
+                        if (pohPortal != null) {
+                            Microbot.log("Poh portal found, we are home");
+                        }
+                        Microbot.log("We should be in poh fully loaded");
                     }
-                    Microbot.log("We should be in poh fully loaded");
                 }
             }
 
