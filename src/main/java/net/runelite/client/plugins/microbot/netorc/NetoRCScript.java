@@ -129,7 +129,12 @@ public class NetoRCScript extends Script {
         Rs2Antiban.setActivity(Activity.CRAFTING_BLOODS_TRUE_ALTAR);
         Rs2Camera.setZoom(100);
         Rs2Camera.setPitch(305);
-        Rs2Camera.setYaw(1024);
+        sleepGaussian(300, 25);
+        if (config.runeType() == RuneType.WRATH) {
+            Rs2Camera.setYaw(1024);
+        } else {
+            Rs2Camera.setYaw(1536);
+        }
         sleepGaussian(700, 200);
         Microbot.log("Script has started");
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
