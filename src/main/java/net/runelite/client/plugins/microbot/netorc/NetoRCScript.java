@@ -679,6 +679,7 @@ public class NetoRCScript extends Script {
                 Microbot.log("Using Teleport to House spell");
                 Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
                 sleepGaussian(1100, 200);
+                sleepUntil(Rs2Player::isAnimating, 5000);
                 sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
                 sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
                 sleepGaussian(1300, 200);
@@ -714,10 +715,9 @@ public class NetoRCScript extends Script {
                             sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
                         });
             }
-
             if (Rs2Player.getRunEnergy() > 45) {
                 if (config.runeType() == RuneType.BLOOD) {
-                    sleepGaussian(700, 200);
+//                    sleepGaussian(700, 200);
                     handlePohFairyRing();
                 }
             }
@@ -725,31 +725,31 @@ public class NetoRCScript extends Script {
     }
 
     private void handlePohFairyRing() {
+
+        // Wait for Fairy Ring / Tree with ring
+        sleepUntil(() ->
+            findObject(ObjectID.POH_FAIRY_RING) != null ||
+            new Rs2TileObjectQueryable().withNameContains("spirit").first() != null, 10000);
+
         if (findObject(ObjectID.POH_FAIRY_RING) != null) {
             interactObject(ObjectID.POH_FAIRY_RING, "Last-destination");
             Microbot.log("Using fairy ring");
-//            sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing), 1200);
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-            setState(State.WALKING_TO);
+//            setState(State.WALKING_TO);
         } else {
             var pohTreeRing = new Rs2TileObjectQueryable().withNameContains("spirit").first();
             if (pohTreeRing != null) {
-                interactObject(pohTreeRing.getId(), "Ring-last-destination");
+                interactObject(pohTreeRing.getId(), "Last-destination");
                 Microbot.log("Using fairy tree");
                 Rs2Player.waitForAnimation();
-//                sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
-                sleepUntil(Rs2Player::isAnimating, 5000);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-            } else {
+            }
+            else {
                 Microbot.log("Unable to find fairy ring, resetting to banking for a retry");
                 setState(State.BANKING);
             }
         }
 
-        if (Rs2Player.getWorldLocation().equals(caveFairyRing)) {
-            setState(State.WALKING_TO);
-        }
+        Rs2Player.waitForAnimation();
+        setState(State.WALKING_TO);
     }
 
 
@@ -768,6 +768,8 @@ public class NetoRCScript extends Script {
 
     private void handleBloodWalking() {
         Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
+
+//        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
 
         sleepUntil(() -> findObject(16308) != null, 5000); // Wait for Cave 1
         interactObject(16308, "Enter");
