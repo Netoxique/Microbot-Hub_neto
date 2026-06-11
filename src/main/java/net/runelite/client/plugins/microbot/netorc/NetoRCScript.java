@@ -683,11 +683,8 @@ public class NetoRCScript extends Script {
                 sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
                 sleepGaussian(1300, 200);
 
-                if (pohPortal != null) {
-                    Microbot.log("Poh portal found, we are home");
-                }
-                Microbot.log("We should be in poh fully loaded");
-            } else {
+            }
+            else {
                 Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
 
                 if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
@@ -703,10 +700,6 @@ public class NetoRCScript extends Script {
                         sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
                         sleepGaussian(1300, 200);
 
-                        if (pohPortal != null) {
-                            Microbot.log("Poh portal found, we are home");
-                        }
-                        Microbot.log("We should be in poh fully loaded");
                     }
                 }
             }
