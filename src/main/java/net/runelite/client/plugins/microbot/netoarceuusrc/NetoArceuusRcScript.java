@@ -52,8 +52,8 @@ public class NetoArceuusRcScript extends Script {
     private static final int REACHED_DISTANCE = 10;
     private static final int ESSENCE_SLOT = 26;
     private static final int CHISEL_SLOT = 27;
-    private static final int CHIP_CLICK_DELAY_MIN = 75;
-    private static final int CHIP_CLICK_DELAY_MAX = 175;
+    private static final int CHIP_CLICK_DELAY_MIN = 60;
+    private static final int CHIP_CLICK_DELAY_MAX = 150;
 
     @Getter
     private String state = "Unknown";
