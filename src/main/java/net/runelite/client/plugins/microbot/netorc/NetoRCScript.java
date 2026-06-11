@@ -318,7 +318,6 @@ public class NetoRCScript extends Script {
 
         if (config.runeType() == RuneType.WRATH) {
             handleWrathReqEquip();
-            sleepGaussian(600, 125);
         }
 
         if (config.runeType() == RuneType.BLOOD) {
