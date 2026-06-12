@@ -46,7 +46,7 @@ public class NetoSawmillPlanksOverlay extends OverlayPanel {
                     .left("Logs left:").right(String.valueOf(script.getLogsLeft())).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Trips:").right(worldHopManager.getTripsDisplay()).build());
+                    .left("World Hop In:").right(worldHopManager.getWorldHopDisplay()).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Break In:").right(breakManager.getBreakInDisplay()).build());

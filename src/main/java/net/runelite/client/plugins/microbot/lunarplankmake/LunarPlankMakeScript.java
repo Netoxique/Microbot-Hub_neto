@@ -136,7 +136,6 @@ public class LunarPlankMakeScript extends Script {
         int logId = config.ITEM().getLogItemId();
         if (!Rs2Inventory.hasItem(logId)) {
             if (inventoryStarted) {
-                worldHopManager.recordCompletedTrip();
                 inventoryStarted = false;
                 if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
                     return;

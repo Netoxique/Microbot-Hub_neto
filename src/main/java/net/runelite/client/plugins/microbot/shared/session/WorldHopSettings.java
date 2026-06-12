@@ -5,9 +5,9 @@ import net.runelite.client.config.ConfigItem;
 public interface WorldHopSettings {
     boolean enableWorldJumping();
 
-    int minTrips();
+    int minMinutes();
 
-    int maxTrips();
+    int maxMinutes();
 
     NetoWorldHopRegion worldJumpRegion();
 

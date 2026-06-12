@@ -27,7 +27,7 @@ import java.time.Instant;
 )
 public class NetoArceuusRcPlugin extends Plugin {
 
-    public static final String version = "1.0.5";
+    public static final String version = "1.0.6";
 
     @Getter
     @Inject

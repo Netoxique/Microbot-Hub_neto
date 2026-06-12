@@ -1038,8 +1038,6 @@ public class NetoRCScript extends Script {
         plugin.updateXpGained();
         handleEmptyPouch();
 
-        worldHopManager.recordCompletedTrip();
-
         if (pauseForBreakAfterCrafting()) {
             setState(State.BANKING);
             return;

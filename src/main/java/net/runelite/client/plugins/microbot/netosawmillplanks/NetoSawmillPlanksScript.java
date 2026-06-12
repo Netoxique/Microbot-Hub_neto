@@ -248,7 +248,6 @@ public class NetoSawmillPlanksScript extends Script {
         sleepUntil(() -> !Rs2Bank.isOpen());
         sleepGaussian(150, 25); // 100 to 200 ms
 
-        worldHopManager.recordCompletedTrip();
         if (!breakManager.tryStartBreakAtSafePoint()) {
             worldHopManager.tryHopIfDue(this::isRunning);
         }

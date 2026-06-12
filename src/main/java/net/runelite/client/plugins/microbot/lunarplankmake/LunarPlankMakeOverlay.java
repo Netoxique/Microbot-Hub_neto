@@ -41,7 +41,7 @@ public class LunarPlankMakeOverlay extends OverlayPanel {
                 .build());
 
         panelComponent.getChildren().add(LineComponent.builder()
-                .left("Inventories:").right(worldHopManager.getTripsDisplay()).build());
+                .left("World Hop In:").right(worldHopManager.getWorldHopDisplay()).build());
 
         panelComponent.getChildren().add(LineComponent.builder()
                 .left("Break In:").right(breakManager.getBreakInDisplay()).build());

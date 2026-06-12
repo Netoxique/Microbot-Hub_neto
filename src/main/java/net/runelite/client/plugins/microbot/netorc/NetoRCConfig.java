@@ -74,7 +74,7 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, R
     @ConfigItem(
             keyName = "enableWorldJumping",
             name = "Enable World Jumping",
-            description = "Hop to another members world after a random number of completed trips.",
+            description = "Hop to another members world after a random number of minutes.",
             position = 1,
             section = worldJumpingSection
     )
@@ -84,26 +84,26 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, R
 
     @Range(min = 1)
     @ConfigItem(
-            keyName = "minTrips",
-            name = "Min. Trips",
-            description = "Minimum completed trips before world jumping.",
+            keyName = "minMinutes",
+            name = "Min. Minutes",
+            description = "Minimum minutes before world jumping.",
             position = 2,
             section = worldJumpingSection
     )
-    default int minTrips() {
-        return 15;
+    default int minMinutes() {
+        return 10;
     }
 
     @Range(min = 1)
     @ConfigItem(
-            keyName = "maxTrips",
-            name = "Max. Trips",
-            description = "Maximum completed trips before world jumping.",
+            keyName = "maxMinutes",
+            name = "Max. Minutes",
+            description = "Maximum minutes before world jumping.",
             position = 3,
             section = worldJumpingSection
     )
-    default int maxTrips() {
-        return 20;
+    default int maxMinutes() {
+        return 15;
     }
 
     @ConfigItem(

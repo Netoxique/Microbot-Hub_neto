@@ -20,7 +20,7 @@ import java.awt.*;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 public class NetoSawmillPlanksPlugin extends Plugin {
-    public static final String version = "1.0.0";
+    public static final String version = "1.0.1";
     @Inject
     private NetoSawmillPlanksScript netoSawmillPlanksScript;
 

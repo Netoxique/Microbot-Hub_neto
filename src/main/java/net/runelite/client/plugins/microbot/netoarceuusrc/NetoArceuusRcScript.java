@@ -273,8 +273,6 @@ public class NetoArceuusRcScript extends Script {
     }
 
     private void handleCompletedTrip() {
-        worldHopManager.recordCompletedTrip();
-
         boolean breakDue = breakManager.shouldStartBreakAtSafePoint();
         boolean worldHopAttempted = worldHopManager.tryHopIfDue(this::isRunning).isAttempted();
         if (worldHopAttempted && breakDue) {

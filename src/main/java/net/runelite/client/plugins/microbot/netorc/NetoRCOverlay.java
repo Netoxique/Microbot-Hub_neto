@@ -52,7 +52,7 @@ public class NetoRCOverlay extends OverlayPanel {
                     .right(String.valueOf(plugin.getTotalXpGained())).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Trips:").right(worldHopManager.getTripsDisplay()).build());
+                    .left("World Hop In:").right(worldHopManager.getWorldHopDisplay()).build());
 
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Break In:").right(breakManager.getBreakInDisplay()).build());

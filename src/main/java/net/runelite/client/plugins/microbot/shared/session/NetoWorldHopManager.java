@@ -8,6 +8,7 @@ import net.runelite.http.api.worlds.WorldRegion;
 import javax.inject.Inject;
 import javax.inject.Singleton;
 import java.util.Random;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BooleanSupplier;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleepGaussian;
@@ -19,8 +20,8 @@ public class NetoWorldHopManager {
 
     private WorldHopSettings settings;
     private String logPrefix = "Neto";
-    private int completedTrips = 0;
-    private int hopAtTrips = 0;
+    private long nextHopAtMillis = 0;
+    private int scheduledDelayMinutes = 0;
 
     @Inject
     public NetoWorldHopManager() {
@@ -32,34 +33,31 @@ public class NetoWorldHopManager {
     }
 
     public synchronized void reset() {
-        completedTrips = 0;
         scheduleNextHop();
     }
 
-    public synchronized void recordCompletedTrip() {
-        if (!isEnabled()) {
-            return;
-        }
-
-        ensureHopThreshold();
-        completedTrips++;
-        log("world jump trips: " + completedTrips + "/" + hopAtTrips);
-    }
-
     public synchronized boolean shouldHop() {
-        return isEnabled() && hopAtTrips > 0 && completedTrips >= hopAtTrips;
+        ensureHopTime();
+        return isEnabled() && nextHopAtMillis > 0 && System.currentTimeMillis() >= nextHopAtMillis;
     }
 
-    public synchronized String getTripsDisplay() {
+    public synchronized String getWorldHopDisplay() {
         if (!isEnabled()) {
             return "Disabled";
         }
-        return completedTrips + "/" + hopAtTrips;
+
+        ensureHopTime();
+        long remainingMillis = nextHopAtMillis - System.currentTimeMillis();
+        if (remainingMillis <= 0) {
+            return "Due";
+        }
+
+        return formatDuration(remainingMillis) + " / " + scheduledDelayMinutes + "m";
     }
 
     public WorldHopResult tryHopIfDue(BooleanSupplier keepRunning) {
         WorldHopSettings activeSettings;
-        int tripsBeforeHop;
+        int delayBeforeHop;
         int maxAttempts;
         int confirmTimeoutMs;
         WorldRegion worldRegion;
@@ -70,7 +68,7 @@ public class NetoWorldHopManager {
             }
 
             activeSettings = settings;
-            tripsBeforeHop = completedTrips;
+            delayBeforeHop = scheduledDelayMinutes;
             maxAttempts = Math.max(1, activeSettings.worldHopMaxAttempts());
             confirmTimeoutMs = Math.max(1, activeSettings.worldHopConfirmTimeoutMs());
             NetoWorldHopRegion hopRegion = activeSettings.worldJumpRegion();
@@ -82,12 +80,10 @@ public class NetoWorldHopManager {
 
         synchronized (this) {
             if (result.isConfirmed()) {
-                log("confirmed world jump after " + tripsBeforeHop + " trips.");
-                completedTrips = 0;
+                log("confirmed world jump after " + delayBeforeHop + " minute timer.");
                 scheduleNextHop();
             } else {
-                log("world jump failed after " + maxAttempts + " attempts. Keeping trip counter at "
-                        + completedTrips + "/" + hopAtTrips + ".");
+                log("world jump failed after " + maxAttempts + " attempts. Keeping timer due.");
             }
         }
 
@@ -159,25 +155,41 @@ public class NetoWorldHopManager {
         return targetWorld;
     }
 
-    private void ensureHopThreshold() {
-        if (isEnabled() && hopAtTrips <= 0) {
+    private void ensureHopTime() {
+        if (isEnabled() && nextHopAtMillis <= 0) {
             scheduleNextHop();
         }
     }
 
     private void scheduleNextHop() {
         if (!isEnabled()) {
-            hopAtTrips = 0;
+            nextHopAtMillis = 0;
+            scheduledDelayMinutes = 0;
             return;
         }
 
-        int minTrips = Math.max(1, settings.minTrips());
-        int maxTrips = Math.max(minTrips, settings.maxTrips());
-        hopAtTrips = minTrips + random.nextInt(maxTrips - minTrips + 1);
+        int minMinutes = Math.max(1, settings.minMinutes());
+        int maxMinutes = Math.max(minMinutes, settings.maxMinutes());
+        scheduledDelayMinutes = minMinutes + random.nextInt(maxMinutes - minMinutes + 1);
+        nextHopAtMillis = System.currentTimeMillis() + TimeUnit.MINUTES.toMillis(scheduledDelayMinutes);
+        log("next world jump scheduled in " + scheduledDelayMinutes + " minutes.");
     }
 
     private boolean isEnabled() {
         return settings != null && settings.enableWorldJumping();
+    }
+
+    private String formatDuration(long millis) {
+        long totalSeconds = Math.max(0, TimeUnit.MILLISECONDS.toSeconds(millis));
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+
+        if (hours > 0) {
+            return String.format("%d:%02d:%02d", hours, minutes, seconds);
+        }
+
+        return String.format("%02d:%02d", minutes, seconds);
     }
 
     private void log(String message) {
