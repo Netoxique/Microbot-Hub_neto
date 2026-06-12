@@ -175,6 +175,16 @@ public class NetoRCScript extends Script {
         return false;
     }
 
+    private int getStaminaThreshold() {
+        if (config.runeType() == RuneType.WRATH) {
+            return 15;
+        }
+        if (config.usePoh()) {
+            return 15;
+        }
+        return 25;
+    }
+
     public boolean run() {
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
             mainScheduledFuture.cancel(true);
@@ -383,15 +393,17 @@ public class NetoRCScript extends Script {
         }
 
         if (config.runeType() == RuneType.BLOOD) {
-            if (!config.usePoh() && lumbyElite != 1) {
+            if (lumbyElite != 1) {
                 if (!Rs2Equipment.isWearing(lunarStaff)) {
                     Microbot.log("Looking for and withdrawing lunar staff");
                     Rs2Bank.withdrawAndEquip(lunarStaff);
                     sleepUntil(() -> Rs2Equipment.isWearing(lunarStaff));
+                    sleepGaussian(700, 200);
                 } else if (!Rs2Equipment.isWearing(lunarStaff) && !Rs2Bank.hasItem(lunarStaff)) {
                     Microbot.log("No lunar staff found, withdrawing dramen staff");
                     Rs2Bank.withdrawAndEquip(dramenStaff);
                     sleepUntil(() -> Rs2Equipment.isWearing(dramenStaff));
+                    sleepGaussian(700, 200);
                 }
             }
 
@@ -466,6 +478,7 @@ public class NetoRCScript extends Script {
             sleepUntil(() -> Rs2Equipment.isWearing("Ring of dueling"));
         }
 
+        // Withdraw essences and fill pouches
         handleFillPouch();
 
         if (Rs2Bank.isOpen() && Rs2Inventory.allPouchesFull() && Rs2Inventory.isFull()) {
@@ -486,7 +499,7 @@ public class NetoRCScript extends Script {
             }
 
             if (config.runeType() == RuneType.WRATH && config.usePoh()) {
-                if (Rs2Player.getRunEnergy() > 45) {
+                if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
                     handleWrathWalking();
                 }
             } else {
@@ -520,7 +533,7 @@ public class NetoRCScript extends Script {
     }
 
     private void handleFeroxRunEnergy() {
-		if (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= 15 || Rs2Player.getHealthPercentage() <= 20) {
+		if (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= getStaminaThreshold() || Rs2Player.getHealthPercentage() <= 20) {
 			Microbot.log("We are thirsty...let us Drink");
             forceDrinkAtFerox = true;
             if (plugin.getMyWorldPoint().distanceTo(feroxPoolWp) > 5) {
@@ -609,7 +622,7 @@ public class NetoRCScript extends Script {
                             }
                         }
                     }
-                    if (Rs2Player.getRunEnergy() < 45) {
+                    if (Rs2Player.getRunEnergy() <= getStaminaThreshold()) {
                         sleepGaussian(700, 200);
                         Microbot.log("We are thirsty..let us Drink");
                         List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
@@ -619,7 +632,7 @@ public class NetoRCScript extends Script {
                                     sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
                                 });
                     }
-                    if (Rs2Player.getRunEnergy() > 45) {
+                    if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
                         if (config.runeType() == RuneType.BLOOD) {
                             sleepGaussian(700, 200);
                             Microbot.log("Looking for fairies");
@@ -666,11 +679,11 @@ public class NetoRCScript extends Script {
             BreakHandlerScript.setLockState(true);
         }
 
-        if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() > 90) {
+        if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() > getStaminaThreshold()) {
             setState(State.WALKING_TO);
         }
         else if (config.runeType() == RuneType.WRATH
-                && Rs2Player.getRunEnergy() < 45
+                && Rs2Player.getRunEnergy() <= getStaminaThreshold()
                 || Rs2Player.getHealthPercentage() < 50) {
 
             GameObject pohPortal = plugin.getPohPortal();
@@ -711,7 +724,7 @@ public class NetoRCScript extends Script {
                 }
             }
 
-            if (Rs2Player.getRunEnergy() < 45) {
+            if (Rs2Player.getRunEnergy() <= getStaminaThreshold()) {
                 sleepGaussian(700, 200);
                 Microbot.log("We are thirsty..let us Drink");
                 List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
@@ -722,7 +735,7 @@ public class NetoRCScript extends Script {
                         });
             }
 
-            if (Rs2Player.getRunEnergy() > 45) {
+            if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
                 if (config.runeType() == RuneType.BLOOD) {
                     sleepGaussian(700, 200);
                     handlePohFairyRing();
@@ -767,7 +780,7 @@ public class NetoRCScript extends Script {
                 }
             }
 
-            if (Rs2Player.getRunEnergy() < 45) {
+            if (Rs2Player.getRunEnergy() <= getStaminaThreshold()) {
                 sleepGaussian(700, 200);
                 Microbot.log("We are thirsty..let us Drink");
                 List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
@@ -777,7 +790,7 @@ public class NetoRCScript extends Script {
                             sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
                         });
             }
-            if (Rs2Player.getRunEnergy() > 45) {
+            if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
                 if (config.runeType() == RuneType.BLOOD) {
 //                    sleepGaussian(700, 200);
                     handlePohFairyRing();
@@ -809,8 +822,6 @@ public class NetoRCScript extends Script {
                 setState(State.BANKING);
             }
         }
-
-        Rs2Player.waitForAnimation();
         setState(State.WALKING_TO);
     }
 
@@ -832,6 +843,8 @@ public class NetoRCScript extends Script {
         Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
 
         sleepUntil(() -> findObject(16308) != null, 10000); // Wait for Cave 1
+        hoverObject(16308);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
         interactObject(16308, "Enter");
         sleepUntil(Rs2Player::isAnimating, 5000);
         sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
@@ -916,8 +929,9 @@ public class NetoRCScript extends Script {
             switch (wrathStep) {
                 case MYTH_CAPE:
                     if (Rs2Inventory.contains(mythCape)) {
+                        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
                         Rs2Inventory.interact(mythCape, "Teleport");
-                        sleepGaussian(700, 50); // 600 to 800 ms
+                        sleepUntil(Rs2Player::isAnimating, 5000);
                         sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
                         sleepUntilOnClientThread(() -> findObject(31626) != null, 5000); // Wait for Myth Statue
                         wrathStep = WrathStep.MYTH_STATUE;
@@ -1044,7 +1058,7 @@ public class NetoRCScript extends Script {
     }
 
     private void handleBankTeleport() {
-        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= 15 || Rs2Player.getHealthPercentage() <= 20);
+        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= getStaminaThreshold() || Rs2Player.getHealthPercentage() <= 20);
 
         if (!needRefill) {
             for (int craftingCapeId : Teleports.CRAFTING_CAPE.getItemIds()) {
