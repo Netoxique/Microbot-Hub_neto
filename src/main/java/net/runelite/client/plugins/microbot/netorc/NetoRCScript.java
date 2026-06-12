@@ -24,6 +24,7 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
@@ -114,6 +115,37 @@ public class NetoRCScript extends Script {
 
     private boolean interactObject(int id, String action) {
         return new Rs2TileObjectQueryable().interact(id, action);
+    }
+
+    private boolean hoverObject(int id) {
+        var obj = new Rs2TileObjectQueryable().withId(id).first();
+        if (obj != null && Rs2AntibanSettings.naturalMouse) {
+            java.awt.Rectangle clickbox = net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper.getObjectClickbox(obj);
+            if (clickbox != null) {
+                net.runelite.api.Point point = net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper.getClickingPoint(clickbox, true);
+                if (point.getX() != 1 && point.getY() != 1) {
+                    Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hoverItem(int itemId) {
+        var item = Rs2Inventory.get(itemId);
+        if (item != null) {
+            return Rs2Inventory.hover(item);
+        }
+        return false;
+    }
+
+    private boolean hoverItem(String itemName) {
+        var item = Rs2Inventory.get(itemName);
+        if (item != null) {
+            return Rs2Inventory.hover(item);
+        }
+        return false;
     }
 
     public boolean run() {
@@ -781,6 +813,7 @@ public class NetoRCScript extends Script {
         sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
         sleepGaussian(150, 25); // 100 to 200 ms
 
+        // Level 93 Agility route
         int agilityLevel = Rs2Player.getRealSkillLevel(Skill.AGILITY);
         if (agilityLevel >= 93) {
             sleepUntil(() -> findObject(43759) != null, 10000); // Wait for Cave 3 (lvl 93 Agi)
@@ -795,7 +828,7 @@ public class NetoRCScript extends Script {
             sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
             sleepGaussian(150, 25); // 100 to 200 ms
         }
-
+        // Level 74 Agility route
         else if (agilityLevel >= 74) {
             sleepUntil(() -> findObject(12770) != null, 10000); // Wait for Cave 3 (lvl 74 Agi)
             interactObject(12770, "Enter");
@@ -907,7 +940,7 @@ public class NetoRCScript extends Script {
             BreakHandlerScript.setLockState(true);
         }
 
-        int runeId = config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune;
+//        int runeId = config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune;
         // Wait for first batch to be crafted
         sleepUntilOnClientThread(() -> !Rs2Inventory.contains(pureEss), 15000);
         
@@ -958,16 +991,21 @@ public class NetoRCScript extends Script {
         while (!Rs2Inventory.allPouchesEmpty()) {
             Microbot.log("Pouches are not empty. Crafting more");
             Rs2Inventory.interact("Colossal Pouch", "Empty");
-            sleepUntil(() -> Rs2Inventory.contains(pureEss));
+            hoverObject(bloodAltar);
+            boolean hasEssence = sleepUntil(() -> Rs2Inventory.contains(pureEss), 2000);
 
-            if (config.runeType() == RuneType.BLOOD) {
-                interactObject(bloodAltar, "Craft-rune");
+            if (hasEssence) {
+                if (config.runeType() == RuneType.BLOOD) {
+                    interactObject(bloodAltar, "Craft-rune");
+                }
+                if (config.runeType() == RuneType.WRATH) {
+                    interactObject(wrathAltar, "Craft-rune");
+                }
+                hoverItem("Colossal Pouch");
+                sleepUntil(() -> !Rs2Inventory.contains(pureEss), 3000);
+            } else {
+                Microbot.log("Failed to empty pouch, retrying...");
             }
-            if (config.runeType() == RuneType.WRATH) {
-                interactObject(wrathAltar, "Craft-rune");
-            }
-//            Rs2Player.waitForXpDrop(Skill.RUNECRAFT);
-//            plugin.updateXpGained();
         }
     }
 
