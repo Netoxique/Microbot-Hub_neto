@@ -67,7 +67,7 @@ public class NetoRCPlugin extends Plugin {
     @Getter
     private WorldPoint myWorldPoint;
     @Getter
-    public static final String version = "1.4.14";
+    public static final String version = "1.4.15";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {

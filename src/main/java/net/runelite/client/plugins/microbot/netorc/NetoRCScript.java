@@ -195,7 +195,18 @@ public class NetoRCScript extends Script {
         if (config.usePoh()) {
             return 15;
         }
+        if (config.runeType() == RuneType.BLOOD && Rs2Player.getRealSkillLevel(Skill.AGILITY) < 93) {
+            return 40;
+        }
         return 25;
+    }
+
+    private boolean needsRestore() {
+        return Rs2Player.getRunEnergy() <= getStaminaThreshold() || Rs2Player.getHealthPercentage() <= 20;
+    }
+
+    private boolean needsFeroxRestore() {
+        return !config.usePoh() && (forceDrinkAtFerox || needsRestore());
     }
 
     public boolean run() {
@@ -256,6 +267,7 @@ public class NetoRCScript extends Script {
                         case GOING_HOME:
                             if (config.usePoh()) {
                                 handleGoingHome();
+                                break;
                             } else if (config.runeType() == RuneType.BLOOD && !config.usePoh()) {
                                 handleArdyCloak();
                             } else if (config.runeType() == RuneType.WRATH) {
@@ -512,13 +524,7 @@ public class NetoRCScript extends Script {
                 return;
             }
 
-            if (config.runeType() == RuneType.WRATH && config.usePoh()) {
-                if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
-                    handleWrathWalking();
-                }
-            } else {
-                setState(State.GOING_HOME);
-            }
+            setState(State.GOING_HOME);
         }
     }
 
@@ -547,7 +553,7 @@ public class NetoRCScript extends Script {
     }
 
     private void handleFeroxRunEnergy() {
-		if (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= getStaminaThreshold() || Rs2Player.getHealthPercentage() <= 20) {
+		if (needsFeroxRestore()) {
 			Microbot.log("We are thirsty...let us Drink");
             forceDrinkAtFerox = true;
             if (plugin.getMyWorldPoint().distanceTo(feroxPoolWp) > 5) {
@@ -688,128 +694,87 @@ public class NetoRCScript extends Script {
         }
     }
 
+    private void teleportToPoh() {
+        if (client.getRealSkillLevel(Skill.RUNECRAFT) >= 99 && Rs2Inventory.hasRunePouch()) {
+            Microbot.log("Using Teleport to House spell");
+            Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
+            sleepGaussian(1100, 200);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+            sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+            sleepGaussian(1300, 200);
+            Microbot.log("We should be in poh fully loaded");
+            return;
+        }
+
+        Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
+        if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
+            Microbot.log("Con cape not found");
+            homeTeleports = Teleports.HOUSE_TAB;
+        }
+
+        for (Integer itemId : homeTeleports.getItemIds()) {
+            if (Rs2Inventory.contains(itemId)) {
+                Microbot.log("Using " + homeTeleports.getName());
+                Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
+                sleepGaussian(1100, 200);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+                sleepGaussian(1300, 200);
+                Microbot.log("We should be in poh fully loaded");
+                return;
+            }
+        }
+    }
+
+    private void restoreAtPohIfNeeded() {
+        if (!needsRestore()) {
+            return;
+        }
+
+        sleepGaussian(700, 200);
+        Microbot.log("We are thirsty..let us Drink");
+        List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
+        Optional<Integer> poolObjectId = poolObjectIds.stream()
+                .filter(id -> findObject(id) != null)
+                .findFirst();
+
+        if (poolObjectId.isPresent()) {
+            interactObject(poolObjectId.get(), "Drink");
+            sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90, 5000);
+        } else {
+            Microbot.log("Unable to find POH pool, resetting to banking for a retry");
+            setState(State.BANKING);
+        }
+    }
+
     private void handleGoingHome() {
         if (plugin.isBreakHandlerEnabled()) {
             BreakHandlerScript.setLockState(true);
         }
 
-        if (config.runeType() == RuneType.WRATH && Rs2Player.getRunEnergy() > getStaminaThreshold()) {
+        if (config.runeType() == RuneType.WRATH && !needsRestore()) {
             setState(State.WALKING_TO);
+            return;
         }
-        else if (config.runeType() == RuneType.WRATH
-                && Rs2Player.getRunEnergy() <= getStaminaThreshold()
-                || Rs2Player.getHealthPercentage() < 50) {
 
-            GameObject pohPortal = plugin.getPohPortal();
+        if (config.runeType() == RuneType.BLOOD
+                && Rs2Equipment.isWearing(Arrays.toString(Teleports.FARMING_CAPE.getItemIds()))) {
+            handleFarmingCape();
+        } else {
+            teleportToPoh();
+        }
 
-            if (client.getRealSkillLevel(Skill.RUNECRAFT) >= 99 && Rs2Inventory.hasRunePouch()) {
-                Microbot.log("Using Teleport to House spell");
-                Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
-                sleepGaussian(1100, 200);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                sleepGaussian(1300, 200);
+        restoreAtPohIfNeeded();
 
-                if (pohPortal != null) {
-                    Microbot.log("Poh portal found, we are home");
-                }
-                Microbot.log("We should be in poh fully loaded");
-            } else {
-                Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
-
-                if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
-                    Microbot.log("Con cape not found");
-                    homeTeleports = Teleports.HOUSE_TAB;
-                }
-                for (Integer itemId : homeTeleports.getItemIds()) {
-                    if (Rs2Inventory.contains(itemId)) {
-                        Microbot.log("Using " + homeTeleports.getName());
-                        Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
-                        sleepGaussian(1100, 200);
-                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                        sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                        sleepGaussian(1300, 200);
-
-                        if (pohPortal != null) {
-                            Microbot.log("Poh portal found, we are home");
-                        }
-                        Microbot.log("We should be in poh fully loaded");
-                    }
-                }
-            }
-
-            if (Rs2Player.getRunEnergy() <= getStaminaThreshold()) {
-                sleepGaussian(700, 200);
-                Microbot.log("We are thirsty..let us Drink");
-                List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-                poolObjectIds.stream().filter(id -> findObject(id) != null).findFirst()
-                        .ifPresent(objectId -> {
-                            interactObject(objectId, "Drink");
-                            sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
-                        });
-            }
-
-            if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
-                if (config.runeType() == RuneType.BLOOD) {
-                    sleepGaussian(700, 200);
-                    handlePohFairyRing();
-                }
-            }
+        if (needsRestore()) {
+            return;
         }
 
         if (config.runeType() == RuneType.BLOOD) {
-
-            if (Rs2Equipment.isWearing(Arrays.toString(Teleports.FARMING_CAPE.getItemIds()))) {
-                handleFarmingCape();
-            }
-            GameObject pohPortal = plugin.getPohPortal();
-
-            if (client.getRealSkillLevel(Skill.RUNECRAFT) >= 99 && Rs2Inventory.hasRunePouch()) {
-                Microbot.log("Using Teleport to House spell");
-                Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
-                sleepGaussian(1100, 200);
-                sleepUntil(Rs2Player::isAnimating, 5000);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                sleepGaussian(1300, 200);
-
-            }
-            else {
-                Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
-
-                if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
-                    Microbot.log("Con cape not found");
-                    homeTeleports = Teleports.HOUSE_TAB;
-                }
-                for (Integer itemId : homeTeleports.getItemIds()) {
-                    if (Rs2Inventory.contains(itemId)) {
-                        Microbot.log("Using " + homeTeleports.getName());
-                        Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
-                        sleepGaussian(1100, 200);
-                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                        sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                        sleepGaussian(1300, 200);
-
-                    }
-                }
-            }
-
-            if (Rs2Player.getRunEnergy() <= getStaminaThreshold()) {
-                sleepGaussian(700, 200);
-                Microbot.log("We are thirsty..let us Drink");
-                List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-                poolObjectIds.stream().filter(id -> findObject(id) != null).findFirst()
-                        .ifPresent(objectId -> {
-                            interactObject(objectId, "Drink");
-                            sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
-                        });
-            }
-            if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
-                if (config.runeType() == RuneType.BLOOD) {
-//                    sleepGaussian(700, 200);
-                    handlePohFairyRing();
-                }
-            }
+            sleepGaussian(700, 200);
+            handlePohFairyRing();
+        } else if (config.runeType() == RuneType.WRATH) {
+            setState(State.WALKING_TO);
         }
     }
 
@@ -1099,7 +1064,11 @@ public class NetoRCScript extends Script {
     }
 
     private void handleBankTeleport() {
-        boolean needRefill = (forceDrinkAtFerox || Rs2Player.getRunEnergy() <= getStaminaThreshold() || Rs2Player.getHealthPercentage() <= 20);
+        if (config.usePoh()) {
+            forceDrinkAtFerox = false;
+        }
+
+        boolean needRefill = needsRestore() || (!config.usePoh() && forceDrinkAtFerox);
 
         if (!needRefill) {
             for (int craftingCapeId : Teleports.CRAFTING_CAPE.getItemIds()) {
@@ -1115,17 +1084,19 @@ public class NetoRCScript extends Script {
 
         Rs2Tab.switchTo(InterfaceTab.INVENTORY);
         sleepGaussian(1300, 200);
-        List<Teleports> bankTeleport = needRefill
-                ? Arrays.asList(
-                Teleports.FEROX_ENCLAVE,
-                Teleports.CRAFTING_CAPE,
-                Teleports.FARMING_CAPE)
-                : Arrays.asList(
-                Teleports.CRAFTING_CAPE,
-                Teleports.FARMING_CAPE,
-                Teleports.SAILORS_AMULET,
-                Teleports.CASTLE_WARS
-        );
+        List<Teleports> bankTeleport;
+        if (needRefill && !config.usePoh()) {
+            bankTeleport = Arrays.asList(
+                    Teleports.FEROX_ENCLAVE,
+                    Teleports.CRAFTING_CAPE,
+                    Teleports.FARMING_CAPE);
+        } else {
+            bankTeleport = Arrays.asList(
+                    Teleports.CRAFTING_CAPE,
+                    Teleports.FARMING_CAPE,
+                    Teleports.SAILORS_AMULET,
+                    Teleports.CASTLE_WARS);
+        }
         boolean teleportUsed = false;
 
         for (Teleports teleport : bankTeleport) {
@@ -1135,7 +1106,7 @@ public class NetoRCScript extends Script {
                     Rs2Equipment.interact(bankTeleportsId, teleport.getInteraction());
                     sleepUntil(() -> teleport.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
                     sleepGaussian(600, 200);
-                    if (teleport == Teleports.FEROX_ENCLAVE) {
+                    if (!config.usePoh() && teleport == Teleports.FEROX_ENCLAVE) {
                         forceDrinkAtFerox = true;
                         handleFeroxRunEnergy();
                     }
