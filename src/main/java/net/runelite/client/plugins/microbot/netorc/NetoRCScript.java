@@ -372,7 +372,6 @@ public class NetoRCScript extends Script {
                 hoverInvItem(config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune);
             }).start();
             sleepUntil(Rs2Bank::isOpen);
-            sleepGaussian(150, 25); // 100 to 200 ms
         }
 
         if (forceBankOnStart && Rs2Bank.isOpen()) {
