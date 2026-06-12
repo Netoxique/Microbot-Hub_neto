@@ -24,7 +24,6 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
-import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
@@ -132,7 +131,7 @@ public class NetoRCScript extends Script {
         return false;
     }
 
-    private boolean hoverItem(int itemId) {
+    private boolean hoverInv(int itemId) {
         var item = Rs2Inventory.get(itemId);
         if (item != null) {
             return Rs2Inventory.hover(item);
@@ -140,7 +139,7 @@ public class NetoRCScript extends Script {
         return false;
     }
 
-    private boolean hoverItem(String itemName) {
+    private boolean hoverInv(String itemName) {
         var item = Rs2Inventory.get(itemName);
         if (item != null) {
             return Rs2Inventory.hover(item);
@@ -340,6 +339,7 @@ public class NetoRCScript extends Script {
                 (forceBankOnStart || needsBankingSupplies())) {
             Microbot.log("Opening bank");
             Rs2Bank.openBank();
+            hoverInv(config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune); // hover runes
             sleepUntil(Rs2Bank::isOpen);
             sleepGaussian(700, 125);
         }
@@ -471,12 +471,13 @@ public class NetoRCScript extends Script {
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
                     Rs2Bank.depositAll(bloodRune);
-                    sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
                     Rs2Bank.depositAll(wrathRune);
-                    sleepGaussian(150, 25); // 100 to 200 ms
+
                 }
+//                Rs2Bank.hover(pureEss);
+                sleepGaussian(150, 25); // 100 to 200 ms
                 Rs2Bank.withdrawAll(pureEss);
                 sleepUntil(Rs2Inventory::isFull);
                 Rs2Inventory.fillPouches();
@@ -940,8 +941,10 @@ public class NetoRCScript extends Script {
             BreakHandlerScript.setLockState(true);
         }
 
+        sleepGaussian(150, 25); // 100 to 200 ms
         Rs2Tab.switchTo(InterfaceTab.INVENTORY);
-        hoverItem("Colossal Pouch");
+        sleepGaussian(150, 25); // 100 to 200 ms
+        hoverInv("Colossal Pouch");
 
         // Wait for first batch to be crafted
         sleepUntilOnClientThread(() -> !Rs2Inventory.contains(pureEss), 15000);
@@ -1003,7 +1006,7 @@ public class NetoRCScript extends Script {
                 if (config.runeType() == RuneType.WRATH) {
                     interactObject(wrathAltar, "Craft-rune");
                 }
-                hoverItem("Colossal Pouch");
+                hoverInv("Colossal Pouch");
                 sleepUntil(() -> !Rs2Inventory.contains(pureEss), 3000);
             } else {
                 Microbot.log("Failed to empty pouch, retrying...");
