@@ -769,15 +769,13 @@ public class NetoRCScript extends Script {
     private void handleBloodWalking() {
         Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
 
-//        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-
-        sleepUntil(() -> findObject(16308) != null, 5000); // Wait for Cave 1
+        sleepUntil(() -> findObject(16308) != null, 10000); // Wait for Cave 1
         interactObject(16308, "Enter");
         sleepUntil(Rs2Player::isAnimating, 5000);
         sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
         sleepGaussian(150, 25); // 100 to 200 ms
 
-        sleepUntil(() -> findObject(5046) != null, 5000); // Wait for Cave 2
+        sleepUntil(() -> findObject(5046) != null, 10000); // Wait for Cave 2
         interactObject(5046, "Enter");
         sleepUntil(Rs2Player::isAnimating, 5000);
         sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
@@ -785,63 +783,58 @@ public class NetoRCScript extends Script {
 
         int agilityLevel = Rs2Player.getRealSkillLevel(Skill.AGILITY);
         if (agilityLevel >= 93) {
-            sleepUntil(() -> findObject(43759) != null, 5000); // Wait for Cave 3 (lvl 93 Agi)
+            sleepUntil(() -> findObject(43759) != null, 10000); // Wait for Cave 3 (lvl 93 Agi)
             interactObject(43759, "Enter");
             sleepUntil(Rs2Player::isAnimating, 5000);
             sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
             sleepGaussian(150, 25); // 100 to 200 ms
 
-            sleepUntil(() -> findObject(43762) != null, 5000); // Wait for Cave 4 (lvl 93 Agi)
+            sleepUntil(() -> findObject(43762) != null, 10000); // Wait for Cave 4 (lvl 93 Agi)
             interactObject(43762, "Enter");
             sleepUntil(Rs2Player::isAnimating, 5000);
             sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
             sleepGaussian(150, 25); // 100 to 200 ms
+        }
 
-            interactObject(bloodRuins, "Enter");
+        else if (agilityLevel >= 74) {
+            sleepUntil(() -> findObject(12770) != null, 10000); // Wait for Cave 3 (lvl 74 Agi)
+            interactObject(12770, "Enter");
             sleepUntil(Rs2Player::isAnimating, 5000);
             sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            sleepGaussian(150, 25); // 100 to 200 ms
 
-            sleepUntil(() -> findObject(bloodAltar) != null, 5000); // Wait for Altar
-            interactObject(bloodAltar, "Craft-rune");
-
-            setState(State.CRAFTING);
-            return;
-        }
-
-        if (plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion) {
-            var altar = findObject(bloodAltar);
-            if (altar != null) {
-                sleepGaussian(150, 25);
-                interactObject(bloodAltar, "Craft-rune");
-                setState(State.CRAFTING);
-                return;
-            }
-        }
-
-        if (agilityLevel >= 74) {
-            Microbot.log("Walking to ruins: " + outsideBloodRuins74);
-            Rs2Walker.walkTo(outsideBloodRuins74);
-//            sleepUntil(() -> plugin.getMyWorldPoint().equals(outsideBloodRuins74), 1200);
+            sleepUntil(() -> findObject(12771) != null, 10000); // Wait for Cave 4 (lvl 74 Agi)
+            interactObject(12771, "Enter");
             sleepUntil(Rs2Player::isAnimating, 5000);
             sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-        } else {
-            Microbot.log("Walking to ruins: " + outsideBloodRuins73);
-            Rs2Walker.walkTo(outsideBloodRuins73);
-            sleepUntil(() -> Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 5);
+            sleepGaussian(150, 25); // 100 to 200 ms
+
+            // Walker should stop when less than 10 tiles from here:
+            Rs2Walker.walkTo(new WorldPoint(3560, 9814, 0)); // Walk to next cave
+
+            sleepUntil(() -> findObject(43755) != null, 10000); // Wait for Cave 5 (lvl 74 Agi)
+            interactObject(43755, "Enter");
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            sleepGaussian(150, 25); // 100 to 200 ms
+
+            sleepUntil(() -> findObject(43758) != null, 10000); // Wait for Cave 6 (lvl 74 Agi)
+            interactObject(43758, "Enter");
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            sleepGaussian(150, 25); // 100 to 200 ms
         }
 
-        if (plugin.getMyWorldPoint().getRegionID() != bloodAltarRegion) {
-            var ruins = findObject(bloodRuins);
-            if (ruins != null && plugin.getMyWorldPoint().getRegionID() == 14232
-                    && !Rs2Player.isMoving() && !Rs2Player.isAnimating() &&
-                    Rs2Player.distanceTo(new WorldPoint(3560, 9780, 0)) < 18) {
-                interactObject(bloodRuins, "Enter");
-//                sleepUntil(() -> !Rs2Player.isAnimating() && plugin.getMyWorldPoint().getRegionID() == bloodAltarRegion, 5000);
-                sleepUntil(Rs2Player::isAnimating, 5000);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-                sleepGaussian(150, 25);
-            }
-        }
+        // Blood altar is probably already visible at this point
+        interactObject(bloodRuins, "Enter");
+        sleepUntil(Rs2Player::isAnimating, 5000);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+
+        sleepUntil(() -> findObject(bloodAltar) != null, 5000); // Wait for Altar
+        interactObject(bloodAltar, "Craft-rune");
+
+        setState(State.CRAFTING);
+        return;
     }
 
 
