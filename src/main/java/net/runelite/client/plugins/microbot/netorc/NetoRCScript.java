@@ -131,7 +131,7 @@ public class NetoRCScript extends Script {
         return false;
     }
 
-    private boolean hoverInv(int itemId) {
+    private boolean hoverInvItem(int itemId) {
         var item = Rs2Inventory.get(itemId);
         if (item != null) {
             return Rs2Inventory.hover(item);
@@ -139,10 +139,38 @@ public class NetoRCScript extends Script {
         return false;
     }
 
-    private boolean hoverInv(String itemName) {
+    private boolean hoverInvItem(String itemName) {
         var item = Rs2Inventory.get(itemName);
         if (item != null) {
             return Rs2Inventory.hover(item);
+        }
+        return false;
+    }
+
+    private boolean hoverBankItem(int itemId) {
+        if (!Rs2Bank.isOpen()) return false;
+        Widget bankContainer = client.getWidget(12, 130);
+        if (bankContainer == null || bankContainer.getChildren() == null) return false;
+        for (Widget child : bankContainer.getChildren()) {
+            if (child != null && child.getItemId() == itemId) {
+                java.awt.Rectangle bounds = child.getBounds();
+                if (bounds != null) {
+                    net.runelite.api.Point point = net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper.getClickingPoint(bounds, true);
+                    if (point.getX() != 1 && point.getY() != 1) {
+                        Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
+                        return true;
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    private boolean hoverBankItem(String itemName) {
+        if (!Rs2Bank.isOpen()) return false;
+        var item = Rs2Bank.getBankItem(itemName);
+        if (item != null) {
+            return hoverBankItem(item.getId());
         }
         return false;
     }
@@ -338,10 +366,13 @@ public class NetoRCScript extends Script {
         while (!Rs2Bank.isOpen() && isRunning() && Rs2Bank.isNearBank(26) &&
                 (forceBankOnStart || needsBankingSupplies())) {
             Microbot.log("Opening bank");
-            Rs2Bank.openBank();
-            hoverInv(config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune); // hover runes
+            new Thread(Rs2Bank::openBank).start();
+            new Thread(() -> {
+                sleepGaussian(850, 75); // 700 to 1000 ms
+                hoverInvItem(config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune);
+            }).start();
             sleepUntil(Rs2Bank::isOpen);
-            sleepGaussian(700, 125);
+            sleepGaussian(150, 25); // 100 to 200 ms
         }
 
         if (forceBankOnStart && Rs2Bank.isOpen()) {
@@ -471,13 +502,12 @@ public class NetoRCScript extends Script {
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
                     Rs2Bank.depositAll(bloodRune);
+                    sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
                     Rs2Bank.depositAll(wrathRune);
-
+                    sleepGaussian(150, 25); // 100 to 200 ms
                 }
-//                Rs2Bank.hover(pureEss);
-                sleepGaussian(150, 25); // 100 to 200 ms
                 Rs2Bank.withdrawAll(pureEss);
                 sleepUntil(Rs2Inventory::isFull);
                 Rs2Inventory.fillPouches();
@@ -944,7 +974,7 @@ public class NetoRCScript extends Script {
         sleepGaussian(150, 25); // 100 to 200 ms
         Rs2Tab.switchTo(InterfaceTab.INVENTORY);
         sleepGaussian(150, 25); // 100 to 200 ms
-        hoverInv("Colossal Pouch");
+        hoverInvItem("Colossal Pouch");
 
         // Wait for first batch to be crafted
         sleepUntilOnClientThread(() -> !Rs2Inventory.contains(pureEss), 15000);
@@ -1006,7 +1036,7 @@ public class NetoRCScript extends Script {
                 if (config.runeType() == RuneType.WRATH) {
                     interactObject(wrathAltar, "Craft-rune");
                 }
-                hoverInv("Colossal Pouch");
+                hoverInvItem("Colossal Pouch");
                 sleepUntil(() -> !Rs2Inventory.contains(pureEss), 3000);
             } else {
                 Microbot.log("Failed to empty pouch, retrying...");
