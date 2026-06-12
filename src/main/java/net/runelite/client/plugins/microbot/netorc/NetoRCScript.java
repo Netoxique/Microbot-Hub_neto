@@ -940,7 +940,9 @@ public class NetoRCScript extends Script {
             BreakHandlerScript.setLockState(true);
         }
 
-//        int runeId = config.runeType() == RuneType.BLOOD ? bloodRune : wrathRune;
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
+        hoverItem("Colossal Pouch");
+
         // Wait for first batch to be crafted
         sleepUntilOnClientThread(() -> !Rs2Inventory.contains(pureEss), 15000);
         
