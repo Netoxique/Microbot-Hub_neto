@@ -51,6 +51,18 @@ public class NetoRCScript extends Script {
         ALTAR
     }
 
+    private enum BloodStep {
+        CAVE_1,
+        CAVE_2,
+        CAVE_3,
+        CAVE_4,
+        WALK_TO_CAVE_5,
+        CAVE_5,
+        CAVE_6,
+        RUINS,
+        ALTAR
+    }
+
     private int lumbyElite = -1;
 
     private final WorldPoint feroxPoolWp = new WorldPoint(3129, 3636, 0);
@@ -65,6 +77,7 @@ public class NetoRCScript extends Script {
     private volatile boolean forceBankOnStart = true;
     private volatile int activeRunId = 0;
     private WrathStep wrathStep = WrathStep.MYTH_CAPE;
+    private BloodStep bloodStep = BloodStep.CAVE_1;
     private final ThreadLocal<Integer> scheduledRunId = new ThreadLocal<>();
 
     public static final int pureEss = 7936;
@@ -288,6 +301,7 @@ public class NetoRCScript extends Script {
         forceDrinkAtFerox = false;
         forceBankOnStart = true;
         wrathStep = WrathStep.MYTH_CAPE;
+        bloodStep = BloodStep.CAVE_1;
         breakManager.configure(config, "Neto RC");
         worldHopManager.configure(config, "Neto RC");
         runtimeDisable.configure(config, "Neto RC");
@@ -839,78 +853,107 @@ public class NetoRCScript extends Script {
     }
 
 
+    private boolean handleTransition(int objectId, String action) {
+        WorldPoint startPoint = plugin.getMyWorldPoint();
+        var obj = findObject(objectId);
+        if (obj == null) return false;
+
+        if (objectId == 16308) {
+            hoverObject(objectId);
+        }
+        if (!Rs2Player.isAnimating()) {
+            Microbot.log("Interacting with object " + objectId + " (" + action + ")");
+            interactObject(objectId, action);
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+            sleepGaussian(150, 25);
+            boolean success = !plugin.getMyWorldPoint().equals(startPoint);
+            if (success) {
+                Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
+            } else {
+                Microbot.log("Transition failed for object " + objectId);
+            }
+            return success;
+        }
+        return false;
+    }
+
+
     private void handleBloodWalking() {
-        Microbot.log("Current location after waiting: " + plugin.getMyWorldPoint());
-
-        sleepUntil(() -> findObject(16308) != null, 10000); // Wait for Cave 1
-        hoverObject(16308);
-        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-        interactObject(16308, "Enter");
-        sleepUntil(Rs2Player::isAnimating, 5000);
-        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-        sleepGaussian(150, 25); // 100 to 200 ms
-
-        sleepUntil(() -> findObject(5046) != null, 10000); // Wait for Cave 2
-        interactObject(5046, "Enter");
-        sleepUntil(Rs2Player::isAnimating, 5000);
-        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-        sleepGaussian(150, 25); // 100 to 200 ms
-
-        // Level 93 Agility route
-        int agilityLevel = Rs2Player.getRealSkillLevel(Skill.AGILITY);
-        if (agilityLevel >= 93) {
-            sleepUntil(() -> findObject(43759) != null, 10000); // Wait for Cave 3 (lvl 93 Agi)
-            interactObject(43759, "Enter");
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            sleepGaussian(150, 25); // 100 to 200 ms
-
-            sleepUntil(() -> findObject(43762) != null, 10000); // Wait for Cave 4 (lvl 93 Agi)
-            interactObject(43762, "Enter");
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            sleepGaussian(150, 25); // 100 to 200 ms
-        }
-        // Level 74 Agility route
-        else if (agilityLevel >= 74) {
-            sleepUntil(() -> findObject(12770) != null, 10000); // Wait for Cave 3 (lvl 74 Agi)
-            interactObject(12770, "Enter");
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            sleepGaussian(150, 25); // 100 to 200 ms
-
-            sleepUntil(() -> findObject(12771) != null, 10000); // Wait for Cave 4 (lvl 74 Agi)
-            interactObject(12771, "Enter");
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            sleepGaussian(150, 25); // 100 to 200 ms
-
-            // Walker should stop when less than 10 tiles from here:
-            Rs2Walker.walkTo(new WorldPoint(3560, 9814, 0)); // Walk to next cave
-
-            sleepUntil(() -> findObject(43755) != null, 10000); // Wait for Cave 5 (lvl 74 Agi)
-            interactObject(43755, "Enter");
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            sleepGaussian(150, 25); // 100 to 200 ms
-
-            sleepUntil(() -> findObject(43758) != null, 10000); // Wait for Cave 6 (lvl 74 Agi)
-            interactObject(43758, "Enter");
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-            sleepGaussian(150, 25); // 100 to 200 ms
-        }
-
-        // Blood altar is probably already visible at this point
-        interactObject(bloodRuins, "Enter");
-        sleepUntil(Rs2Player::isAnimating, 5000);
-        sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-
-        sleepUntil(() -> findObject(bloodAltar) != null, 5000); // Wait for Altar
-        interactObject(bloodAltar, "Craft-rune");
-
-        setState(State.CRAFTING);
-        return;
+        BloodStep initialStep;
+        do {
+            initialStep = bloodStep;
+            switch (bloodStep) {
+                case CAVE_1:
+                    if (handleTransition(16308, "Enter")) {
+                        bloodStep = BloodStep.CAVE_2;
+                    }
+                    break;
+                case CAVE_2:
+                    if (handleTransition(5046, "Enter")) {
+                        bloodStep = BloodStep.CAVE_3;
+                    }
+                    break;
+                case CAVE_3:
+                    int agilityLevel = Rs2Player.getRealSkillLevel(Skill.AGILITY);
+                    if (agilityLevel >= 93) {
+                        if (handleTransition(43759, "Enter")) {
+                            bloodStep = BloodStep.CAVE_4;
+                        }
+                    } else if (agilityLevel >= 74) {
+                        if (handleTransition(12770, "Enter")) {
+                            bloodStep = BloodStep.CAVE_4;
+                        }
+                    }
+                    break;
+                case CAVE_4:
+                    int agilityLevel2 = Rs2Player.getRealSkillLevel(Skill.AGILITY);
+                    if (agilityLevel2 >= 93) {
+                        if (handleTransition(43762, "Enter")) {
+                            bloodStep = BloodStep.RUINS;
+                        }
+                    } else if (agilityLevel2 >= 74) {
+                        if (handleTransition(12771, "Enter")) {
+                            bloodStep = BloodStep.WALK_TO_CAVE_5;
+                        }
+                    }
+                    break;
+                case WALK_TO_CAVE_5:
+                    WorldPoint cave5Wp = new WorldPoint(3560, 9814, 0);
+                    if (plugin.getMyWorldPoint().distanceTo(cave5Wp) > 5) {
+                        Rs2Walker.walkTo(cave5Wp);
+                        sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(cave5Wp) <= 5, 10000);
+                    } else {
+                        bloodStep = BloodStep.CAVE_5;
+                    }
+                    break;
+                case CAVE_5:
+                    if (handleTransition(43755, "Enter")) {
+                        bloodStep = BloodStep.CAVE_6;
+                    }
+                    break;
+                case CAVE_6:
+                    if (handleTransition(43758, "Enter")) {
+                        bloodStep = BloodStep.RUINS;
+                    }
+                    break;
+                case RUINS:
+                    if (handleTransition(bloodRuins, "Enter")) {
+                        bloodStep = BloodStep.ALTAR;
+                    }
+                    break;
+                case ALTAR:
+                    var altar = findObject(bloodAltar);
+                    if (altar != null) {
+                        sleepGaussian(150, 25);
+                        interactObject(altar.getId(), "Craft-rune");
+                        bloodStep = BloodStep.CAVE_1;
+                        setState(State.CRAFTING);
+                        return;
+                    }
+                    break;
+            }
+        } while (bloodStep != initialStep);
     }
 
 
