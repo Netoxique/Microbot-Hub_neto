@@ -2,6 +2,8 @@ package net.runelite.client.plugins.microbot.netorc.enums;
 
 import lombok.Getter;
 import net.runelite.api.gameval.ItemID;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 
 @Getter
 public enum Teleports {
@@ -36,6 +38,41 @@ public enum Teleports {
         if (RegionIds == null) return false;
         for (int id : RegionIds) {
             if (id == regionId) return true;
+        }
+        return false;
+    }
+
+    public int firstItemId() {
+        return itemIds[0];
+    }
+
+    public boolean isWearing() {
+        for (int itemId : itemIds) {
+            if (Rs2Equipment.isWearing(itemId)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    public boolean isInInventory() {
+        return Rs2Inventory.contains(itemIds);
+    }
+
+    public boolean interactWorn() {
+        for (int itemId : itemIds) {
+            if (Rs2Equipment.isWearing(itemId)) {
+                return Rs2Equipment.interact(itemId, interaction);
+            }
+        }
+        return false;
+    }
+
+    public boolean interactInventory() {
+        for (int itemId : itemIds) {
+            if (Rs2Inventory.contains(itemId)) {
+                return Rs2Inventory.interact(itemId, interaction);
+            }
         }
         return false;
     }

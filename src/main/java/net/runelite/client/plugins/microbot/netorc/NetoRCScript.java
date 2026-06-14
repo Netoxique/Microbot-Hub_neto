@@ -9,10 +9,12 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.ObjectID;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
+import net.runelite.client.plugins.microbot.netorc.enums.BloodStep;
 import net.runelite.client.plugins.microbot.netorc.enums.RuneType;
 import net.runelite.client.plugins.microbot.netorc.enums.State;
 import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.netorc.enums.Teleports;
+import net.runelite.client.plugins.microbot.netorc.enums.WrathStep;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
 import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
@@ -43,35 +45,7 @@ public class NetoRCScript extends Script {
     private final NetoRCPlugin plugin;
     public static State state = State.BANKING;
 
-    private enum WrathStep {
-        MYTH_CAPE,
-        MYTH_STATUE,
-        CAVE,
-        RUINS,
-        ALTAR
-    }
-
-    private enum BloodStep {
-        CAVE_1,
-        CAVE_2,
-        CAVE_3,
-        CAVE_4,
-        WALK_TO_CAVE_5,
-        CAVE_5,
-        CAVE_6,
-        RUINS,
-        ALTAR
-    }
-
     private int lumbyElite = -1;
-
-    private final WorldPoint feroxPoolWp = new WorldPoint(3129, 3636, 0);
-    private final WorldPoint monasteryFairyRing = new WorldPoint(2656, 3230, 0);
-    private final WorldPoint caveFairyRing = new WorldPoint(3447, 9824, 0);
-    private final WorldPoint firstCaveExit = new WorldPoint(3460, 9813, 0);
-    private final WorldPoint outsideBloodRuins74 = new WorldPoint(3555, 9783, 0);
-    private final WorldPoint outsideBloodRuins93 = new WorldPoint(3543, 9772, 0);
-    private final WorldPoint outsideBloodRuins73 = new WorldPoint(3558, 9779, 0);
 
 	private volatile boolean forceDrinkAtFerox = false;
     private volatile boolean forceBankOnStart = true;
@@ -81,16 +55,8 @@ public class NetoRCScript extends Script {
     private final ThreadLocal<Integer> scheduledRunId = new ThreadLocal<>();
 
     public static final int pureEss = 7936;
-    public static final int feroxPool = 39651;
-    public static final int monasteryRegion = 10290;
-    public static final int bloodAltarRegion = 12875;
 
-    public static final int guildSpiritTree = ObjectID.FARMING_SPIRIT_TREE_PATCH_5;
-    private final WorldPoint guildSpiritTreeLoc = new WorldPoint(1252, 3749, 0);
-
-    public static final int bloodRuins = ObjectID.BLOODTEMPLE_RUINED;
     public static final int bloodAltar = ObjectID.BLOOD_ALTAR;
-    public static final int wrathRuins = ObjectID.WRATHTEMPLE_RUINED;
     public static final int wrathAltar = ObjectID.WRATH_ALTAR;
 
     public static final int activeBloodEssence = ItemID.BLOOD_ESSENCE_ACTIVE;
@@ -156,34 +122,6 @@ public class NetoRCScript extends Script {
         var item = Rs2Inventory.get(itemName);
         if (item != null) {
             return Rs2Inventory.hover(item);
-        }
-        return false;
-    }
-
-    private boolean hoverBankItem(int itemId) {
-        if (!Rs2Bank.isOpen()) return false;
-        Widget bankContainer = client.getWidget(12, 130);
-        if (bankContainer == null || bankContainer.getChildren() == null) return false;
-        for (Widget child : bankContainer.getChildren()) {
-            if (child != null && child.getItemId() == itemId) {
-                java.awt.Rectangle bounds = child.getBounds();
-                if (bounds != null) {
-                    net.runelite.api.Point point = net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper.getClickingPoint(bounds, true);
-                    if (point.getX() != 1 && point.getY() != 1) {
-                        Microbot.getNaturalMouse().moveTo(point.getX(), point.getY());
-                        return true;
-                    }
-                }
-            }
-        }
-        return false;
-    }
-
-    private boolean hoverBankItem(String itemName) {
-        if (!Rs2Bank.isOpen()) return false;
-        var item = Rs2Bank.getBankItem(itemName);
-        if (item != null) {
-            return hoverBankItem(item.getId());
         }
         return false;
     }
@@ -270,6 +208,7 @@ public class NetoRCScript extends Script {
                                 break;
                             } else if (config.runeType() == RuneType.BLOOD && !config.usePoh()) {
                                 handleArdyCloak();
+                                break;
                             } else if (config.runeType() == RuneType.WRATH) {
                                 handleWrathWalking();
                                 break;
@@ -358,36 +297,14 @@ public class NetoRCScript extends Script {
     }
 
     private void handleBanking() {
-        int currentRegion = plugin.getMyWorldPoint().getRegionID();
         boolean forceBank = forceBankOnStart;
 
-        if (forceBank) {
-            if (!isBankingRegion(currentRegion)) {
-                Microbot.log("Startup banking requested, teleporting to bank");
-                handleBankTeleport();
-                return;
-            }
-        } else if (!Rs2Inventory.allPouchesFull() && !Rs2Inventory.contains(pureEss)) {
-            if (!isBankingRegion(currentRegion)) {
-                Microbot.log("Not in banking region, teleporting");
-                handleBankTeleport();
-            }
+        if (!ensureBankingLocation(forceBank)) {
+            return;
         }
 
-		if (plugin.isBreakHandlerEnabled()) {
-			BreakHandlerScript.setLockState(true);
-		}
-
-        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
-
-		if (Rs2Inventory.hasDegradedPouch()) {
-			Rs2Magic.repairPouchesWithLunar();
-			sleepGaussian(600, 200);
-			return;
-		}
-
-        if (Rs2Inventory.anyPouchUnknown()) {
-            checkPouches();
+        if (!prepareBankingUiAndPouches()) {
+            return;
         }
 
         if (!forceBank && Rs2Inventory.isFull() && Rs2Inventory.allPouchesFull() && Rs2Inventory.contains(pureEss)) {
@@ -399,6 +316,53 @@ public class NetoRCScript extends Script {
             handleFeroxRunEnergy();
         }
 
+        openBankIfNeeded();
+        withdrawRuneTypeSupplies();
+        ensureTravelItems(client.getRealSkillLevel(Skill.RUNECRAFT));
+        handleFillPouch();
+        finishBankingAndRoute();
+    }
+
+    private boolean ensureBankingLocation(boolean forceBank) {
+        int currentRegion = plugin.getMyWorldPoint().getRegionID();
+
+        if (forceBank && !isBankingRegion(currentRegion)) {
+            Microbot.log("Startup banking requested, teleporting to bank");
+            handleBankTeleport();
+            return false;
+        }
+
+        if (!forceBank
+                && !Rs2Inventory.allPouchesFull()
+                && !Rs2Inventory.contains(pureEss)
+                && !isBankingRegion(currentRegion)) {
+            Microbot.log("Not in banking region, teleporting");
+            handleBankTeleport();
+        }
+
+        return true;
+    }
+
+    private boolean prepareBankingUiAndPouches() {
+		if (plugin.isBreakHandlerEnabled()) {
+			BreakHandlerScript.setLockState(true);
+		}
+
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
+
+		if (Rs2Inventory.hasDegradedPouch()) {
+			Rs2Magic.repairPouchesWithLunar();
+			sleepGaussian(600, 200);
+			return false;
+		}
+
+        if (Rs2Inventory.anyPouchUnknown()) {
+            checkPouches();
+        }
+        return true;
+    }
+
+    private void openBankIfNeeded() {
         while (!Rs2Bank.isOpen() && isRunning() && Rs2Bank.isNearBank(26) &&
                 (forceBankOnStart || needsBankingSupplies())) {
             Microbot.log("Opening bank");
@@ -413,25 +377,15 @@ public class NetoRCScript extends Script {
         if (forceBankOnStart && Rs2Bank.isOpen()) {
             forceBankOnStart = false;
         }
+    }
 
+    private void withdrawRuneTypeSupplies() {
         if (config.runeType() == RuneType.WRATH) {
             handleWrathReqEquip();
         }
 
         if (config.runeType() == RuneType.BLOOD) {
-            if (lumbyElite != 1) {
-                if (!Rs2Equipment.isWearing(lunarStaff)) {
-                    Microbot.log("Looking for and withdrawing lunar staff");
-                    Rs2Bank.withdrawAndEquip(lunarStaff);
-                    sleepUntil(() -> Rs2Equipment.isWearing(lunarStaff));
-                    sleepGaussian(700, 200);
-                } else if (!Rs2Equipment.isWearing(lunarStaff) && !Rs2Bank.hasItem(lunarStaff)) {
-                    Microbot.log("No lunar staff found, withdrawing dramen staff");
-                    Rs2Bank.withdrawAndEquip(dramenStaff);
-                    sleepUntil(() -> Rs2Equipment.isWearing(dramenStaff));
-                    sleepGaussian(700, 200);
-                }
-            }
+            ensureBloodStaff();
 
             if (!config.usePoh() && !Rs2Equipment.isWearing("Ardougne cloak")) {
                 Rs2Bank.withdrawAndEquip("Ardougne cloak");
@@ -449,7 +403,27 @@ public class NetoRCScript extends Script {
                 }
             }
         }
-        int runecraftLevel = client.getRealSkillLevel(Skill.RUNECRAFT);
+    }
+
+    private void ensureBloodStaff() {
+        if (lumbyElite == 1 || Rs2Equipment.isWearing(lunarStaff) || Rs2Equipment.isWearing(dramenStaff)) {
+            return;
+        }
+
+        if (Rs2Bank.hasItem(lunarStaff)) {
+            Microbot.log("Looking for and withdrawing lunar staff");
+            Rs2Bank.withdrawAndEquip(lunarStaff);
+            sleepUntil(() -> Rs2Equipment.isWearing(lunarStaff));
+            sleepGaussian(700, 200);
+        } else if (Rs2Bank.hasItem(dramenStaff)) {
+            Microbot.log("No lunar staff found, withdrawing dramen staff");
+            Rs2Bank.withdrawAndEquip(dramenStaff);
+            sleepUntil(() -> Rs2Equipment.isWearing(dramenStaff));
+            sleepGaussian(700, 200);
+        }
+    }
+
+    private void ensureTravelItems(int runecraftLevel) {
         if (runecraftLevel >= 99) {
             if (!Rs2Equipment.isWearing("Runecraft cape")) {
                 Rs2Bank.withdrawAndEquip("Runecraft cape");
@@ -457,30 +431,8 @@ public class NetoRCScript extends Script {
             }
         }
 
-        // Handle POH Teleports
         if (config.usePoh()) {
-            boolean hasPohTeleport = Rs2Equipment.isWearing(Teleports.CONSTRUCTION_CAPE.getItemIds())
-                    || Rs2Inventory.contains(Teleports.CONSTRUCTION_CAPE.getItemIds())
-                    || Rs2Inventory.contains(Teleports.HOUSE_TAB.getItemIds())
-                    || (Rs2Inventory.hasRunePouch() && runecraftLevel >= 99);
-
-            if (!hasPohTeleport) {
-                if (Rs2Bank.hasItem(Teleports.CONSTRUCTION_CAPE.getItemIds())) {
-                    if (runecraftLevel >= 99) {
-                        Rs2Bank.withdrawItem(Teleports.CONSTRUCTION_CAPE.getItemIds()[0]);
-                        sleepUntil(() -> Rs2Inventory.contains(Teleports.CONSTRUCTION_CAPE.getItemIds()));
-                    } else {
-                        Rs2Bank.withdrawAndEquip(Teleports.CONSTRUCTION_CAPE.getItemIds()[0]);
-                        sleepUntil(() -> Rs2Equipment.isWearing(Teleports.CONSTRUCTION_CAPE.getItemIds()));
-                    }
-                } else if (runecraftLevel >= 99 && Rs2Bank.hasRunePouch()) {
-                    Rs2Bank.withdrawRunePouch();
-                    sleepUntil(Rs2Inventory::hasRunePouch);
-                } else if (Rs2Bank.hasItem(Teleports.HOUSE_TAB.getItemIds())) {
-                    Rs2Bank.withdrawAll(Teleports.HOUSE_TAB.getItemIds()[0]);
-                    sleepUntil(() -> Rs2Inventory.contains(Teleports.HOUSE_TAB.getItemIds()));
-                }
-            }
+            ensurePohTeleport(runecraftLevel);
         } else {
             if (runecraftLevel < 99 && !Rs2Inventory.hasRunePouch()) {
                 Rs2Bank.withdrawRunePouch();
@@ -488,25 +440,46 @@ public class NetoRCScript extends Script {
             }
         }
 
-        // Get sailor's amulet
-        for (int sailorsAmuletId : Teleports.SAILORS_AMULET.getItemIds()) {
-            if (!Rs2Equipment.isWearing(sailorsAmuletId) && Rs2Bank.hasItem(sailorsAmuletId)) {
-                Microbot.log("Withdrawing bank teleport " + Teleports.SAILORS_AMULET.getName());
-                Rs2Bank.withdrawAndEquip(sailorsAmuletId);
-                sleepUntil(() -> Rs2Equipment.isWearing(sailorsAmuletId));
-                break;
+        ensureEquippedTeleport(Teleports.SAILORS_AMULET);
+        ensureEquippedTeleport(Teleports.FEROX_ENCLAVE);
+    }
+
+    private void ensurePohTeleport(int runecraftLevel) {
+        boolean hasPohTeleport = Teleports.CONSTRUCTION_CAPE.isWearing()
+                || Teleports.CONSTRUCTION_CAPE.isInInventory()
+                || Teleports.HOUSE_TAB.isInInventory()
+                || (Rs2Inventory.hasRunePouch() && runecraftLevel >= 99);
+
+        if (hasPohTeleport) {
+            return;
+        }
+
+        if (Rs2Bank.hasItem(Teleports.CONSTRUCTION_CAPE.getItemIds())) {
+            if (runecraftLevel >= 99) {
+                Rs2Bank.withdrawItem(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                sleepUntil(Teleports.CONSTRUCTION_CAPE::isInInventory);
+            } else {
+                Rs2Bank.withdrawAndEquip(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                sleepUntil(Teleports.CONSTRUCTION_CAPE::isWearing);
             }
+        } else if (runecraftLevel >= 99 && Rs2Bank.hasRunePouch()) {
+            Rs2Bank.withdrawRunePouch();
+            sleepUntil(Rs2Inventory::hasRunePouch);
+        } else if (Rs2Bank.hasItem(Teleports.HOUSE_TAB.getItemIds())) {
+            Rs2Bank.withdrawAll(Teleports.HOUSE_TAB.firstItemId());
+            sleepUntil(Teleports.HOUSE_TAB::isInInventory);
         }
+    }
 
-        if (!Rs2Equipment.isWearing("Ring of dueling") && Rs2Bank.hasItem("Ring of dueling")) {
-            Microbot.log("Withdrawing ring of dueling");
-            Rs2Bank.withdrawAndEquip(2552);
-            sleepUntil(() -> Rs2Equipment.isWearing("Ring of dueling"));
+    private void ensureEquippedTeleport(Teleports teleport) {
+        if (!teleport.isWearing() && Rs2Bank.hasItem(teleport.getItemIds())) {
+            Microbot.log("Withdrawing bank teleport " + teleport.getName());
+            Rs2Bank.withdrawAndEquip(teleport.firstItemId());
+            sleepUntil(teleport::isWearing);
         }
+    }
 
-        // Withdraw essences and fill pouches
-        handleFillPouch();
-
+    private void finishBankingAndRoute() {
         if (Rs2Bank.isOpen() && Rs2Inventory.allPouchesFull() && Rs2Inventory.isFull()) {
             Microbot.log("We are full, lets go");
             Rs2Bank.closeBank();
@@ -556,15 +529,15 @@ public class NetoRCScript extends Script {
 		if (needsFeroxRestore()) {
 			Microbot.log("We are thirsty...let us Drink");
             forceDrinkAtFerox = true;
-            if (plugin.getMyWorldPoint().distanceTo(feroxPoolWp) > 5) {
+            if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) > 5) {
                 Microbot.log("Walking to Ferox pool");
-                Rs2Walker.walkTo(feroxPoolWp);
-                sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(feroxPoolWp) < 5);
+                Rs2Walker.walkTo(NetoRcConstants.FEROX_POOL);
+                sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) < 5);
             }
 
-            if (plugin.getMyWorldPoint().distanceTo(feroxPoolWp) < 5) {
+            if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) < 5) {
                 Microbot.log("Interacting with the Ferox pool");
-                interactObject(feroxPool, "Drink");
+                interactObject(NetoRcConstants.FEROX_POOL_OBJECT, "Drink");
             }
             sleepUntil(() -> (!Rs2Player.isInteracting()) && !Rs2Player.isAnimating() && Rs2Player.getRunEnergy() > 90);
             sleepGaussian(1100, 200);
@@ -583,22 +556,22 @@ public class NetoRCScript extends Script {
             if (Rs2Equipment.isWearing(itemId)) {
                 Microbot.log("Using Ardy cloak");
                 Rs2Equipment.interact(itemId, ardyCloakTeleport.getInteraction());
-                Microbot.log("Waiting for region " + monasteryRegion);
-                sleepUntil(() -> plugin.getMyWorldPoint().getRegionID() == (monasteryRegion));
+                Microbot.log("Waiting for region " + NetoRcConstants.MONASTERY_REGION);
+                sleepUntil(() -> plugin.getMyWorldPoint().getRegionID() == NetoRcConstants.MONASTERY_REGION);
                 sleepGaussian(1100, 200);
             }
         }
 
-        if (plugin.getMyWorldPoint().distanceTo(monasteryFairyRing) > 7) {
+        if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.MONASTERY_FAIRY_RING) > 7) {
             Microbot.log("Walking to monastery fairy ring");
-            Rs2Walker.walkTo(monasteryFairyRing);
-            sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(monasteryFairyRing) < 7);
+            Rs2Walker.walkTo(NetoRcConstants.MONASTERY_FAIRY_RING);
+            sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(NetoRcConstants.MONASTERY_FAIRY_RING) < 7);
             sleepGaussian(900, 200);
         }
 
         var fairyRing = new Rs2TileObjectQueryable().withNameContains("fairy").first();
 
-        if (plugin.getMyWorldPoint().distanceTo(monasteryFairyRing) < 7) {
+        if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.MONASTERY_FAIRY_RING) < 7) {
             if (fairyRing == null) {
                 Microbot.log("Unable to find fairies, resetting from bank to retry");
                 setState(State.BANKING);
@@ -606,7 +579,7 @@ public class NetoRCScript extends Script {
             } else {
                 Microbot.log("Interacting with fairies");
                 interactObject(fairyRing.getId(), "Last-destination");
-                sleepUntil(() -> plugin.getMyWorldPoint().equals(caveFairyRing));
+                sleepUntil(() -> plugin.getMyWorldPoint().equals(NetoRcConstants.CAVE_FAIRY_RING));
             }
         }
         setState(State.WALKING_TO);
@@ -615,17 +588,16 @@ public class NetoRCScript extends Script {
     private void handleFarmingCape() {
         Teleports farmingCapeTeleport = Teleports.FARMING_CAPE;
         if (config.usePoh()) {
-            if (Rs2Equipment.isWearing(Arrays.toString(farmingCapeTeleport.getItemIds()))) {
+            if (farmingCapeTeleport.isWearing()) {
                 if (plugin.getMyWorldPoint().getRegionID() != 4922) {
-                    Rs2Equipment.interact(Arrays.toString(farmingCapeTeleport.getItemIds()),
-                            farmingCapeTeleport.getInteraction());
+                    farmingCapeTeleport.interactWorn();
                     sleepUntil(() -> plugin.getMyWorldPoint().getRegionID() == 4922);
                     sleepGaussian(1100, 200);
                 }
-                if (plugin.getMyWorldPoint().distanceTo(guildSpiritTreeLoc) > 10) {
-                    Rs2Walker.walkTo(guildSpiritTreeLoc);
+                if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.GUILD_SPIRIT_TREE) > 10) {
+                    Rs2Walker.walkTo(NetoRcConstants.GUILD_SPIRIT_TREE);
                 } else {
-                    interactObject(guildSpiritTree, "Travel");
+                    interactObject(NetoRcConstants.GUILD_SPIRIT_TREE_OBJECT, "Travel");
                     sleepUntil(() -> Rs2Widget.isWidgetVisible(187, 3), 10000);
                     sleepGaussian(1100, 200);
 
@@ -642,17 +614,8 @@ public class NetoRCScript extends Script {
                             }
                         }
                     }
-                    if (Rs2Player.getRunEnergy() <= getStaminaThreshold()) {
-                        sleepGaussian(700, 200);
-                        Microbot.log("We are thirsty..let us Drink");
-                        List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-                        poolObjectIds.stream().filter(id -> findObject(id) != null).findFirst()
-                                .ifPresent(objectId -> {
-                                    interactObject(objectId, "Drink");
-                                    sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90);
-                                });
-                    }
-                    if (Rs2Player.getRunEnergy() > getStaminaThreshold()) {
+                    restoreAtPohIfNeeded();
+                    if (!needsRestore()) {
                         if (config.runeType() == RuneType.BLOOD) {
                             sleepGaussian(700, 200);
                             Microbot.log("Looking for fairies");
@@ -707,22 +670,19 @@ public class NetoRCScript extends Script {
         }
 
         Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
-        if (!Rs2Inventory.contains(homeTeleports.getItemIds())) {
+        if (!homeTeleports.isInInventory()) {
             Microbot.log("Con cape not found");
             homeTeleports = Teleports.HOUSE_TAB;
         }
 
-        for (Integer itemId : homeTeleports.getItemIds()) {
-            if (Rs2Inventory.contains(itemId)) {
-                Microbot.log("Using " + homeTeleports.getName());
-                Rs2Inventory.interact(itemId, homeTeleports.getInteraction());
-                sleepGaussian(1100, 200);
-                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-                sleepGaussian(1300, 200);
-                Microbot.log("We should be in poh fully loaded");
-                return;
-            }
+        if (homeTeleports.isInInventory()) {
+            Microbot.log("Using " + homeTeleports.getName());
+            homeTeleports.interactInventory();
+            sleepGaussian(1100, 200);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+            sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
+            sleepGaussian(1300, 200);
+            Microbot.log("We should be in poh fully loaded");
         }
     }
 
@@ -733,13 +693,12 @@ public class NetoRCScript extends Script {
 
         sleepGaussian(700, 200);
         Microbot.log("We are thirsty..let us Drink");
-        List<Integer> poolObjectIds = Arrays.asList(29241, 29240, 29239, 29238, 29237);
-        Optional<Integer> poolObjectId = poolObjectIds.stream()
+        OptionalInt poolObjectId = Arrays.stream(NetoRcConstants.POH_POOL_OBJECTS)
                 .filter(id -> findObject(id) != null)
                 .findFirst();
 
         if (poolObjectId.isPresent()) {
-            interactObject(poolObjectId.get(), "Drink");
+            interactObject(poolObjectId.getAsInt(), "Drink");
             sleepUntil(() -> !Rs2Player.isInteracting() && Rs2Player.getRunEnergy() > 90, 5000);
         } else {
             Microbot.log("Unable to find POH pool, resetting to banking for a retry");
@@ -758,7 +717,7 @@ public class NetoRCScript extends Script {
         }
 
         if (config.runeType() == RuneType.BLOOD
-                && Rs2Equipment.isWearing(Arrays.toString(Teleports.FARMING_CAPE.getItemIds()))) {
+                && Teleports.FARMING_CAPE.isWearing()) {
             handleFarmingCape();
         } else {
             teleportToPoh();
@@ -884,10 +843,9 @@ public class NetoRCScript extends Script {
                     }
                     break;
                 case WALK_TO_CAVE_5:
-                    WorldPoint cave5Wp = new WorldPoint(3560, 9814, 0);
-                    if (plugin.getMyWorldPoint().distanceTo(cave5Wp) > 5) {
-                        Rs2Walker.walkTo(cave5Wp);
-                        sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(cave5Wp) <= 5, 10000);
+                    if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.BLOOD_CAVE_5) > 5) {
+                        Rs2Walker.walkTo(NetoRcConstants.BLOOD_CAVE_5);
+                        sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(NetoRcConstants.BLOOD_CAVE_5) <= 5, 10000);
                     } else {
                         bloodStep = BloodStep.CAVE_5;
                     }
@@ -903,7 +861,7 @@ public class NetoRCScript extends Script {
                     }
                     break;
                 case RUINS:
-                    if (handleTransition(bloodRuins, "Enter")) {
+                    if (handleTransition(ObjectID.BLOODTEMPLE_RUINED, "Enter")) {
                         bloodStep = BloodStep.ALTAR;
                     }
                     break;
@@ -959,12 +917,12 @@ public class NetoRCScript extends Script {
                     if (cave != null) {
                         sleepGaussian(150, 25); // 100 to 200 ms
                         interactObject(cave.getId(), "Enter");
-                        sleepUntilOnClientThread(() -> findObject(wrathRuins) != null, 20000); // Wait for Ruins
+                        sleepUntilOnClientThread(() -> findObject(ObjectID.WRATHTEMPLE_RUINED) != null, 20000); // Wait for Ruins
                         wrathStep = WrathStep.RUINS;
                     }
                     break;
                 case RUINS:
-                    var ruins = findObject(wrathRuins);
+                    var ruins = findObject(ObjectID.WRATHTEMPLE_RUINED);
                     if (ruins != null) {
                         sleepGaussian(1250, 250); // 500 to 2000 ms
                         interactObject(ruins.getId(), "Enter");
@@ -1070,16 +1028,12 @@ public class NetoRCScript extends Script {
 
         boolean needRefill = needsRestore() || (!config.usePoh() && forceDrinkAtFerox);
 
-        if (!needRefill) {
-            for (int craftingCapeId : Teleports.CRAFTING_CAPE.getItemIds()) {
-                if (Rs2Inventory.contains(craftingCapeId)) {
-                    Microbot.log("Using: " + Teleports.CRAFTING_CAPE.getName());
-                    Rs2Inventory.interact(craftingCapeId, Teleports.CRAFTING_CAPE.getInteraction());
-                    sleepUntil(() -> Teleports.CRAFTING_CAPE.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
-                    sleepGaussian(600, 200);
-                    return;
-                }
-            }
+        if (!needRefill && Teleports.CRAFTING_CAPE.isInInventory()) {
+            Microbot.log("Using: " + Teleports.CRAFTING_CAPE.getName());
+            Teleports.CRAFTING_CAPE.interactInventory();
+            sleepUntil(() -> Teleports.CRAFTING_CAPE.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
+            sleepGaussian(600, 200);
+            return;
         }
 
         Rs2Tab.switchTo(InterfaceTab.INVENTORY);
@@ -1097,24 +1051,18 @@ public class NetoRCScript extends Script {
                     Teleports.SAILORS_AMULET,
                     Teleports.CASTLE_WARS);
         }
-        boolean teleportUsed = false;
-
         for (Teleports teleport : bankTeleport) {
-            for (Integer bankTeleportsId : teleport.getItemIds()) {
-                if (Rs2Equipment.isWearing(bankTeleportsId)) {
-                    Microbot.log("Using: " + teleport.getName());
-                    Rs2Equipment.interact(bankTeleportsId, teleport.getInteraction());
-                    sleepUntil(() -> teleport.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
-                    sleepGaussian(600, 200);
-                    if (!config.usePoh() && teleport == Teleports.FEROX_ENCLAVE) {
-                        forceDrinkAtFerox = true;
-                        handleFeroxRunEnergy();
-                    }
-                    teleportUsed = true;
-                    break;
+            if (teleport.isWearing()) {
+                Microbot.log("Using: " + teleport.getName());
+                teleport.interactWorn();
+                sleepUntil(() -> teleport.matchesRegion(plugin.getMyWorldPoint().getRegionID()));
+                sleepGaussian(600, 200);
+                if (!config.usePoh() && teleport == Teleports.FEROX_ENCLAVE) {
+                    forceDrinkAtFerox = true;
+                    handleFeroxRunEnergy();
                 }
+                break;
             }
-            if (teleportUsed) break;
         }
     }
 }
