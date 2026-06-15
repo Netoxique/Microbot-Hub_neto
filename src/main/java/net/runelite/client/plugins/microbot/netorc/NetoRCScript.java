@@ -669,12 +669,10 @@ public class NetoRCScript extends Script {
         }
 
         if (teleportInitiated) {
-            WorldPoint waitLocation = new WorldPoint(1986, 7051, 0); // Inside PoH portal
-            if (sleepUntil(() -> plugin.getMyWorldPoint().equals(waitLocation), 6000)) {
-                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-                sleepGaussian(150, 25);
-                Microbot.log("We should be in poh fully loaded");
-            }
+            // wait for PoH portal
+            sleepUntil(() -> Microbot.getRs2TileObjectCache().query().withId(4525).first() != null, 10000);
+            sleepGaussian(150, 25);
+            Microbot.log("We should be in poh fully loaded");
         }
     }
 
