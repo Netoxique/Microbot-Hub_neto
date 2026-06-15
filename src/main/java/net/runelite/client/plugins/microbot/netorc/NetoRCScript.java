@@ -33,6 +33,7 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 
@@ -352,7 +353,6 @@ public class NetoRCScript extends Script {
 
 		if (Rs2Inventory.hasDegradedPouch()) {
 			Rs2Magic.repairPouchesWithLunar();
-			sleepGaussian(600, 200);
 			return false;
 		}
 
@@ -529,10 +529,9 @@ public class NetoRCScript extends Script {
 		if (needsFeroxRestore()) {
 			Microbot.log("We are thirsty...let us Drink");
             forceDrinkAtFerox = true;
-            if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) > 5) {
+            if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) > 7) {
                 Microbot.log("Walking to Ferox pool");
-                Rs2Walker.walkTo(NetoRcConstants.FEROX_POOL);
-                sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) < 5);
+                smartWalk(NetoRcConstants.FEROX_POOL, 5);
             }
 
             if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) < 5) {
@@ -557,31 +556,20 @@ public class NetoRCScript extends Script {
                 Microbot.log("Using Ardy cloak");
                 Rs2Equipment.interact(itemId, ardyCloakTeleport.getInteraction());
                 Microbot.log("Waiting for region " + NetoRcConstants.MONASTERY_REGION);
-                sleepUntil(() -> plugin.getMyWorldPoint().getRegionID() == NetoRcConstants.MONASTERY_REGION);
-                sleepGaussian(1100, 200);
+                sleepUntil(Rs2Player::isAnimating, 5000);
+                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
             }
         }
 
-        if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.MONASTERY_FAIRY_RING) > 7) {
-            Microbot.log("Walking to monastery fairy ring");
-            Rs2Walker.walkTo(NetoRcConstants.MONASTERY_FAIRY_RING);
-            sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(NetoRcConstants.MONASTERY_FAIRY_RING) < 7);
-            sleepGaussian(900, 200);
-        }
+        smartWalk(NetoRcConstants.MONASTERY_FAIRY_RING);
 
-        var fairyRing = new Rs2TileObjectQueryable().withNameContains("fairy").first();
+//        sleepUntilOnClientThread(() -> findObject(29495) != null, 10000); // Wait for Monastery Ring
+//        var fairyRing = new Rs2TileObjectQueryable().withNameContains("fairy").first();
 
-        if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.MONASTERY_FAIRY_RING) < 7) {
-            if (fairyRing == null) {
-                Microbot.log("Unable to find fairies, resetting from bank to retry");
-                setState(State.BANKING);
-                return;
-            } else {
-                Microbot.log("Interacting with fairies");
-                interactObject(fairyRing.getId(), "Last-destination");
-                sleepUntil(() -> plugin.getMyWorldPoint().equals(NetoRcConstants.CAVE_FAIRY_RING));
-            }
-        }
+        Microbot.log("Interacting with fairies");
+        interactObject(29495, "Last-destination");
+//        interactObject(fairyRing.getId(), "Last-destination");
+
         setState(State.WALKING_TO);
     }
 
@@ -594,8 +582,8 @@ public class NetoRCScript extends Script {
                     sleepUntil(() -> plugin.getMyWorldPoint().getRegionID() == 4922);
                     sleepGaussian(1100, 200);
                 }
-                if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.GUILD_SPIRIT_TREE) > 10) {
-                    Rs2Walker.walkTo(NetoRcConstants.GUILD_SPIRIT_TREE);
+                if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.GUILD_SPIRIT_TREE) > 7) {
+                    smartWalk(NetoRcConstants.GUILD_SPIRIT_TREE);
                 } else {
                     interactObject(NetoRcConstants.GUILD_SPIRIT_TREE_OBJECT, "Travel");
                     sleepUntil(() -> Rs2Widget.isWidgetVisible(187, 3), 10000);
@@ -764,6 +752,39 @@ public class NetoRCScript extends Script {
     }
 
 
+    private void smartWalk(WorldPoint dst) {
+        smartWalk(dst, 7);
+    }
+
+    private void smartWalk(WorldPoint dst, int distanceThreshold) {
+        WorldPoint myLocation = plugin.getMyWorldPoint();
+        if (myLocation == null) {
+            Microbot.log("MyLocation is null");
+            return;
+        }
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(true);
+        }
+        Microbot.log("Walking from (" + myLocation.getX() + "," + myLocation.getY() + "," + myLocation.getPlane() +
+                ") to (" + dst.getX() + "," + dst.getY() + "," + dst.getPlane() + ") with threshold " + distanceThreshold);
+
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+
+        while (!future.isDone()) {
+            WorldPoint currentLoc = plugin.getMyWorldPoint();
+            if (currentLoc != null && currentLoc.distanceTo(dst) <= distanceThreshold) {
+                Rs2Walker.setTarget(null);
+                future.cancel(true);
+                break;
+            }
+            sleep(100);
+        }
+
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(false);
+        }
+    }
+
     private void handleWalking() {
         if (plugin.isBreakHandlerEnabled()) {
             BreakHandlerScript.setLockState(true);
@@ -782,20 +803,63 @@ public class NetoRCScript extends Script {
         var obj = findObject(objectId);
         if (obj == null) return false;
 
-        if (objectId == 16308) {
+        if (objectId == 16308) { // hover first cave
             hoverObject(objectId);
         }
         if (!Rs2Player.isAnimating()) {
             Microbot.log("Interacting with object " + objectId + " (" + action + ")");
             interactObject(objectId, action);
             sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
+//            if (objectId == 43755) {sleep(4000);} // grater sleep for cave 6 (lvl 73 agility)
+            sleepUntil(() -> !Rs2Player.isAnimating(), 20000);
             sleepGaussian(150, 25);
             boolean success = !plugin.getMyWorldPoint().equals(startPoint);
             if (success) {
                 Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
             } else {
                 Microbot.log("Transition failed for object " + objectId);
+            }
+            return success;
+        }
+        return false;
+    }
+
+    // Transition that handles multiple objects with the same ID
+    private boolean handleTransition(int objectId, WorldPoint location, String action) {
+        WorldPoint startPoint = plugin.getMyWorldPoint();
+        var obj = Rs2GameObject.findObjectByLocation(location);
+        if (obj == null || obj.getId() != objectId) return false;
+
+        if (!Rs2Player.isAnimating()) {
+            Microbot.log("Interacting with object " + objectId + " at " + location + " (" + action + ")");
+            Rs2GameObject.interact(obj, action);
+            sleepUntil(Rs2Player::isAnimating, 5000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 15000);
+            sleepGaussian(150, 25);
+            boolean success = !plugin.getMyWorldPoint().equals(startPoint);
+            if (success) {
+                Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
+            } else {
+                Microbot.log("Transition failed for object " + objectId + " at " + location);
+            }
+            return success;
+        }
+        return false;
+    }
+
+    private boolean handleTransLoc(int objectId, WorldPoint waitLocation, String action) {
+        var obj = findObject(objectId);
+        if (obj == null) return false;
+
+        if (!Rs2Player.isAnimating()) {
+            Microbot.log("Interacting with object " + objectId + " (" + action + ") waiting for loc " + waitLocation);
+            interactObject(objectId, action);
+            boolean success = sleepUntil(() -> plugin.getMyWorldPoint().equals(waitLocation), 20000);
+            if (success) {
+                Microbot.log("Successfully transitioned to " + waitLocation);
+                sleepGaussian(150, 25);
+            } else {
+                Microbot.log("Transition failed for object " + objectId + " to loc " + waitLocation);
             }
             return success;
         }
@@ -824,7 +888,8 @@ public class NetoRCScript extends Script {
                         if (handleTransition(43759, "Enter")) {
                             bloodStep = BloodStep.CAVE_4;
                         }
-                    } else if (agilityLevel >= 74) {
+                    }
+                    else if (agilityLevel >= 74) {
                         if (handleTransition(12770, "Enter")) {
                             bloodStep = BloodStep.CAVE_4;
                         }
@@ -836,27 +901,28 @@ public class NetoRCScript extends Script {
                         if (handleTransition(43762, "Enter")) {
                             bloodStep = BloodStep.RUINS;
                         }
-                    } else if (agilityLevel2 >= 74) {
-                        if (handleTransition(12771, "Enter")) {
-                            bloodStep = BloodStep.WALK_TO_CAVE_5;
+                    }
+                    else if (agilityLevel2 >= 74) {
+                        if (handleTransition(12771, new WorldPoint(3492, 9861, 0), "Enter")) {
+//                            bloodStep = BloodStep.WALK_TO_CAVE_5;
+                            bloodStep = BloodStep.CAVE_5;
                         }
                     }
                     break;
                 case WALK_TO_CAVE_5:
-                    if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.BLOOD_CAVE_5) > 5) {
-                        Rs2Walker.walkTo(NetoRcConstants.BLOOD_CAVE_5);
-                        sleepUntil(() -> plugin.getMyWorldPoint().distanceTo(NetoRcConstants.BLOOD_CAVE_5) <= 5, 10000);
+                    if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.BLOOD_CAVE_5) > 7) {
+                        smartWalk(NetoRcConstants.BLOOD_CAVE_5);
                     } else {
                         bloodStep = BloodStep.CAVE_5;
                     }
                     break;
                 case CAVE_5:
-                    if (handleTransition(43755, "Enter")) {
+                    if (handleTransLoc(43755, new WorldPoint(3560, 9809, 0), "Enter")) {
                         bloodStep = BloodStep.CAVE_6;
                     }
                     break;
                 case CAVE_6:
-                    if (handleTransition(43758, "Enter")) {
+                    if (handleTransLoc(43758, new WorldPoint(3555, 9783, 0), "Enter")) {
                         bloodStep = BloodStep.RUINS;
                     }
                     break;
