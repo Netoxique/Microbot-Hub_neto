@@ -801,24 +801,18 @@ public class NetoRCScript extends Script {
         var obj = findObject(objectId);
         if (obj == null) return false;
 
-        if (objectId == 16308) { // hover first cave
-            hoverObject(objectId);
+        Microbot.log("Interacting with object " + objectId + " (" + action + ")");
+        interactObject(objectId, action);
+        sleepUntil(Rs2Player::isAnimating, 5000);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 15000);
+        sleepGaussian(150, 25);
+        boolean success = !plugin.getMyWorldPoint().equals(startPoint);
+        if (success) {
+            Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
+        } else {
+            Microbot.log("Transition failed for object " + objectId);
         }
-        if (!Rs2Player.isAnimating()) {
-            Microbot.log("Interacting with object " + objectId + " (" + action + ")");
-            interactObject(objectId, action);
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 15000);
-            sleepGaussian(150, 25);
-            boolean success = !plugin.getMyWorldPoint().equals(startPoint);
-            if (success) {
-                Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
-            } else {
-                Microbot.log("Transition failed for object " + objectId);
-            }
-            return success;
-        }
-        return false;
+        return success;
     }
 
     // Transition that handles multiple objects with the same ID
@@ -827,40 +821,34 @@ public class NetoRCScript extends Script {
         var obj = Rs2GameObject.findObjectByLocation(location);
         if (obj == null || obj.getId() != objectId) return false;
 
-        if (!Rs2Player.isAnimating()) {
-            Microbot.log("Interacting with object " + objectId + " at " + location + " (" + action + ")");
-            Rs2GameObject.interact(obj, action);
-            sleepUntil(Rs2Player::isAnimating, 5000);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 15000);
-            sleepGaussian(150, 25);
-            boolean success = !plugin.getMyWorldPoint().equals(startPoint);
-            if (success) {
-                Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
-            } else {
-                Microbot.log("Transition failed for object " + objectId + " at " + location);
-            }
-            return success;
+        Microbot.log("Interacting with object " + objectId + " at " + location + " (" + action + ")");
+        Rs2GameObject.interact(obj, action);
+        sleepUntil(Rs2Player::isAnimating, 5000);
+        sleepUntil(() -> !Rs2Player.isAnimating(), 15000);
+        sleepGaussian(150, 25);
+        boolean success = !plugin.getMyWorldPoint().equals(startPoint);
+        if (success) {
+            Microbot.log("Successfully transitioned from " + startPoint + " to " + plugin.getMyWorldPoint());
+        } else {
+            Microbot.log("Transition failed for object " + objectId + " at " + location);
         }
-        return false;
+        return success;
     }
 
     private boolean handleTransLoc(int objectId, WorldPoint waitLocation, String action) {
         var obj = findObject(objectId);
         if (obj == null) return false;
 
-        if (!Rs2Player.isAnimating()) {
-            Microbot.log("Interacting with object " + objectId + " (" + action + ") waiting for loc " + waitLocation);
-            interactObject(objectId, action);
-            boolean success = sleepUntil(() -> plugin.getMyWorldPoint().equals(waitLocation), 20000);
-            if (success) {
-                Microbot.log("Successfully transitioned to " + waitLocation);
-                sleepGaussian(150, 25);
-            } else {
-                Microbot.log("Transition failed for object " + objectId + " to loc " + waitLocation);
-            }
-            return success;
+        Microbot.log("Interacting with object " + objectId + " (" + action + ") waiting for loc " + waitLocation);
+        interactObject(objectId, action);
+        boolean success = sleepUntil(() -> plugin.getMyWorldPoint().equals(waitLocation), 20000);
+        if (success) {
+            Microbot.log("Successfully transitioned to " + waitLocation);
+            sleepGaussian(150, 25);
+        } else {
+            Microbot.log("Transition failed for object " + objectId + " to loc " + waitLocation);
         }
-        return false;
+        return success;
     }
 
 
