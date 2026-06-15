@@ -810,8 +810,7 @@ public class NetoRCScript extends Script {
             Microbot.log("Interacting with object " + objectId + " (" + action + ")");
             interactObject(objectId, action);
             sleepUntil(Rs2Player::isAnimating, 5000);
-//            if (objectId == 43755) {sleep(4000);} // grater sleep for cave 6 (lvl 73 agility)
-            sleepUntil(() -> !Rs2Player.isAnimating(), 20000);
+            sleepUntil(() -> !Rs2Player.isAnimating(), 15000);
             sleepGaussian(150, 25);
             boolean success = !plugin.getMyWorldPoint().equals(startPoint);
             if (success) {
@@ -904,16 +903,8 @@ public class NetoRCScript extends Script {
                     }
                     else if (agilityLevel2 >= 74) {
                         if (handleTransition(12771, new WorldPoint(3492, 9861, 0), "Enter")) {
-//                            bloodStep = BloodStep.WALK_TO_CAVE_5;
                             bloodStep = BloodStep.CAVE_5;
                         }
-                    }
-                    break;
-                case WALK_TO_CAVE_5:
-                    if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.BLOOD_CAVE_5) > 7) {
-                        smartWalk(NetoRcConstants.BLOOD_CAVE_5);
-                    } else {
-                        bloodStep = BloodStep.CAVE_5;
                     }
                     break;
                 case CAVE_5:
@@ -927,7 +918,7 @@ public class NetoRCScript extends Script {
                     }
                     break;
                 case RUINS:
-                    if (handleTransition(ObjectID.BLOODTEMPLE_RUINED, "Enter")) {
+                    if (handleTransLoc(ObjectID.BLOODTEMPLE_RUINED, new WorldPoint(3239, 4832, 0), "Enter")) {
                         bloodStep = BloodStep.ALTAR;
                     }
                     break;
