@@ -529,17 +529,15 @@ public class NetoRCScript extends Script {
 		if (needsFeroxRestore()) {
 			Microbot.log("We are thirsty...let us Drink");
             forceDrinkAtFerox = true;
-            if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) > 7) {
-                Microbot.log("Walking to Ferox pool");
-                smartWalk(NetoRcConstants.FEROX_POOL, 5);
-            }
 
-            if (plugin.getMyWorldPoint().distanceTo(NetoRcConstants.FEROX_POOL) < 5) {
-                Microbot.log("Interacting with the Ferox pool");
-                interactObject(NetoRcConstants.FEROX_POOL_OBJECT, "Drink");
-            }
+            Microbot.log("Walking to Ferox pool");
+            smartWalk(NetoRcConstants.FEROX_POOL, 5);
+
+            Microbot.log("Interacting with the Ferox pool");
+            interactObject(NetoRcConstants.FEROX_POOL_OBJECT, "Drink");
+
             sleepUntil(() -> (!Rs2Player.isInteracting()) && !Rs2Player.isAnimating() && Rs2Player.getRunEnergy() > 90);
-            sleepGaussian(1100, 200);
+            sleepGaussian(700, 50);
 			forceDrinkAtFerox = false;
         }
     }
