@@ -923,7 +923,6 @@ public class NetoRCScript extends Script {
                 case ALTAR:
                     var altar = findObject(bloodAltar);
                     if (altar != null) {
-                        sleepGaussian(150, 25);
                         interactObject(altar.getId(), "Craft-rune");
                         bloodStep = BloodStep.CAVE_1;
                         setState(State.CRAFTING);
