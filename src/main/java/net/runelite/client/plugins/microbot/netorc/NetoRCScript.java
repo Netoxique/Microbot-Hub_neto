@@ -644,31 +644,37 @@ public class NetoRCScript extends Script {
     }
 
     private void teleportToPoh() {
+        boolean teleportInitiated = false;
+
         if (client.getRealSkillLevel(Skill.RUNECRAFT) >= 99 && Rs2Inventory.hasRunePouch()) {
             Microbot.log("Using Teleport to House spell");
             Rs2Magic.cast(Rs2Spells.TELEPORT_TO_HOUSE);
-            sleepGaussian(1100, 200);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-            sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-            sleepGaussian(1300, 200);
-            Microbot.log("We should be in poh fully loaded");
+            teleportInitiated = true;
+        } else if (Teleports.CONSTRUCTION_CAPE.isWearing()) {
+            Microbot.log("Using worn Construction cape");
+            Teleports.CONSTRUCTION_CAPE.interactWorn();
+            teleportInitiated = true;
+        } else if (Teleports.CONSTRUCTION_CAPE.isInInventory()) {
+            Microbot.log("Using Construction cape from inventory");
+            Teleports.CONSTRUCTION_CAPE.interactInventory();
+            teleportInitiated = true;
+        } else if (Teleports.HOUSE_TAB.isInInventory()) {
+            Microbot.log("Using House tab");
+            Teleports.HOUSE_TAB.interactInventory();
+            teleportInitiated = true;
+        } else {
+            Microbot.log("No PoH teleport found! Resetting to banking.");
+            setState(State.BANKING);
             return;
         }
 
-        Teleports homeTeleports = Teleports.CONSTRUCTION_CAPE;
-        if (!homeTeleports.isInInventory()) {
-            Microbot.log("Con cape not found");
-            homeTeleports = Teleports.HOUSE_TAB;
-        }
-
-        if (homeTeleports.isInInventory()) {
-            Microbot.log("Using " + homeTeleports.getName());
-            homeTeleports.interactInventory();
-            sleepGaussian(1100, 200);
-            sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
-            sleepUntil(() -> Microbot.getClient().getTopLevelWorldView() != null, 5000);
-            sleepGaussian(1300, 200);
-            Microbot.log("We should be in poh fully loaded");
+        if (teleportInitiated) {
+            WorldPoint waitLocation = new WorldPoint(1986, 7051, 0); // Inside PoH portal
+            if (sleepUntil(() -> plugin.getMyWorldPoint().equals(waitLocation), 6000)) {
+                sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                sleepGaussian(150, 25);
+                Microbot.log("We should be in poh fully loaded");
+            }
         }
     }
 
@@ -702,8 +708,7 @@ public class NetoRCScript extends Script {
             return;
         }
 
-        if (config.runeType() == RuneType.BLOOD
-                && Teleports.FARMING_CAPE.isWearing()) {
+        if (config.runeType() == RuneType.BLOOD && Teleports.FARMING_CAPE.isWearing()) {
             handleFarmingCape();
         } else {
             teleportToPoh();
@@ -711,9 +716,9 @@ public class NetoRCScript extends Script {
 
         restoreAtPohIfNeeded();
 
-        if (needsRestore()) {
-            return;
-        }
+//        if (needsRestore()) {
+//            return;
+//        }
 
         if (config.runeType() == RuneType.BLOOD) {
             sleepGaussian(700, 200);
@@ -733,8 +738,8 @@ public class NetoRCScript extends Script {
         if (findObject(ObjectID.POH_FAIRY_RING) != null) {
             interactObject(ObjectID.POH_FAIRY_RING, "Last-destination");
             Microbot.log("Using fairy ring");
-//            setState(State.WALKING_TO);
-        } else {
+        }
+        else {
             var pohTreeRing = new Rs2TileObjectQueryable().withNameContains("spirit").first();
             if (pohTreeRing != null) {
                 interactObject(pohTreeRing.getId(), "Last-destination");
@@ -858,12 +863,12 @@ public class NetoRCScript extends Script {
             initialStep = bloodStep;
             switch (bloodStep) {
                 case CAVE_1:
-                    if (handleTransition(16308, "Enter")) {
+                    if (handleTransLoc(16308, new WorldPoint(3460, 9813, 0), "Enter")) {
                         bloodStep = BloodStep.CAVE_2;
                     }
                     break;
                 case CAVE_2:
-                    if (handleTransition(5046, "Enter")) {
+                    if (handleTransLoc(5046, new WorldPoint(3481, 9824, 0), "Enter")) {
                         bloodStep = BloodStep.CAVE_3;
                     }
                     break;
