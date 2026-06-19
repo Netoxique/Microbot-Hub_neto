@@ -15,6 +15,8 @@ import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
 import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -201,6 +203,15 @@ public class NetoArceuusRcScript extends Script {
             }
 
             State state = getCurrentState();
+            if (state == State.CHIP_ESSENCE) {
+                Rs2AntibanSettings.dynamicActivity = false;
+                Rs2AntibanSettings.dynamicIntensity = false;
+                Rs2Antiban.setActivityIntensity(ActivityIntensity.HIGH);
+            } else {
+                Rs2AntibanSettings.dynamicActivity = true;
+                Rs2AntibanSettings.dynamicIntensity = true;
+                Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+            }
             log.debug("Current State={}", state);
             this.state = String.format("(%s) %s", getAltarName(), state);
             switch (state) {

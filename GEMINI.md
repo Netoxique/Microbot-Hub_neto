@@ -1,10 +1,14 @@
-# CLAUDE.md
+# GEMINI.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Gemini CLI when working with code in this repository.
 
 ## Overview
 
 Microbot Hub is a community plugin repository for the Microbot RuneLite client. It maintains a separation between core client functionality and community-contributed plugins, allowing rapid plugin development without affecting client stability. Each plugin is independently built, versioned, and packaged for GitHub Releases.
+
+## Code editing
+
+Do **NOT** delete comments `//` inside the code.
 
 ## Build System Architecture
 
