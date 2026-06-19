@@ -20,6 +20,7 @@ import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
@@ -340,7 +341,7 @@ public class NetoArceuusRcScript extends Script {
     private boolean clickInventorySlot(int slot) {
         Widget inventory = Rs2Inventory.getInventory();
         if (inventory == null) {
-            Rs2Tab.switchToInventoryTab();
+            Rs2Tab.switchTo(InterfaceTab.INVENTORY);
             if (!sleepUntil(() -> Rs2Inventory.getInventory() != null, 1_000)) return false;
             inventory = Rs2Inventory.getInventory();
         }
