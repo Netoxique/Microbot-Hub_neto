@@ -17,6 +17,7 @@ import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
+import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -61,6 +62,7 @@ public class NetoArceuusRcScript extends Script {
     @Getter
     private String state = "Unknown";
     private boolean hasChippedEssence = false;
+    private boolean cameraSet = false;
     @Inject
     private NetoBreakManager breakManager;
     @Inject
@@ -70,6 +72,7 @@ public class NetoArceuusRcScript extends Script {
 
     public boolean run(NetoArceuusRcConfig config) {
         NetoArceuusRcScript.config = config;
+        cameraSet = false;
         breakManager.configure(config, "Neto Arceuus RC");
         worldHopManager.configure(config, "Neto Arceuus RC");
         runtimeDisable.configure(config, "Neto Arceuus RC");
@@ -201,6 +204,11 @@ public class NetoArceuusRcScript extends Script {
             if (!super.run()) {
                 state = "Disabled";
                 return;
+            }
+
+            if (!cameraSet) {
+                setCameraPosition();
+                cameraSet = true;
             }
 
             State state = getCurrentState();
@@ -419,6 +427,14 @@ public class NetoArceuusRcScript extends Script {
             return;
         }
 
+    }
+
+    private void setCameraPosition() {
+        Microbot.getClientThread().invokeLater(() -> {
+            Microbot.getClient().setCameraPitchTarget(512);
+            Microbot.getClient().setCameraYawTarget(0);
+        });
+        Rs2Camera.setZoom(166);
     }
 
     @Override

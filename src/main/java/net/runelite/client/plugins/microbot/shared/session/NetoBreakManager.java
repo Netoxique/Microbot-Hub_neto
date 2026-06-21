@@ -96,7 +96,10 @@ public class NetoBreakManager {
             }
             log("break complete, logging back into world " + world + ".");
             new Login(world);
-            if (sleepUntil(Microbot::isLoggedIn, LOGIN_TIMEOUT_MS)) {
+            if (sleepUntil(() -> {
+                Microbot.getBlockingEventManager().shouldBlockAndProcess();
+                return Microbot.isLoggedIn();
+            }, LOGIN_TIMEOUT_MS)) {
                 finishBreak();
             }
         }
