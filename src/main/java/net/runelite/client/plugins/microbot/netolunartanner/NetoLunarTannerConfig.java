@@ -3,16 +3,15 @@ package net.runelite.client.plugins.microbot.netolunartanner;
 import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
-import net.runelite.client.plugins.microbot.netolunartanner.enums.Hides;
 
 @ConfigGroup("netoLunarTanner")
 public interface NetoLunarTannerConfig extends Config {
     @ConfigItem(
-        keyName = "hideType",
-        name = "Hide Type",
-        description = "Type of hide to tan"
+        keyName = "hidePriority",
+        name = "Hide Priority",
+        description = "Comma-separated list of hides in priority order (e.g. green, blue, red, black)"
     )
-    default Hides ITEM() {
-        return Hides.GREEN_DRAGONHIDE;
+    default String hidePriority() {
+        return "green, blue, red, black";
     }
 }
