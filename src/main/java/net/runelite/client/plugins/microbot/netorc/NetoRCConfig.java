@@ -9,19 +9,6 @@ import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
 
 
 @ConfigGroup("Frosty")
-@ConfigInformation(
-        "• This plugin will craft Blood and Wrath runes<br />" +
-        "• <b>IF using Farming Cape, it must be used with POH</b> />" +
-        "• IF making wrath runes, Myth cape must be in inventory, <b> not </b> equipped<br />" +
-        "• IF using POH, ensure you have pool and fairy ring <br />" +
-        "• IF not using POH, have Ardougne cloak, house tabs and Ring of Duelings(8) in bank <br />" +
-        "• <b> Ensure your last destination is DLS on fairy ring </b> <br />" +
-        "• Ensure you have a Colossal pouch <br />" +
-        "• Ensure you have Tiara or a bound Hat of the Eye equipped <br />" +
-        "• Ensure you have a RunePouch <b> with runes for NPC contact </b> for pouch repair <br />" +
-        "• Start at Crafting guild or Ferox Enclave lobby <br />"
-
-)
 public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, RuntimeSettings {
     @ConfigSection(
             name = "Settings",
@@ -50,6 +37,26 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, R
             position = 5
     )
     String runtimeSection = "Runtime";
+
+    @ConfigItem(
+            keyName = "instructions",
+            name = "Instructions",
+            description = "Instructions for using the plugin",
+            position = 0,
+            section = settingsSection
+    )
+    default String instructions() {
+        return "• This plugin will craft Blood and Wrath runes\n" +
+                "• IF using Farming Cape, it must be used with POH\n" +
+                "• IF making wrath runes, Myth cape must be in inventory, not equipped\n" +
+                "• IF using POH, ensure you have pool and fairy ring\n" +
+                "• IF not using POH, have Ardougne cloak, house tabs and Ring of Duelings(8) in bank\n" +
+                "• Ensure your last destination is DLS on fairy ring\n" +
+                "• Ensure you have a Colossal pouch\n" +
+                "• Ensure you have Tiara or a bound Hat of the Eye equipped\n" +
+                "• Ensure you have a RunePouch with runes for NPC contact for pouch repair\n" +
+                "• Start at Crafting guild or Ferox Enclave lobby";
+    }
 
     @ConfigItem(
             keyName = "Use POH",
@@ -196,16 +203,5 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, R
     )
     default int maxRuntime() {
         return 480;
-    }
-
-    @ConfigItem(
-            keyName = "showUpdateMessage",
-            name = "Show Update Message",
-            description = "Shows the update message in the chat console",
-            position = 1,
-            section = settingsSection
-    )
-    default boolean showUpdateMessage() {
-        return true;
     }
 }
