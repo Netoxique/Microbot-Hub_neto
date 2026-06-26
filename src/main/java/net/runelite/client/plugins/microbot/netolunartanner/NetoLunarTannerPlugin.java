@@ -1,0 +1,61 @@
+package net.runelite.client.plugins.microbot.netolunartanner;
+
+import com.google.inject.Provides;
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.client.config.ConfigManager;
+import net.runelite.client.plugins.Plugin;
+import net.runelite.client.plugins.PluginDescriptor;
+import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.ui.overlay.OverlayManager;
+
+import javax.inject.Inject;
+import java.awt.*;
+
+@PluginDescriptor(
+        name = "Neto Lunar Tanner",
+        description = "Tans hides on the lunar spellbook",
+        tags = {"magic", "moneymaking", "neto"},
+        authors = { "Neto" },
+        version = NetoLunarTannerPlugin.version,
+        minClientVersion = "2.0.13",
+        cardUrl = "",
+        iconUrl = "",
+        enabledByDefault = PluginConstants.DEFAULT_ENABLED,
+        isExternal = PluginConstants.IS_EXTERNAL
+)
+@Slf4j
+public class NetoLunarTannerPlugin extends Plugin {
+    public static final String version = "1.0.0";
+    @Inject
+    private NetoLunarTannerConfig config;
+
+    @Provides
+    NetoLunarTannerConfig provideConfig(ConfigManager configManager) {
+        return configManager.getConfig(NetoLunarTannerConfig.class);
+    }
+
+    @Inject
+    private OverlayManager overlayManager;
+    @Inject
+    private NetoLunarTannerOverlay netoLunarTannerOverlay;
+
+    @Inject
+    NetoLunarTannerScript netoLunarTannerScript;
+
+
+    @Override
+    protected void startUp() throws AWTException {
+        log.info("Starting up NetoLunarTannerPlugin");
+        if (overlayManager != null) {
+            overlayManager.add(netoLunarTannerOverlay);
+        }
+        netoLunarTannerScript.run(config);
+    }
+
+    @Override
+    protected void shutDown() {
+        log.info("Shutting down NetoLunarTannerPlugin");
+        netoLunarTannerScript.shutdown();
+        overlayManager.remove(netoLunarTannerOverlay);
+    }
+}
