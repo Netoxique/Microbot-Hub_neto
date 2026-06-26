@@ -635,7 +635,7 @@ public class NetoRCScript extends Script {
             sleepUntil(() -> Rs2Equipment.isWearing(dragonShield));
             sleepGaussian(900, 200);
         }
-        if (!Rs2Inventory.contains(mythCape)) {
+        if (!Rs2Equipment.isWearing(mythCape) && !Rs2Inventory.contains(mythCape)) {
             Microbot.log("Withdrawing " + mythCape);
             Rs2Bank.withdrawItem(mythCape);
             sleepUntil(() -> Rs2Inventory.contains(mythCape));
@@ -939,9 +939,13 @@ public class NetoRCScript extends Script {
             initialStep = wrathStep;
             switch (wrathStep) {
                 case MYTH_CAPE:
-                    if (Rs2Inventory.contains(mythCape)) {
+                    if (Rs2Equipment.isWearing(mythCape) || Rs2Inventory.contains(mythCape)) {
                         sleepUntil(() -> !Rs2Player.isAnimating(), 10000);
-                        Rs2Inventory.interact(mythCape, "Teleport");
+                        if (Rs2Equipment.isWearing(mythCape)) {
+                            Rs2Equipment.interact(mythCape, "Teleport");
+                        } else {
+                            Rs2Inventory.interact(mythCape, "Teleport");
+                        }
                         sleepUntil(Rs2Player::isAnimating, 5000);
                         sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
                         sleepUntilOnClientThread(() -> findObject(31626) != null, 5000); // Wait for Myth Statue
