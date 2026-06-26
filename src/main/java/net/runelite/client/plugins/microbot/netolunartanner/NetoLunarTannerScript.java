@@ -2,13 +2,18 @@ package net.runelite.client.plugins.microbot.netolunartanner;
 
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.netolunartanner.enums.Hides;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.util.QuantityFormatter;
 
+import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -24,6 +29,15 @@ public class NetoLunarTannerScript extends Script {
     private List<Hides> priorityList = new ArrayList<>();
     private Hides activeHide;
     private final Map<Hides, Integer> profitMap = new HashMap<>();
+
+    @Inject
+    private NetoLunarTannerPlugin plugin;
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
 
     // State management
     private enum State {
@@ -48,6 +62,18 @@ public class NetoLunarTannerScript extends Script {
         }
         priorityList = parsed;
 
+        breakManager.configure(config, "Neto Lunar Tanner");
+        worldHopManager.configure(config, "Neto Lunar Tanner");
+        runtimeDisable.configure(config, "Neto Lunar Tanner");
+
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
+
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(true);
+        }
+
         // Cache the profit for each hide type using ItemManager
         profitMap.clear();
         for (Hides hide : Hides.values()) {
@@ -63,6 +89,12 @@ public class NetoLunarTannerScript extends Script {
 
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
+                // Check runtime limits
+                if (runtimeDisable.updateRuntime(NetoLunarTannerPlugin.class)) return;
+
+                // Check if break is currently active
+                if (breakManager.updateBreakState()) return;
+
                 if (!super.run() || !Microbot.isLoggedIn()) return;
 
                 // Resume/pick active hide from inventory if activeHide is null but we have hides
@@ -92,6 +124,19 @@ public class NetoLunarTannerScript extends Script {
                     totalProfit += (long) profitPerHide * hidesTannedThisAction;
 
                     calculateProfitAndDisplay();
+
+                    // Check if we just finished tanning an inventory of hides
+                    if (!Rs2Inventory.hasItem(activeHide.getName(), true) && Rs2Inventory.hasItem(activeHide.getFinished())) {
+                        if (pauseForBreakAfterTanning()) {
+                            activeHide = null;
+                            return;
+                        }
+
+                        if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+                            activeHide = null;
+                            return;
+                        }
+                    }
                 } else {
                     activeHide = null;
                     bank();
@@ -101,6 +146,24 @@ public class NetoLunarTannerScript extends Script {
             }
         }, 0, 50, TimeUnit.MILLISECONDS);
         return true;
+    }
+
+    private boolean pauseForBreakAfterTanning() {
+        if (breakManager.tryStartBreakAtSafePoint()) {
+            return true;
+        }
+
+        if (!plugin.isBreakHandlerEnabled()) {
+            return false;
+        }
+
+        BreakHandlerScript.setLockState(false);
+        if (BreakHandlerScript.isBreakActive() || BreakHandlerScript.breakIn <= 0) {
+            return true;
+        }
+
+        BreakHandlerScript.setLockState(true);
+        return false;
     }
 
     // Parse comma-separated list of priority hides
@@ -191,6 +254,12 @@ public class NetoLunarTannerScript extends Script {
 
     @Override
     public void shutdown() {
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(false);
+        }
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
         super.shutdown();
         hidesTanned = 0; // Reset the count of tanned hides
         totalProfit = 0; // Reset total profit

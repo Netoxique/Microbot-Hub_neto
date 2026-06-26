@@ -6,6 +6,7 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.PluginConstants;
+import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -57,5 +58,9 @@ public class NetoLunarTannerPlugin extends Plugin {
         log.info("Shutting down NetoLunarTannerPlugin");
         netoLunarTannerScript.shutdown();
         overlayManager.remove(netoLunarTannerOverlay);
+    }
+
+    public boolean isBreakHandlerEnabled() {
+        return Microbot.isPluginEnabled(net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin.class);
     }
 }
