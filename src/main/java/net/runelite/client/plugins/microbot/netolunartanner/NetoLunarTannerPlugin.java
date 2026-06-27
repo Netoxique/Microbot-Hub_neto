@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.netolunartanner;
 
 import com.google.inject.Provides;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
@@ -11,6 +12,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.time.Instant;
 
 @PluginDescriptor(
         name = "Neto Lunar Tanner",
@@ -27,6 +29,9 @@ import java.awt.*;
 @Slf4j
 public class NetoLunarTannerPlugin extends Plugin {
     public static final String version = "1.0.0";
+    @Getter
+    private Instant startTime;
+
     @Inject
     private NetoLunarTannerConfig config;
 
@@ -47,6 +52,7 @@ public class NetoLunarTannerPlugin extends Plugin {
     @Override
     protected void startUp() throws AWTException {
         log.info("Starting up NetoLunarTannerPlugin");
+        startTime = Instant.now();
         if (overlayManager != null) {
             overlayManager.add(netoLunarTannerOverlay);
         }

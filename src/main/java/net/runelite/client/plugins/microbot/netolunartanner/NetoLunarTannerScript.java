@@ -216,7 +216,10 @@ public class NetoLunarTannerScript extends Script {
     private void bank() {
         if (currentState != State.BANKING) {
             currentState = State.BANKING;
-            if (!Rs2Bank.openBank()) return;
+            if (!Rs2Bank.openBank()) {
+                currentState = State.TANNING;
+                return;
+            }
 
             // Deposit all finished leather for all hides
             for (Hides hide : Hides.values()) {
