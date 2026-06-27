@@ -12,6 +12,8 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.util.QuantityFormatter;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
@@ -73,6 +75,8 @@ public class NetoLunarTannerScript extends Script {
         if (plugin.isBreakHandlerEnabled()) {
             BreakHandlerScript.setLockState(true);
         }
+
+        Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
 
         // Cache the profit for each hide type using ItemManager
         profitMap.clear();
