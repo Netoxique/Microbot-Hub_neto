@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.shared.session;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.security.Login;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.http.api.worlds.WorldRegion;
 
 import javax.inject.Inject;
@@ -52,7 +53,7 @@ public class NetoWorldHopManager {
             return "Due";
         }
 
-        return formatDuration(remainingMillis) + " / " + scheduledDelayMinutes + "m";
+        return formatDuration(remainingMillis);
     }
 
     public WorldHopResult tryHopIfDue(BooleanSupplier keepRunning) {
@@ -76,6 +77,24 @@ public class NetoWorldHopManager {
         }
 
         sleepGaussian(3500, 250);
+
+        // Ensure the world switcher interface is opened and loaded before attempting the hop.
+        // Otherwise, the first call to Microbot.hopToWorld fails because the switcher buttons widget is not ready.
+        if (Microbot.isLoggedIn() && Rs2Widget.isHidden(69, 18)) {
+            log("world switcher interface is closed/not loaded. Opening it first...");
+            Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                Microbot.getClient().openWorldHopper();
+                return true;
+            });
+            boolean opened = sleepUntil(() -> !Rs2Widget.isHidden(69, 18), 3000);
+            if (opened) {
+                log("world switcher interface opened successfully.");
+                sleepGaussian(600, 100);
+            } else {
+                log("warning: timed out waiting for world switcher interface to open.");
+            }
+        }
+
         WorldHopResult result = attemptWorldHop(worldRegion, maxAttempts, confirmTimeoutMs, keepRunning);
 
         synchronized (this) {
