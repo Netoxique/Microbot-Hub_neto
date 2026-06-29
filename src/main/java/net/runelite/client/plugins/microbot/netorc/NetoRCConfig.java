@@ -10,6 +10,17 @@ import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
 
 @ConfigGroup("Frosty")
 public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, RuntimeSettings {
+    String DEFAULT_INSTRUCTIONS = "• This plugin will craft Blood and Wrath runes\n" +
+            "• IF using Farming Cape, it must be used with POH\n" +
+            "• IF making wrath runes, Myth cape must be in inventory, not equipped\n" +
+            "• IF using POH, ensure you have pool and fairy ring\n" +
+            "• IF not using POH, have Ardougne cloak, house tabs and Ring of Duelings(8) in bank\n" +
+            "• Ensure your last destination is DLS on fairy ring\n" +
+            "• Ensure you have a Colossal pouch\n" +
+            "• Ensure you have Tiara or a bound Hat of the Eye equipped\n" +
+            "• Ensure you have a RunePouch with runes for NPC contact for pouch repair\n" +
+            "• Start at Crafting guild or Ferox Enclave lobby";
+
     @ConfigSection(
             name = "Settings",
             description = "Settings",
@@ -46,16 +57,17 @@ public interface NetoRCConfig extends Config, BreakSettings, WorldHopSettings, R
             section = settingsSection
     )
     default String instructions() {
-        return "• This plugin will craft Blood and Wrath runes\n" +
-                "• IF using Farming Cape, it must be used with POH\n" +
-                "• IF making wrath runes, Myth cape must be in inventory, not equipped\n" +
-                "• IF using POH, ensure you have pool and fairy ring\n" +
-                "• IF not using POH, have Ardougne cloak, house tabs and Ring of Duelings(8) in bank\n" +
-                "• Ensure your last destination is DLS on fairy ring\n" +
-                "• Ensure you have a Colossal pouch\n" +
-                "• Ensure you have Tiara or a bound Hat of the Eye equipped\n" +
-                "• Ensure you have a RunePouch with runes for NPC contact for pouch repair\n" +
-                "• Start at Crafting guild or Ferox Enclave lobby";
+        return "";
+    }
+
+    @ConfigItem(
+            keyName = "instructionsInitialized",
+            name = "Instructions Initialized",
+            description = "Whether the instructions have been initialized",
+            hidden = true
+    )
+    default boolean instructionsInitialized() {
+        return false;
     }
 
     @ConfigItem(

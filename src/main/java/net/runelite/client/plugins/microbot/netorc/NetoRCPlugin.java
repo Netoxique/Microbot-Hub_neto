@@ -46,7 +46,12 @@ public class NetoRCPlugin extends Plugin {
     private Client client;
     @Provides
     NetoRCConfig provideConfig(ConfigManager configManager) {
-        return configManager.getConfig(NetoRCConfig.class);
+        NetoRCConfig config = configManager.getConfig(NetoRCConfig.class);
+        if (!config.instructionsInitialized()) {
+            configManager.setConfiguration("Frosty", "instructions", NetoRCConfig.DEFAULT_INSTRUCTIONS);
+            configManager.setConfiguration("Frosty", "instructionsInitialized", true);
+        }
+        return config;
     }
     @Inject
     private OverlayManager overlayManager;
