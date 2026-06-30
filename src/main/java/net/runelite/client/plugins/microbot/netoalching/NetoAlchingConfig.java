@@ -8,10 +8,20 @@ import net.runelite.client.config.ConfigItem;
 public interface NetoAlchingConfig extends Config {
 
     @ConfigItem(
+            keyName = "sellToGeAtShutdown",
+            name = "Sell to GE at shutdown",
+            description = "Enables the Neto GE Seller plugin right before this script shuts down.",
+            position = 1
+    )
+    default boolean sellToGeAtShutdown() {
+        return true;
+    }
+
+    @ConfigItem(
             keyName = "alchItems",
             name = "Alch Items",
             description = "Comma separated list of items to alch (e.g. Rune dagger, Adamant platebody, Maple longbow (u))",
-            position = 1
+            position = 2
     )
     default String alchItems() {
         return "Rune dagger, Adamant platebody, Maple longbow (u)";

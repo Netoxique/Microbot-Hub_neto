@@ -234,6 +234,17 @@ public class NetoAlchingScript extends Script {
         if (alchItem != null) {
             Microbot.status = "Alching " + alchItem.getName();
             int haPrice = alchItem.getHaPrice();
+            if (haPrice == 0) {
+                int unnotedId = alchItem.isNoted() ? alchItem.getUnNotedId() : alchItem.getId();
+                net.runelite.api.ItemComposition unnotedComp = Microbot.getClientThread().runOnClientThreadOptional(() ->
+                        Microbot.getClient().getItemDefinition(unnotedId)).orElse(null);
+                if (unnotedComp != null) {
+                    haPrice = unnotedComp.getHaPrice();
+                    if (haPrice == 0) {
+                        haPrice = (int) (unnotedComp.getPrice() * 0.6);
+                    }
+                }
+            }
 
             // Perform anti-ban slot move (similar to AIO Magic)
             if (Rs2AntibanSettings.naturalMouse) {
@@ -254,7 +265,6 @@ public class NetoAlchingScript extends Script {
             if (itemsRemainingInBank) {
                 state = NetoAlchingState.WITHDRAWING;
             } else {
-                Microbot.showMessage("Finished alching all items!");
                 finishScript();
             }
         }
@@ -313,11 +323,19 @@ public class NetoAlchingScript extends Script {
             Microbot.getClient().addChatMessage(
                     net.runelite.api.ChatMessageType.GAMEMESSAGE,
                     "",
-                    "Neto Alching: Finished alching. Total profit: " + formatProfit(totalProfit),
+                    "<col=ff0000>Neto Alching: Finished alching. Total profit: " + formatProfit(totalProfit) + "</col>",
                     ""
             );
             return null;
         });
+
+        if (config.sellToGeAtShutdown()) {
+            boolean started = Microbot.startPlugin("net.runelite.client.plugins.microbot.netogeseller.NetoGeSellerPlugin");
+            if (!started) {
+                System.err.println("Neto Alching: Failed to start Neto GE Seller plugin at shutdown.");
+                log.error("Failed to start Neto GE Seller plugin at shutdown.");
+            }
+        }
 
         // Disable/stop the plugin
         Microbot.stopPlugin(Microbot.getPluginManager()
