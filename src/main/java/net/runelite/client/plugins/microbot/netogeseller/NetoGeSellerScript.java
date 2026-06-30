@@ -15,6 +15,8 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import java.awt.event.KeyEvent;
+import net.runelite.client.eventbus.Subscribe;
+import net.runelite.api.events.GrandExchangeOfferChanged;
 
 import javax.inject.Inject;
 import java.util.HashMap;
@@ -66,12 +68,43 @@ public class NetoGeSellerScript extends Script {
 
     private Map<String, SellItemConfig> itemsToSellMap = new HashMap<>();
     private boolean hasUnsoldBankItems = false;
+    private volatile int totalProfit = 0;
+
+    private static class SlotState {
+        int itemId;
+        int quantitySold;
+        int spent;
+
+        SlotState(int itemId, int quantitySold, int spent) {
+            this.itemId = itemId;
+            this.quantitySold = quantitySold;
+            this.spent = spent;
+        }
+    }
+
+    private final SlotState[] slotStates = new SlotState[8];
+
+    public int getTotalProfit() {
+        return totalProfit;
+    }
+
+    public static String formatProfit(int profit) {
+        if (profit >= 1_000_000) {
+            return new java.text.DecimalFormat("#.##").format(profit / 1_000_000.0) + "M GP";
+        } else if (profit >= 10_000) {
+            return new java.text.DecimalFormat("#.##").format(profit / 1_000.0) + "K GP";
+        } else {
+            return String.format("%,d GP", profit);
+        }
+    }
 
     public boolean run() {
         this.currentState = State.BANKING;
         this.firstTimeOpeningBank = true;
         this.itemsToSellMap = parseItemsToSell(config.itemsToSell());
         this.hasUnsoldBankItems = true;
+        this.totalProfit = 0;
+        initializeSlotStates();
 
         Microbot.enableAutoRunOn = false;
 
@@ -591,8 +624,78 @@ public class NetoGeSellerScript extends Script {
         return getExactItemNameFromBank(itemNameLower);
     }
 
+    private void initializeSlotStates() {
+        Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            for (int i = 0; i < 8; i++) {
+                if (offers != null && i < offers.length) {
+                    GrandExchangeOffer offer = offers[i];
+                    if (offer != null && offer.getState() != GrandExchangeOfferState.EMPTY) {
+                        slotStates[i] = new SlotState(offer.getItemId(), offer.getQuantitySold(), offer.getSpent());
+                    } else {
+                        slotStates[i] = null;
+                    }
+                } else {
+                    slotStates[i] = null;
+                }
+            }
+            return null;
+        });
+    }
+
+    @Subscribe
+    public void onGrandExchangeOfferChanged(GrandExchangeOfferChanged event) {
+        GrandExchangeOffer offer = event.getOffer();
+        int slot = event.getSlot();
+        if (slot < 0 || slot >= 8) return;
+
+        if (offer.getState() == GrandExchangeOfferState.EMPTY) {
+            slotStates[slot] = null;
+            return;
+        }
+
+        boolean isSelling = offer.getState() == GrandExchangeOfferState.SELLING || 
+                            offer.getState() == GrandExchangeOfferState.SOLD || 
+                            offer.getState() == GrandExchangeOfferState.CANCELLED_SELL;
+        if (!isSelling) {
+            return;
+        }
+
+        int itemId = offer.getItemId();
+        if (itemId <= 0) return;
+
+        String itemName = Microbot.getItemManager().getItemComposition(itemId).getName();
+        if (itemName == null || !itemsToSellMap.containsKey(itemName.toLowerCase())) {
+            return;
+        }
+
+        SlotState prev = slotStates[slot];
+        if (prev == null || prev.itemId != itemId) {
+            prev = new SlotState(itemId, offer.getQuantitySold(), offer.getSpent());
+            slotStates[slot] = prev;
+            return;
+        }
+
+        int newQuantitySold = offer.getQuantitySold();
+        int newSpent = offer.getSpent();
+
+        int deltaQuantity = newQuantitySold - prev.quantitySold;
+        int deltaSpent = newSpent - prev.spent;
+
+        if (deltaSpent > 0 || deltaQuantity > 0) {
+            if (deltaSpent > 0) {
+                totalProfit += deltaSpent;
+            }
+            prev.quantitySold = newQuantitySold;
+            prev.spent = newSpent;
+        }
+    }
+
     @Override
     public void shutdown() {
         super.shutdown();
+        String message = "Neto GE Seller shutdown. Total Profit: " + formatProfit(totalProfit);
+        Microbot.showMessage(message);
+        log.info(message);
     }
 }

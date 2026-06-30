@@ -8,6 +8,7 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.ui.ClientToolbar;
 import net.runelite.client.ui.ClientUI;
 import net.runelite.client.ui.NavigationButton;
@@ -43,6 +44,9 @@ public class NetoGeSellerPlugin extends Plugin {
     private NetoGeSellerScript script;
 
     @Inject
+    private EventBus eventBus;
+
+    @Inject
     private ClientUI clientUI;
 
     @Inject
@@ -59,6 +63,7 @@ public class NetoGeSellerPlugin extends Plugin {
         if (overlayManager != null) {
             overlayManager.add(overlay);
         }
+        eventBus.register(script);
         script.run();
         openFlippingUtilitiesPanel();
     }
@@ -86,6 +91,7 @@ public class NetoGeSellerPlugin extends Plugin {
 
     @Override
     protected void shutDown() {
+        eventBus.unregister(script);
         script.shutdown();
         if (overlayManager != null) {
             overlayManager.remove(overlay);
