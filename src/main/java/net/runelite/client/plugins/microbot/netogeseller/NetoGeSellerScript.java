@@ -160,7 +160,11 @@ public class NetoGeSellerScript extends Script {
                     String exactName = getExactItemName(itemNameLower);
                     if (exactName != null) {
                         Microbot.status = "Withdrawing " + toWithdraw + " " + exactName;
-                        Rs2Bank.withdrawX(exactName, toWithdraw);
+                        if (toWithdraw == bankQty) {
+                            Rs2Bank.withdrawAll(exactName, true);
+                        } else {
+                            Rs2Bank.withdrawX(exactName, toWithdraw);
+                        }
                         sleep(600, 1000);
                     }
                 }
