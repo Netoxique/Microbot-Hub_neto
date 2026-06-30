@@ -43,16 +43,16 @@ public class NetoAlchingScript extends Script {
     private boolean isFinished = false;
 
     public static final List<String> FIRE_STAVES = List.of(
-            "Staff of fire",
+            "Twinflame staff",
             "Fire battlestaff",
             "Mystic fire staff",
             "Lava battlestaff",
             "Mystic lava staff",
             "Smoke battlestaff",
             "Mystic smoke staff",
-            "Twinflame staff",
             "Steam battlestaff",
-            "Mystic steam staff"
+            "Mystic steam staff",
+            "Staff of fire"
     );
 
     public boolean run(NetoAlchingConfig config) {
@@ -115,6 +115,9 @@ public class NetoAlchingScript extends Script {
             sleepUntil(Rs2Bank::isOpen, 5000);
             return;
         }
+
+        Rs2Bank.depositAll();
+        sleepUntil(Rs2Inventory::isEmpty, 5000);
 
         // Verify Nature Runes are present either in inventory or in bank
         boolean hasNatureRunes = Rs2Inventory.hasItem(ItemID.NATURERUNE) || Rs2Bank.hasItem(ItemID.NATURERUNE);
@@ -185,17 +188,17 @@ public class NetoAlchingScript extends Script {
                 break;
             }
 
-            if (Rs2Bank.hasItem(itemName)) {
+            if (Rs2Bank.hasItem(itemName, true)) {
                 Microbot.status = "Withdrawing: " + itemName;
-                Rs2Bank.withdrawAll(itemName);
-                sleepUntil(() -> Rs2Inventory.hasItem(itemName), 2000);
+                Rs2Bank.withdrawAll(itemName, true);
+                sleepUntil(() -> Rs2Inventory.hasItem(itemName, true), 2000);
             }
         }
 
         // Check if there are still more items to alch in the bank
         itemsRemainingInBank = false;
         for (String itemName : alchItemsList) {
-            if (Rs2Bank.hasItem(itemName)) {
+            if (Rs2Bank.hasItem(itemName, true)) {
                 itemsRemainingInBank = true;
                 break;
             }
@@ -223,8 +226,8 @@ public class NetoAlchingScript extends Script {
 
         // Find the first alchable item present in our inventory
         Rs2ItemModel alchItem = alchItemsList.stream()
-                .filter(Rs2Inventory::hasItem)
-                .map(Rs2Inventory::get)
+                .filter(itemName -> Rs2Inventory.hasItem(itemName, true))
+                .map(itemName -> Rs2Inventory.get(itemName, true))
                 .findFirst()
                 .orElse(null);
 
