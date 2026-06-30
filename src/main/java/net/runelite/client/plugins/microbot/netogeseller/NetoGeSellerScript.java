@@ -19,6 +19,7 @@ import java.awt.event.KeyEvent;
 import javax.inject.Inject;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleep;
@@ -73,7 +74,7 @@ public class NetoGeSellerScript extends Script {
                 Microbot.log("Error in Neto GE Seller: " + ex.getMessage());
                 log.error("Neto GE Seller error: ", ex);
             }
-        }, 0, 1000, TimeUnit.MILLISECONDS);
+        }, 0, 200, TimeUnit.MILLISECONDS);
 
         return true;
     }
@@ -215,9 +216,9 @@ public class NetoGeSellerScript extends Script {
                     log.info("Attempting to sell '{}' with hotkey '{}'.", item.getName(), config.hotkey());
                     boolean sold = sellItemWithHotkey(item.getName(), quantityToSell, config.hotkey());
                     log.info("sellItemWithHotkey result for '{}': {}", item.getName(), sold);
-                    if (sold) {
-                        sleep(1000, 1500);
-                    }
+//                    if (sold) {
+//                        sleep(1000, 1500);
+//                    }
                 } else {
                     if (Rs2GrandExchange.hasSoldOffer()) {
                         Microbot.status = "Collecting sold offers to Bank";
@@ -263,12 +264,15 @@ public class NetoGeSellerScript extends Script {
 
     private void handleWaitingForSell() {
         Microbot.status = "Waiting for all offers to sell...";
+        log.info("handleWaitingForSell: Checking for active/completed offers of configured items.");
         if (!Rs2GrandExchange.openExchange()) {
+            log.warn("handleWaitingForSell: Failed to open Grand Exchange.");
             return;
         }
         sleepUntil(Rs2GrandExchange::isOpen);
 
         if (Rs2GrandExchange.hasSoldOffer()) {
+            log.info("handleWaitingForSell: Sold offer(s) detected. Collecting all to bank.");
             Rs2GrandExchange.collectAllToBank();
             sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5000);
             sleep(800, 1200);
@@ -276,23 +280,31 @@ public class NetoGeSellerScript extends Script {
 
         if (!hasActiveOffers()) {
             Microbot.status = "All offers completed. Stopping plugin.";
+            log.info("handleWaitingForSell: No active offers for configured items. Closing Grand Exchange and stopping plugin.");
             Rs2GrandExchange.closeExchange();
             sleepUntil(() -> !Rs2GrandExchange.isOpen());
-            shutdown();
             Microbot.stopPlugin(this.plugin);
         }
     }
 
     private boolean hasActiveOffers() {
-        GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
-        if (offers == null) return false;
-        for (GrandExchangeOffer offer : offers) {
-            GrandExchangeOfferState state = offer.getState();
-            if (state == GrandExchangeOfferState.SELLING || state == GrandExchangeOfferState.BUYING) {
-                return true;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null) return false;
+            for (GrandExchangeOffer offer : offers) {
+                GrandExchangeOfferState state = offer.getState();
+                if (state == GrandExchangeOfferState.SELLING || state == GrandExchangeOfferState.BUYING) {
+                    int itemId = offer.getItemId();
+                    if (itemId <= 0) continue;
+                    String itemName = Microbot.getItemManager().getItemComposition(itemId).getName();
+                    if (itemName != null && itemsToSellMap.containsKey(itemName.toLowerCase())) {
+                        log.info("Active offer found for configured item: '{}' (State: {})", itemName, state);
+                        return true;
+                    }
+                }
             }
-        }
-        return false;
+            return false;
+        }).orElse(false);
     }
 
     private boolean sellItemWithHotkey(String itemName, int quantity, String hotkey) {
