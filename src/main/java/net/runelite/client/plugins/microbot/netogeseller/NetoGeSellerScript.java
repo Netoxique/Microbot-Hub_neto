@@ -440,11 +440,11 @@ public class NetoGeSellerScript extends Script {
             }
             sleep(100, 200);
         }
-        sleep(600, 1000);
+        sleepGaussian(250, 25);
 
         log.info("Submitting insta-sell hotkey value with Enter.");
         Rs2Keyboard.enter();
-        sleep(1000, 1500);
+        sleepGaussian(250, 25);
 
         Widget confirmButton = getConfirmButton();
         if (confirmButton == null) {
@@ -454,12 +454,6 @@ public class NetoGeSellerScript extends Script {
 
         log.info("Clicking GE confirm button for '{}'.", itemName);
         Rs2Widget.clickWidget(confirmButton);
-        boolean warningPromptVisible = sleepUntil(() -> Rs2Widget.hasWidget("Your offer is much"), 2000);
-        log.info("Price warning prompt wait result={}, hasWarning={}", warningPromptVisible, Rs2Widget.hasWidget("Your offer is much"));
-        if (Rs2Widget.hasWidget("Your offer is much")) {
-            log.info("Accepting GE price warning prompt.");
-            Rs2Widget.clickWidget("Yes");
-        }
 
         boolean offerScreenClosed = sleepUntil(() -> !Rs2Widget.hasWidget("Enter Price"), 5000);
         log.info("sellItemWithHotkey final result for '{}': offerScreenClosed={}, hasEnterPrice={}", itemName, offerScreenClosed, Rs2Widget.hasWidget("Enter Price"));
