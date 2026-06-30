@@ -14,6 +14,7 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import java.awt.event.KeyEvent;
 
 import javax.inject.Inject;
 import java.util.HashMap;
@@ -362,7 +363,12 @@ public class NetoGeSellerScript extends Script {
 
         log.info("Pressing insta-sell hotkey sequence '{}'.", hotkey);
         for (char c : hotkey.toCharArray()) {
-            Rs2Keyboard.keyPress(c);
+            int vk = getVirtualKeyCode(c);
+            if (vk != KeyEvent.VK_UNDEFINED) {
+                Rs2Keyboard.keyPress(vk);
+            } else {
+                Rs2Keyboard.keyPress(c);
+            }
             sleep(100, 200);
         }
         sleep(600, 1000);
@@ -389,6 +395,31 @@ public class NetoGeSellerScript extends Script {
         boolean offerScreenClosed = sleepUntil(() -> !Rs2Widget.hasWidget("Enter Price"), 5000);
         log.info("sellItemWithHotkey final result for '{}': offerScreenClosed={}, hasEnterPrice={}", itemName, offerScreenClosed, Rs2Widget.hasWidget("Enter Price"));
         return offerScreenClosed;
+    }
+
+    private int getVirtualKeyCode(char c) {
+        if (c >= 'a' && c <= 'z') {
+            return KeyEvent.VK_A + (c - 'a');
+        }
+        if (c >= 'A' && c <= 'Z') {
+            return KeyEvent.VK_A + (c - 'A');
+        }
+        if (c >= '0' && c <= '9') {
+            return KeyEvent.VK_0 + (c - '0');
+        }
+        switch (c) {
+            case ' ':
+                return KeyEvent.VK_SPACE;
+            case '\n':
+            case '\r':
+                return KeyEvent.VK_ENTER;
+            case '\t':
+                return KeyEvent.VK_TAB;
+            case '\b':
+                return KeyEvent.VK_BACK_SPACE;
+            default:
+                return KeyEvent.VK_UNDEFINED;
+        }
     }
 
     private boolean setQuantity(int quantity) {
