@@ -42,7 +42,29 @@ public class NetoGeSellerScript extends Script {
 
     private State currentState = State.BANKING;
     private boolean firstTimeOpeningBank = true;
-    private Map<String, Integer> itemsToSellMap = new HashMap<>();
+    public enum SellMode {
+        SELL_ALL,
+        SELL_EXCESS,
+        SELL_ALL_IF_OVER
+    }
+
+    public static class SellItemConfig {
+        private final String name;
+        private final int threshold;
+        private final SellMode mode;
+
+        public SellItemConfig(String name, int threshold, SellMode mode) {
+            this.name = name;
+            this.threshold = threshold;
+            this.mode = mode;
+        }
+
+        public String getName() { return name; }
+        public int getThreshold() { return threshold; }
+        public SellMode getMode() { return mode; }
+    }
+
+    private Map<String, SellItemConfig> itemsToSellMap = new HashMap<>();
     private boolean hasUnsoldBankItems = false;
 
     public boolean run() {
@@ -79,8 +101,8 @@ public class NetoGeSellerScript extends Script {
         return true;
     }
 
-    private Map<String, Integer> parseItemsToSell(String configStr) {
-        Map<String, Integer> map = new HashMap<>();
+    private Map<String, SellItemConfig> parseItemsToSell(String configStr) {
+        Map<String, SellItemConfig> map = new HashMap<>();
         if (configStr == null || configStr.trim().isEmpty()) {
             return map;
         }
@@ -90,32 +112,37 @@ public class NetoGeSellerScript extends Script {
             if (item.isEmpty()) continue;
 
             String name = item;
-            int keep = 0;
+            int threshold = 0;
+            SellMode mode = SellMode.SELL_ALL;
 
+            String delimiter = null;
             if (item.contains(":")) {
-                String[] parts = item.split(":");
-                name = parts[0].trim();
-                if (parts.length > 1) {
-                    try {
-                        keep = Integer.parseInt(parts[1].trim());
-                    } catch (NumberFormatException e) {
-                        Microbot.log("Invalid keep quantity for item: " + name);
-                    }
-                }
+                delimiter = ":";
             } else if (item.contains(";")) {
-                String[] parts = item.split(";");
+                delimiter = ";";
+            }
+
+            if (delimiter != null) {
+                String[] parts = item.split(delimiter);
                 name = parts[0].trim();
                 if (parts.length > 1) {
+                    String valStr = parts[1].trim();
+                    if (valStr.startsWith(">")) {
+                        mode = SellMode.SELL_ALL_IF_OVER;
+                        valStr = valStr.substring(1).trim();
+                    } else {
+                        mode = SellMode.SELL_EXCESS;
+                    }
                     try {
-                        keep = Integer.parseInt(parts[1].trim());
+                        threshold = Integer.parseInt(valStr);
                     } catch (NumberFormatException e) {
-                        Microbot.log("Invalid keep quantity for item: " + name);
+                        Microbot.log("Invalid quantity for item: " + name);
                     }
                 }
             }
 
             if (!name.isEmpty()) {
-                map.put(name.toLowerCase(), keep);
+                map.put(name.toLowerCase(), new SellItemConfig(name, threshold, mode));
             }
         }
         return map;
@@ -139,14 +166,26 @@ public class NetoGeSellerScript extends Script {
         sleep(600, 1000);
         hasUnsoldBankItems = false;
 
-        for (Map.Entry<String, Integer> entry : itemsToSellMap.entrySet()) {
+        for (Map.Entry<String, SellItemConfig> entry : itemsToSellMap.entrySet()) {
             String itemNameLower = entry.getKey();
-            int keepThreshold = entry.getValue();
+            SellItemConfig itemConfig = entry.getValue();
 
             int bankQty = getBankQuantity(itemNameLower);
             int invQty = getInventoryQuantity(itemNameLower);
             int totalQty = bankQty + invQty;
-            int excess = totalQty - keepThreshold;
+            
+            int excess = 0;
+            if (itemConfig.getMode() == SellMode.SELL_ALL) {
+                excess = totalQty;
+            } else if (itemConfig.getMode() == SellMode.SELL_EXCESS) {
+                excess = totalQty - itemConfig.getThreshold();
+            } else if (itemConfig.getMode() == SellMode.SELL_ALL_IF_OVER) {
+                if (totalQty >= itemConfig.getThreshold()) {
+                    excess = totalQty;
+                } else {
+                    excess = 0;
+                }
+            }
 
             if (excess > 0) {
                 if (Rs2Inventory.isFull()) {
@@ -172,12 +211,26 @@ public class NetoGeSellerScript extends Script {
         }
 
         // Check if there are still more items to withdraw later
-        for (Map.Entry<String, Integer> entry : itemsToSellMap.entrySet()) {
+        for (Map.Entry<String, SellItemConfig> entry : itemsToSellMap.entrySet()) {
             String itemNameLower = entry.getKey();
-            int keepThreshold = entry.getValue();
+            SellItemConfig itemConfig = entry.getValue();
             int bankQty = getBankQuantity(itemNameLower);
             int invQty = getInventoryQuantity(itemNameLower);
-            int excess = (bankQty + invQty) - keepThreshold;
+            int totalQty = bankQty + invQty;
+            
+            int excess = 0;
+            if (itemConfig.getMode() == SellMode.SELL_ALL) {
+                excess = totalQty;
+            } else if (itemConfig.getMode() == SellMode.SELL_EXCESS) {
+                excess = totalQty - itemConfig.getThreshold();
+            } else if (itemConfig.getMode() == SellMode.SELL_ALL_IF_OVER) {
+                if (totalQty >= itemConfig.getThreshold()) {
+                    excess = totalQty;
+                } else {
+                    excess = 0;
+                }
+            }
+            
             if (excess > invQty) {
                 hasUnsoldBankItems = true;
                 break;

@@ -17,7 +17,7 @@ public interface NetoGeSellerConfig extends Config {
     @ConfigItem(
             keyName = "itemsToSell",
             name = "Items to Sell",
-            description = "Comma separated list of items to sell. Format: ItemName:KeepAmount (e.g. Magic log:100, Coal:500, Rune bar)",
+            description = "Comma separated list of items to sell. Format: ItemName:KeepAmount (e.g. Magic log:100, Coal:500, Rune bar, Teak logs:>200)",
             position = 1,
             section = generalSettings
     )
