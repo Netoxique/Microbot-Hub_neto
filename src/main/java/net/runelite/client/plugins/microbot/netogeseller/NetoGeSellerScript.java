@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.netogeseller;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
 import net.runelite.api.gameval.VarbitID;
@@ -695,7 +696,9 @@ public class NetoGeSellerScript extends Script {
     public void shutdown() {
         super.shutdown();
         String message = "Neto GE Seller shutdown. Total Profit: " + formatProfit(totalProfit);
-        Microbot.showMessage(message);
+        Microbot.getClientThread().invoke(() -> {
+            Microbot.getClient().addChatMessage(ChatMessageType.GAMEMESSAGE, "", "<col=ff0000>" + message + "</col>", null);
+        });
         log.info(message);
     }
 }
