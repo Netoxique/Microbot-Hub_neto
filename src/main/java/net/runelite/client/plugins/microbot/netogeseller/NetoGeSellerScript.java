@@ -133,7 +133,8 @@ public class NetoGeSellerScript extends Script {
             firstTimeOpeningBank = false;
         }
 
-        Rs2Bank.setWithdrawAsNote();
+        Rs2Widget.clickWidget(InterfaceID.Bankmain.NOTE);
+        sleep(600, 1000);
         hasUnsoldBankItems = false;
 
         for (Map.Entry<String, Integer> entry : itemsToSellMap.entrySet()) {
@@ -183,41 +184,59 @@ public class NetoGeSellerScript extends Script {
     }
 
     private void handleSelling() {
+        log.info("Neto GE Seller SELLING state started. hasUnsoldBankItems={}, inventorySize={}", hasUnsoldBankItems, Rs2Inventory.size());
         Microbot.status = "Opening Grand Exchange";
         if (!Rs2GrandExchange.openExchange()) {
+            log.warn("Failed to open Grand Exchange from SELLING state.");
             return;
         }
-        sleepUntil(Rs2GrandExchange::isOpen);
+        log.info("Grand Exchange open interaction succeeded. Waiting for GE interface.");
+        boolean geOpen = sleepUntil(Rs2GrandExchange::isOpen);
+        log.info("Grand Exchange open wait result={}, isOpen={}", geOpen, Rs2GrandExchange.isOpen());
 
         boolean foundItemToSell = false;
         for (Rs2ItemModel item : Rs2Inventory.all(Rs2ItemModel::isTradeable)) {
             String nameLower = item.getName().toLowerCase();
+            log.info("Considering tradeable inventory item '{}', quantity={}, configuredForSale={}", item.getName(), item.getQuantity(), itemsToSellMap.containsKey(nameLower));
             if (itemsToSellMap.containsKey(nameLower)) {
                 int quantityToSell = item.getQuantity();
-                if (quantityToSell <= 0) continue;
+                if (quantityToSell <= 0) {
+                    log.warn("Skipping configured item '{}' because quantity is {}.", item.getName(), quantityToSell);
+                    continue;
+                }
 
                 foundItemToSell = true;
+                int availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
+                log.info("Matched configured sell item '{}'. quantityToSell={}, availableSlots={}", item.getName(), quantityToSell, availableSlots);
 
-                if (Rs2GrandExchange.getAvailableSlotsCount() > 0) {
+                if (availableSlots > 0) {
                     Microbot.status = "Selling " + quantityToSell + " " + item.getName();
-                    if (sellItemWithHotkey(item.getName(), quantityToSell, config.hotkey())) {
+                    log.info("Attempting to sell '{}' with hotkey '{}'.", item.getName(), config.hotkey());
+                    boolean sold = sellItemWithHotkey(item.getName(), quantityToSell, config.hotkey());
+                    log.info("sellItemWithHotkey result for '{}': {}", item.getName(), sold);
+                    if (sold) {
                         sleep(1000, 1500);
                     }
                 } else {
                     if (Rs2GrandExchange.hasSoldOffer()) {
                         Microbot.status = "Collecting sold offers to Bank";
+                        log.info("No available GE slots, but sold offers exist. Collecting to bank.");
                         Rs2GrandExchange.collectAllToBank();
-                        sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5000);
+                        boolean soldOffersCleared = sleepUntil(() -> !Rs2GrandExchange.hasSoldOffer(), 5000);
+                        log.info("Sold-offer collection wait result={}, hasSoldOffer={}", soldOffersCleared, Rs2GrandExchange.hasSoldOffer());
                         sleep(800, 1200);
                     } else {
                         if (Rs2Inventory.size() < 28 && hasUnsoldBankItems) {
                             Microbot.status = "Slots full. Returning to bank to withdraw more items";
+                            log.info("GE slots full, no sold offers, inventory has space, and bank still has unsold items. Returning to BANKING.");
                             Rs2GrandExchange.closeExchange();
-                            sleepUntil(() -> !Rs2GrandExchange.isOpen());
+                            boolean geClosed = sleepUntil(() -> !Rs2GrandExchange.isOpen());
+                            log.info("GE close wait result={}, isOpen={}", geClosed, Rs2GrandExchange.isOpen());
                             currentState = State.BANKING;
                             return;
                         } else {
                             Microbot.status = "Slots full. Waiting for sales...";
+                            log.info("GE slots full and no sold offers. Waiting for sales. inventorySize={}, hasUnsoldBankItems={}", Rs2Inventory.size(), hasUnsoldBankItems);
                             sleep(2000);
                         }
                     }
@@ -229,10 +248,13 @@ public class NetoGeSellerScript extends Script {
         if (!foundItemToSell) {
             if (hasUnsoldBankItems) {
                 Microbot.status = "No items in inventory. Returning to bank";
+                log.info("No configured sell item found in inventory, but bank has unsold items. Returning to BANKING.");
                 Rs2GrandExchange.closeExchange();
-                sleepUntil(() -> !Rs2GrandExchange.isOpen());
+                boolean geClosed = sleepUntil(() -> !Rs2GrandExchange.isOpen());
+                log.info("GE close wait result={}, isOpen={}", geClosed, Rs2GrandExchange.isOpen());
                 currentState = State.BANKING;
             } else {
+                log.info("No configured sell item found in inventory and no unsold bank items remain. Transitioning to WAITING_FOR_SELL.");
                 currentState = State.WAITING_FOR_SELL;
             }
         }
@@ -273,67 +295,114 @@ public class NetoGeSellerScript extends Script {
     }
 
     private boolean sellItemWithHotkey(String itemName, int quantity, String hotkey) {
-        if (!Rs2Inventory.hasItem(itemName, true)) return false;
-        if (Rs2GrandExchange.getAvailableSlotsCount() == 0) return false;
-        if (quantity <= 0) return false;
+        log.info("sellItemWithHotkey started. itemName='{}', quantity={}, hotkey='{}'", itemName, quantity, hotkey);
+        if (!Rs2Inventory.hasItem(itemName, true)) {
+            log.warn("sellItemWithHotkey returning false: inventory does not contain '{}'.", itemName);
+            return false;
+        }
+        int availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
+        if (availableSlots == 0) {
+            log.warn("sellItemWithHotkey returning false: no GE slots available.");
+            return false;
+        }
+        if (quantity <= 0) {
+            log.warn("sellItemWithHotkey returning false: invalid quantity {} for '{}'.", quantity, itemName);
+            return false;
+        }
 
-        if (!Rs2Inventory.interact(itemName, "Offer", true)) return false;
+        log.info("Interacting with '{}' using Offer action.", itemName);
+        boolean offerInteraction = Rs2Inventory.interact(itemName, "Offer", true);
+        log.info("Offer interaction result for '{}': {}", itemName, offerInteraction);
+        if (!offerInteraction) {
+            log.warn("sellItemWithHotkey returning false: Offer interaction failed for '{}'.", itemName);
+            return false;
+        }
 
-        if (!sleepUntil(Rs2GrandExchange::isOfferScreenOpen, 5000)) return false;
+        log.info("Waiting for GE offer screen to open for '{}'.", itemName);
+        boolean offerScreenOpened = sleepUntil(Rs2GrandExchange::isOfferScreenOpen, 5000);
+        log.info("Offer screen wait result={}, isOfferScreenOpen={}", offerScreenOpened, Rs2GrandExchange.isOfferScreenOpen());
+        if (!offerScreenOpened) {
+            log.warn("sellItemWithHotkey returning false: offer screen did not open for '{}'.", itemName);
+            return false;
+        }
         sleep(300, 500);
 
         int currentOfferQty = Microbot.getVarbitValue(VarbitID.GE_NEWOFFER_QUANTITY);
+        log.info("Current GE offer quantity varbit={}, targetQuantity={}", currentOfferQty, quantity);
         if (quantity != currentOfferQty) {
+            log.info("GE offer quantity differs from target. Setting quantity to {}.", quantity);
             if (!setQuantity(quantity)) {
+                log.warn("sellItemWithHotkey returning false: failed to set quantity for '{}'.", itemName);
                 return false;
             }
         }
 
         Widget pricePerItemButtonX = getPricePerItemButton_X();
         if (pricePerItemButtonX == null) {
+            log.warn("sellItemWithHotkey returning false: price-per-item X button was not found.");
             return false;
         }
 
+        log.info("Clicking price-per-item X button for '{}'.", itemName);
         Microbot.getMouse().click(pricePerItemButtonX.getBounds());
-        if (!sleepUntil(() -> Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT2) != null, 3000)) return false;
+        boolean priceChatboxOpened = sleepUntil(() -> Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT2) != null, 3000);
+        log.info("Price chatbox prompt wait result={}", priceChatboxOpened);
+        if (!priceChatboxOpened) {
+            log.warn("sellItemWithHotkey returning false: price chatbox prompt did not appear.");
+            return false;
+        }
         sleep(600, 1000);
 
         if (hotkey == null || hotkey.isEmpty()) {
             hotkey = "n";
         }
-        
+
+        log.info("Pressing insta-sell hotkey '{}'.", hotkey.charAt(0));
         Rs2Keyboard.keyPress(hotkey.charAt(0));
         sleep(600, 1000);
 
+        log.info("Submitting insta-sell hotkey value with Enter.");
         Rs2Keyboard.enter();
         sleep(1000, 1500);
 
         Widget confirmButton = getConfirmButton();
         if (confirmButton == null) {
+            log.warn("sellItemWithHotkey returning false: confirm button was not found.");
             return false;
         }
 
+        log.info("Clicking GE confirm button for '{}'.", itemName);
         Rs2Widget.clickWidget(confirmButton);
-        sleepUntil(() -> Rs2Widget.hasWidget("Your offer is much"), 2000);
+        boolean warningPromptVisible = sleepUntil(() -> Rs2Widget.hasWidget("Your offer is much"), 2000);
+        log.info("Price warning prompt wait result={}, hasWarning={}", warningPromptVisible, Rs2Widget.hasWidget("Your offer is much"));
         if (Rs2Widget.hasWidget("Your offer is much")) {
+            log.info("Accepting GE price warning prompt.");
             Rs2Widget.clickWidget("Yes");
         }
 
-        return sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 5000);
+        boolean offerScreenClosed = sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 5000);
+        log.info("sellItemWithHotkey final result for '{}': offerScreenClosed={}, isOfferScreenOpen={}", itemName, offerScreenClosed, Rs2GrandExchange.isOfferScreenOpen());
+        return offerScreenClosed;
     }
 
     private boolean setQuantity(int quantity) {
         int tries = 0;
         int targetQuantity = quantity;
         while (targetQuantity != Microbot.getVarbitValue(VarbitID.GE_NEWOFFER_QUANTITY)) {
+            int currentQuantity = Microbot.getVarbitValue(VarbitID.GE_NEWOFFER_QUANTITY);
+            log.info("setQuantity attempt {}. currentQuantity={}, targetQuantity={}", tries + 1, currentQuantity, targetQuantity);
             Widget quantityButtonX = getQuantityButton_X();
             if (quantityButtonX == null) {
+                log.warn("setQuantity attempt {} could not find quantity X button.", tries + 1);
                 tries++;
                 continue;
             }
+            log.info("Clicking quantity X button.");
             Microbot.getMouse().click(quantityButtonX.getBounds());
-            sleepUntil(() -> Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT2) != null, 3000);
+            boolean quantityChatboxOpened = sleepUntil(() -> Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT2) != null, 3000);
+            log.info("Quantity chatbox prompt wait result={}", quantityChatboxOpened);
             sleep(600, 1000);
+            log.info("Setting GE offer quantity chatbox value to {}.", targetQuantity);
             Rs2GrandExchange.setChatboxValue(targetQuantity);
             sleep(500, 750);
             Rs2Keyboard.enter();
@@ -345,7 +414,9 @@ public class NetoGeSellerScript extends Script {
                 break;
             }
         }
-        return tries <= 3;
+        boolean success = tries <= 3;
+        log.info("setQuantity completed. success={}, tries={}, finalQuantity={}, targetQuantity={}", success, tries, Microbot.getVarbitValue(VarbitID.GE_NEWOFFER_QUANTITY), targetQuantity);
+        return success;
     }
 
     private Widget getPricePerItemButton_X() {
