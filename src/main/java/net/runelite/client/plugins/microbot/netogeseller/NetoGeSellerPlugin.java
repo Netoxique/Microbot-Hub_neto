@@ -8,6 +8,10 @@ import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.ui.overlay.OverlayManager;
+import net.runelite.client.ui.ClientToolbar;
+import net.runelite.client.ui.ClientUI;
+import net.runelite.client.ui.NavigationButton;
+import javax.swing.SwingUtilities;
 
 import javax.inject.Inject;
 import java.awt.*;
@@ -38,6 +42,12 @@ public class NetoGeSellerPlugin extends Plugin {
     @Inject
     private NetoGeSellerScript script;
 
+    @Inject
+    private ClientUI clientUI;
+
+    @Inject
+    private ClientToolbar clientToolbar;
+
     @Provides
     NetoGeSellerConfig provideConfig(ConfigManager configManager) {
         return configManager.getConfig(NetoGeSellerConfig.class);
@@ -50,6 +60,28 @@ public class NetoGeSellerPlugin extends Plugin {
             overlayManager.add(overlay);
         }
         script.run();
+        openFlippingUtilitiesPanel();
+    }
+
+    private void openFlippingUtilitiesPanel() {
+        SwingUtilities.invokeLater(() -> {
+            try {
+                java.lang.reflect.Field sidebarEntriesField = ClientUI.class.getDeclaredField("sidebarEntries");
+                sidebarEntriesField.setAccessible(true);
+                @SuppressWarnings("unchecked")
+                java.util.TreeSet<NavigationButton> sidebarEntries = (java.util.TreeSet<NavigationButton>) sidebarEntriesField.get(clientUI);
+                
+                for (NavigationButton button : sidebarEntries) {
+                    if (button.getTooltip() != null && button.getTooltip().equalsIgnoreCase("Flipping Utilities")) {
+                        clientToolbar.openPanel(button);
+                        log.info("Opened Flipping Utilities panel");
+                        break;
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Failed to open Flipping Utilities panel", e);
+            }
+        });
     }
 
     @Override
