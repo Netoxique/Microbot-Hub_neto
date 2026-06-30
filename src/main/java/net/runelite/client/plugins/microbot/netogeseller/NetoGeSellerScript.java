@@ -319,10 +319,10 @@ public class NetoGeSellerScript extends Script {
         }
 
         log.info("Waiting for GE offer screen to open for '{}'.", itemName);
-        boolean offerScreenOpened = sleepUntil(Rs2GrandExchange::isOfferScreenOpen, 5000);
-        log.info("Offer screen wait result={}, isOfferScreenOpen={}", offerScreenOpened, Rs2GrandExchange.isOfferScreenOpen());
+        boolean offerScreenOpened = sleepUntil(() -> Rs2Widget.hasWidget("Enter Price"), 5000);
+        log.info("Offer screen wait result={}, hasEnterPrice={}", offerScreenOpened, Rs2Widget.hasWidget("Enter Price"));
         if (!offerScreenOpened) {
-            log.warn("sellItemWithHotkey returning false: offer screen did not open for '{}'.", itemName);
+            log.warn("sellItemWithHotkey returning false: offer screen did not open (Enter Price button not found) for '{}'.", itemName);
             return false;
         }
         sleep(300, 500);
@@ -337,13 +337,16 @@ public class NetoGeSellerScript extends Script {
             }
         }
 
-        Widget pricePerItemButtonX = getPricePerItemButton_X();
+        Widget pricePerItemButtonX = Rs2Widget.findWidget("Enter Price");
         if (pricePerItemButtonX == null) {
-            log.warn("sellItemWithHotkey returning false: price-per-item X button was not found.");
+            pricePerItemButtonX = Rs2Widget.findWidget("Enter price");
+        }
+        if (pricePerItemButtonX == null) {
+            log.warn("sellItemWithHotkey returning false: price-per-item X button (Enter Price) was not found.");
             return false;
         }
 
-        log.info("Clicking price-per-item X button for '{}'.", itemName);
+        log.info("Clicking price-per-item X button (Enter Price) for '{}'.", itemName);
         Microbot.getMouse().click(pricePerItemButtonX.getBounds());
         boolean priceChatboxOpened = sleepUntil(() -> Rs2Widget.getWidget(InterfaceID.Chatbox.MES_TEXT2) != null, 3000);
         log.info("Price chatbox prompt wait result={}", priceChatboxOpened);
@@ -357,8 +360,11 @@ public class NetoGeSellerScript extends Script {
             hotkey = "n";
         }
 
-        log.info("Pressing insta-sell hotkey '{}'.", hotkey.charAt(0));
-        Rs2Keyboard.keyPress(hotkey.charAt(0));
+        log.info("Pressing insta-sell hotkey sequence '{}'.", hotkey);
+        for (char c : hotkey.toCharArray()) {
+            Rs2Keyboard.keyPress(c);
+            sleep(100, 200);
+        }
         sleep(600, 1000);
 
         log.info("Submitting insta-sell hotkey value with Enter.");
@@ -380,8 +386,8 @@ public class NetoGeSellerScript extends Script {
             Rs2Widget.clickWidget("Yes");
         }
 
-        boolean offerScreenClosed = sleepUntil(() -> !Rs2GrandExchange.isOfferScreenOpen(), 5000);
-        log.info("sellItemWithHotkey final result for '{}': offerScreenClosed={}, isOfferScreenOpen={}", itemName, offerScreenClosed, Rs2GrandExchange.isOfferScreenOpen());
+        boolean offerScreenClosed = sleepUntil(() -> !Rs2Widget.hasWidget("Enter Price"), 5000);
+        log.info("sellItemWithHotkey final result for '{}': offerScreenClosed={}, hasEnterPrice={}", itemName, offerScreenClosed, Rs2Widget.hasWidget("Enter Price"));
         return offerScreenClosed;
     }
 
