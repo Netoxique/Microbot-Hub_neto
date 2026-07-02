@@ -36,6 +36,14 @@ import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectQueryable;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.microbot.api.tileobject.models.TileObjectType;
+import java.awt.Rectangle;
+import net.runelite.api.widgets.ComponentID;
+import net.runelite.api.gameval.VarbitID;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.client.plugins.microbot.util.math.Rs2Random;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 
 import javax.inject.Inject;
 import java.awt.event.KeyEvent;
@@ -93,7 +101,229 @@ public class NetoRCScript extends Script {
     }
 
     private boolean interactObject(int id, String action) {
-        return new Rs2TileObjectQueryable().interact(id, action);
+        var obj = new Rs2TileObjectQueryable().withId(id).first();
+        if (obj != null) {
+            return interactObject(obj, action);
+        }
+        return false;
+    }
+
+    private TileObject getUnderlyingTileObject(Rs2TileObjectModel model) {
+        try {
+            java.lang.reflect.Field field = Rs2TileObjectModel.class.getDeclaredField("tileObject");
+            field.setAccessible(true);
+            return (TileObject) field.get(model);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private boolean interactObject(Rs2TileObjectModel obj, String action) {
+        if (obj == null) return false;
+
+        TileObject tileObject = getUnderlyingTileObject(obj);
+        if (tileObject == null) {
+            return obj.click(action);
+        }
+
+        if (!Rs2Camera.isTileOnScreen(obj.getLocalLocation())) {
+            Rs2Camera.turnTo(tileObject);
+        }
+
+        Rectangle clickbox = Rs2UiHelper.getObjectClickbox(tileObject);
+        if (clickbox == null || (clickbox.getX() == 1 && clickbox.getY() == 1)) {
+            return obj.click(action);
+        }
+
+        if (Rs2UiHelper.isMouseWithinRectangle(clickbox)) {
+            java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+            Point clickPoint = new Point(mousePos.x, mousePos.y);
+
+            int param0;
+            int param1;
+            MenuAction menuAction = MenuAction.WALK;
+
+            if (obj.getTileObjectType() == TileObjectType.GAME) {
+                GameObject gameObj = (GameObject) tileObject;
+                if (gameObj.sizeX() > 1) {
+                    param0 = gameObj.getLocalLocation().getSceneX() - gameObj.sizeX() / 2;
+                } else {
+                    param0 = gameObj.getLocalLocation().getSceneX();
+                }
+
+                if (gameObj.sizeY() > 1) {
+                    param1 = gameObj.getLocalLocation().getSceneY() - gameObj.sizeY() / 2;
+                } else {
+                    param1 = gameObj.getLocalLocation().getSceneY();
+                }
+            } else {
+                param0 = obj.getLocalLocation().getSceneX();
+                param1 = obj.getLocalLocation().getSceneY();
+            }
+
+            int index = 0;
+            String objName = "";
+            if (action != null) {
+                var objComp = obj.getObjectComposition();
+                String[] actions;
+                if (objComp.getImpostorIds() != null && objComp.getImpostor() != null) {
+                    actions = objComp.getImpostor().getActions();
+                } else {
+                    actions = objComp.getActions();
+                }
+
+                for (int i = 0; i < actions.length; i++) {
+                    if (actions[i] == null) continue;
+                    if (action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[i]))) {
+                        index = i;
+                        break;
+                    }
+                }
+                objName = objComp.getName();
+            }
+
+            if (Microbot.getClient().isWidgetSelected()) {
+                menuAction = MenuAction.WIDGET_TARGET_ON_GAME_OBJECT;
+            } else if (index == 0) {
+                menuAction = MenuAction.GAME_OBJECT_FIRST_OPTION;
+            } else if (index == 1) {
+                menuAction = MenuAction.GAME_OBJECT_SECOND_OPTION;
+            } else if (index == 2) {
+                menuAction = MenuAction.GAME_OBJECT_THIRD_OPTION;
+            } else if (index == 3) {
+                menuAction = MenuAction.GAME_OBJECT_FOURTH_OPTION;
+            } else if (index == 4) {
+                menuAction = MenuAction.GAME_OBJECT_FIFTH_OPTION;
+            }
+
+            NewMenuEntry entry = new NewMenuEntry()
+                    .param0(param0)
+                    .param1(param1)
+                    .opcode(menuAction.getId())
+                    .identifier(obj.getId())
+                    .itemId(-1)
+                    .option(action)
+                    .target(objName)
+                    .setWorldViewId(obj.getWorldView().getId())
+                    .gameObject(tileObject);
+
+            Microbot.status = action + " " + obj.getName();
+            Microbot.getMouse().click(clickPoint, entry);
+            if (!Microbot.getClient().isClientThread()) {
+                sleep(Rs2Random.logNormalBounded(50, 100));
+            }
+            return true;
+        } else {
+            return obj.click(action);
+        }
+    }
+
+    private void clickWithHoverOptimization(Rectangle bounds, NewMenuEntry entry) {
+        Point clickPoint;
+        if (Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+            java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+            clickPoint = new Point(mousePos.x, mousePos.y);
+        } else {
+            clickPoint = Rs2UiHelper.getClickingPoint(bounds, true);
+        }
+        Microbot.getMouse().click(clickPoint, entry);
+        if (!Microbot.getClient().isClientThread()) {
+            sleep(Rs2Random.logNormalBounded(50, 100));
+        }
+    }
+
+    private boolean interactInventory(String itemName, String action) {
+        var item = Rs2Inventory.get(itemName);
+        if (item != null) {
+            return interactInventory(item, action);
+        }
+        return false;
+    }
+
+    private boolean interactInventory(int itemId, String action) {
+        var item = Rs2Inventory.get(itemId);
+        if (item != null) {
+            return interactInventory(item, action);
+        }
+        return false;
+    }
+
+    private boolean interactInventory(Rs2ItemModel item, String action) {
+        if (item == null) return false;
+
+        Rectangle bounds = Rs2Inventory.itemBounds(item);
+        if (bounds != null && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+            int param1 = Rs2Bank.isOpen() ? ComponentID.BANK_INVENTORY_ITEM_CONTAINER : ComponentID.INVENTORY_CONTAINER;
+            int identifier = -1;
+
+            Widget containerWidget = Rs2Widget.getWidget(param1);
+            if (containerWidget != null && containerWidget.getChildren() != null) {
+                Widget itemWidget = Arrays.stream(containerWidget.getChildren())
+                        .filter(w -> w != null && w.getIndex() == item.getSlot())
+                        .findFirst()
+                        .orElse(null);
+
+                String[] actions = itemWidget != null && itemWidget.getActions() != null ?
+                        itemWidget.getActions() :
+                        item.getInventoryActions();
+
+                if (actions != null) {
+                    for (int i = 0; i < actions.length; i++) {
+                        if (actions[i] != null && net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper.stripColTags(actions[i]).equalsIgnoreCase(action)) {
+                            identifier = i + 1;
+                            break;
+                        }
+                    }
+                }
+            }
+
+            if (identifier != -1) {
+                NewMenuEntry entry = new NewMenuEntry()
+                        .option(action)
+                        .param0(item.getSlot())
+                        .param1(param1)
+                        .opcode(MenuAction.CC_OP.getId())
+                        .identifier(identifier)
+                        .itemId(item.getId())
+                        .target(item.getName());
+
+                java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+                Point clickPoint = new Point(mousePos.x, mousePos.y);
+                Microbot.getMouse().click(clickPoint, entry);
+                if (!Microbot.getClient().isClientThread()) {
+                    sleep(Rs2Random.logNormalBounded(50, 100));
+                }
+                return true;
+            }
+        }
+
+        return Rs2Inventory.interact(item, action);
+    }
+
+    private void depositAll(int itemId) {
+        var item = Rs2Inventory.get(itemId);
+        if (item == null || !Rs2Bank.isOpen()) return;
+
+        Rectangle bounds = Rs2Inventory.itemBounds(item);
+        if (bounds != null && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+            int identifier = (Microbot.getVarbitValue(VarbitID.BANK_QUANTITY_TYPE) == 4) ? 2 : 8;
+            NewMenuEntry entry = new NewMenuEntry()
+                    .param0(item.getSlot())
+                    .param1(ComponentID.BANK_INVENTORY_ITEM_CONTAINER)
+                    .opcode(MenuAction.CC_OP.getId())
+                    .identifier(identifier)
+                    .itemId(item.getId())
+                    .target(item.getName());
+
+            java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+            Point clickPoint = new Point(mousePos.x, mousePos.y);
+            Microbot.getMouse().click(clickPoint, entry);
+            if (!Microbot.getClient().isClientThread()) {
+                sleep(Rs2Random.logNormalBounded(50, 100));
+            }
+        } else {
+            Rs2Bank.depositAll(itemId);
+        }
     }
 
     private boolean hoverObject(int id) {
@@ -293,7 +523,7 @@ public class NetoRCScript extends Script {
     }
 
     private void checkPouches() {
-        Rs2Inventory.interact(colossalPouch, "Check");
+        interactInventory(colossalPouch, "Check");
         sleepGaussian(600, 200);
     }
 
@@ -487,7 +717,7 @@ public class NetoRCScript extends Script {
 
             if (config.runeType() == RuneType.BLOOD) {
                 if (Rs2Inventory.contains(inactiveBloodEssence)) {
-                    Rs2Inventory.interact(inactiveBloodEssence, "Activate");
+                    interactInventory(inactiveBloodEssence, "Activate");
                     Microbot.log("Activating blood essence");
                     sleepGaussian(700, 200);
                 }
@@ -506,11 +736,11 @@ public class NetoRCScript extends Script {
             Microbot.log("Pouches are not full yet");
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
-                    Rs2Bank.depositAll(bloodRune);
+                    depositAll(bloodRune);
                     sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
-                    Rs2Bank.depositAll(wrathRune);
+                    depositAll(wrathRune);
                     sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 Rs2Bank.withdrawAll(pureEss);
@@ -944,7 +1174,7 @@ public class NetoRCScript extends Script {
                         if (Rs2Equipment.isWearing(mythCape)) {
                             Rs2Equipment.interact(mythCape, "Teleport");
                         } else {
-                            Rs2Inventory.interact(mythCape, "Teleport");
+                            interactInventory(mythCape, "Teleport");
                         }
                         sleepUntil(Rs2Player::isAnimating, 5000);
                         sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
@@ -1051,8 +1281,8 @@ public class NetoRCScript extends Script {
     private void handleEmptyPouch() {
         while (!Rs2Inventory.allPouchesEmpty()) {
             Microbot.log("Pouches are not empty. Crafting more");
-            Rs2Inventory.interact("Colossal Pouch", "Empty");
-            hoverObject(bloodAltar);
+            interactInventory("Colossal Pouch", "Empty");
+            hoverObject(config.runeType() == RuneType.BLOOD ? bloodAltar : wrathAltar);
             boolean hasEssence = sleepUntil(() -> Rs2Inventory.contains(pureEss), 2000);
 
             if (hasEssence) {
