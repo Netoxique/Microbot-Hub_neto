@@ -16,7 +16,18 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.api.MenuAction;
+import net.runelite.api.Point;
+import net.runelite.api.widgets.ComponentID;
+import net.runelite.api.widgets.Widget;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.client.plugins.microbot.util.math.Rs2Random;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
+import java.awt.Rectangle;
 
 import javax.inject.Inject;
 import java.util.Arrays;
@@ -255,7 +266,7 @@ public class NetoAlchingScript extends Script {
                 }
             }
 
-            Rs2Magic.alch(alchItem);
+            performHoverOptimizedAlch(alchItem);
             boolean xpGained = Rs2Player.waitForXpDrop(Skill.MAGIC, 10000, false);
             if (xpGained) {
                 totalProfit += haPrice;
@@ -267,6 +278,100 @@ public class NetoAlchingScript extends Script {
             } else {
                 finishScript();
             }
+        }
+    }
+
+    private void performHoverOptimizedAlch(Rs2ItemModel item) {
+        // Switch to magic tab if not already active
+        if (Rs2Tab.getCurrentTab() != InterfaceTab.MAGIC) {
+            Rs2Tab.switchToMagicTab();
+            sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.MAGIC, 5000);
+            sleep(150, 300);
+        }
+
+        // Handle sub-menu check (like Rs2Magic setup)
+        Widget backWidget = Rs2Widget.getWidget(218, 4);
+        if (backWidget != null && backWidget.getActions() != null && Rs2Widget.isWidgetVisible(218, 4) &&
+                Arrays.stream(backWidget.getActions()).anyMatch(x -> x.equalsIgnoreCase("back"))) {
+            Rs2Widget.clickWidget(backWidget);
+            sleep(150, 300);
+        }
+
+        // Locate High Alchemy spell widget
+        MagicAction magicSpell = MagicAction.HIGH_LEVEL_ALCHEMY;
+        Widget spellWidget = Rs2Widget.getWidget(magicSpell.getWidgetId());
+        if (spellWidget == null) return;
+
+        // Verify requirements / can cast
+        if (!Rs2Magic.canCast(magicSpell)) {
+            log.warn("Cannot cast High Alchemy");
+            return;
+        }
+
+        // Click on High Alchemy spell
+        NewMenuEntry spellEntry = new NewMenuEntry()
+                .option("Cast")
+                .param0(-1)
+                .param1(magicSpell.getWidgetId())
+                .opcode(MenuAction.WIDGET_TARGET.getId())
+                .identifier(1)
+                .itemId(-1)
+                .target(magicSpell.getName());
+
+        Rectangle spellBounds = spellWidget.getBounds();
+        Point spellClickPoint;
+        if (Rs2UiHelper.isMouseWithinRectangle(spellBounds)) {
+            java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+            spellClickPoint = new Point(mousePos.x, mousePos.y);
+        } else {
+            spellClickPoint = Rs2UiHelper.getClickingPoint(spellBounds, true);
+        }
+
+        Microbot.status = "Casting High Alchemy";
+        Microbot.getMouse().click(spellClickPoint, spellEntry);
+
+        if (!Microbot.getClient().isClientThread()) {
+            sleep(Rs2Random.logNormalBounded(50, 100));
+        }
+
+        // Wait for inventory tab to open (the game switches automatically when targeting)
+        sleepUntil(() -> Microbot.getClientThread().runOnClientThreadOptional(() -> Rs2Tab.getCurrentTab() == InterfaceTab.INVENTORY).orElse(false), 5000);
+        sleep(300, 600);
+
+        // Click on the item to alch
+        Widget inventoryWidget = Rs2Widget.getWidget(ComponentID.INVENTORY_CONTAINER);
+        if (inventoryWidget == null || inventoryWidget.getChildren() == null) return;
+
+        Widget itemWidget = Arrays.stream(inventoryWidget.getChildren())
+                .filter(w -> w != null && w.getIndex() == item.getSlot())
+                .findFirst()
+                .orElse(null);
+
+        Rectangle itemBounds = itemWidget != null ? itemWidget.getBounds() : null;
+        if (itemBounds == null) return;
+
+        NewMenuEntry itemEntry = new NewMenuEntry()
+                .option("Cast")
+                .param0(item.getSlot())
+                .param1(ComponentID.INVENTORY_CONTAINER)
+                .opcode(MenuAction.WIDGET_TARGET_ON_WIDGET.getId())
+                .identifier(1)
+                .itemId(item.getId())
+                .target(item.getName());
+
+        Point itemClickPoint;
+        if (Rs2UiHelper.isMouseWithinRectangle(itemBounds)) {
+            java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+            itemClickPoint = new Point(mousePos.x, mousePos.y);
+        } else {
+            itemClickPoint = Rs2UiHelper.getClickingPoint(itemBounds, true);
+        }
+
+        Microbot.status = "Alching " + item.getName();
+        Microbot.getMouse().click(itemClickPoint, itemEntry);
+
+        if (!Microbot.getClient().isClientThread()) {
+            sleep(Rs2Random.logNormalBounded(50, 100));
         }
     }
 
