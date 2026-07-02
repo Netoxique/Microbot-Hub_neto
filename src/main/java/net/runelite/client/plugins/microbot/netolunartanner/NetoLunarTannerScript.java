@@ -15,6 +15,20 @@ import net.runelite.client.util.QuantityFormatter;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
+import net.runelite.api.MenuAction;
+import net.runelite.api.Point;
+import net.runelite.api.widgets.Widget;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.math.Rs2Random;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
+import java.awt.Rectangle;
+import java.util.Arrays;
+
+import static net.runelite.client.plugins.microbot.util.Global.sleep;
+import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
@@ -120,7 +134,7 @@ public class NetoLunarTannerScript extends Script {
 
                 if (activeHide != null && Rs2Inventory.hasItem(activeHide.getName(), true)) {
                     int initialHideCount = Rs2Inventory.count(activeHide.getFinished());
-                    Rs2Magic.cast(MagicAction.TAN_LEATHER);
+                    castTanLeatherHoverOptimized();
 
                     // Wait for the inventory count to change indicating hides have been tanned
                     while (Rs2Inventory.count(activeHide.getFinished()) == initialHideCount) {
@@ -157,6 +171,69 @@ public class NetoLunarTannerScript extends Script {
             }
         }, 0, 50, TimeUnit.MILLISECONDS);
         return true;
+    }
+
+    private void castTanLeatherHoverOptimized() {
+        MagicAction magicSpell = MagicAction.TAN_LEATHER;
+
+        // Switch to magic tab if not already active
+        if (Rs2Tab.getCurrentTab() != InterfaceTab.MAGIC) {
+            Rs2Tab.switchToMagicTab();
+            sleepUntil(() -> Rs2Tab.getCurrentTab() == InterfaceTab.MAGIC, 5000);
+            sleep(150, 300);
+        }
+
+        // Handle sub-menu check (like Rs2Magic setup)
+        Widget backWidget = Rs2Widget.getWidget(218, 4);
+        if (backWidget != null && backWidget.getActions() != null && Rs2Widget.isWidgetVisible(218, 4) &&
+                Arrays.stream(backWidget.getActions()).anyMatch(x -> x.equalsIgnoreCase("back"))) {
+            Rs2Widget.clickWidget(backWidget);
+            sleep(150, 300);
+        }
+
+        // Locate Tan Leather spell widget
+        Widget spellWidget = Rs2Widget.getWidget(magicSpell.getWidgetId());
+        if (spellWidget == null) return;
+
+        // Verify requirements / can cast
+        if (!Rs2Magic.canCast(magicSpell)) {
+            return;
+        }
+
+        // Click on Tan Leather spell
+        MenuAction menuAction;
+        if (magicSpell.getName().toLowerCase().contains("teleport") ||
+                magicSpell.getName().toLowerCase().contains("bones to") ||
+                (magicSpell.getActions() != null && Arrays.stream(magicSpell.getActions()).anyMatch(x -> x != null && x.equalsIgnoreCase("cast")))) {
+            menuAction = MenuAction.CC_OP;
+        } else {
+            menuAction = MenuAction.WIDGET_TARGET;
+        }
+
+        NewMenuEntry spellEntry = new NewMenuEntry()
+                .option("Cast")
+                .param0(-1)
+                .param1(magicSpell.getWidgetId())
+                .opcode(menuAction.getId())
+                .identifier(1)
+                .itemId(-1)
+                .target(magicSpell.getName());
+
+        Rectangle spellBounds = spellWidget.getBounds();
+        Point spellClickPoint;
+        if (Rs2UiHelper.isMouseWithinRectangle(spellBounds)) {
+            java.awt.Point mousePos = Microbot.getMouse().getMousePosition();
+            spellClickPoint = new Point(mousePos.x, mousePos.y);
+        } else {
+            spellClickPoint = Rs2UiHelper.getClickingPoint(spellBounds, true);
+        }
+
+        Microbot.status = "Casting Tan Leather";
+        Microbot.getMouse().click(spellClickPoint, spellEntry);
+
+        if (!Microbot.getClient().isClientThread()) {
+            sleep(Rs2Random.logNormalBounded(50, 100));
+        }
     }
 
     private boolean pauseForBreakAfterTanning() {
