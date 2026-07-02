@@ -300,7 +300,7 @@ public class NetoRCScript extends Script {
         return Rs2Inventory.interact(item, action);
     }
 
-    private void depositAll(int itemId) {
+    private void depositItem(int itemId) {
         var item = Rs2Inventory.get(itemId);
         if (item == null || !Rs2Bank.isOpen()) return;
 
@@ -736,11 +736,11 @@ public class NetoRCScript extends Script {
             Microbot.log("Pouches are not full yet");
             if (Rs2Bank.isOpen()) {
                 if (Rs2Inventory.contains(bloodRune)) {
-                    depositAll(bloodRune);
+                    depositItem(bloodRune);
                     sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 if (Rs2Inventory.contains(wrathRune)) {
-                    depositAll(wrathRune);
+                    depositItem(wrathRune);
                     sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 Rs2Bank.withdrawAll(pureEss);
