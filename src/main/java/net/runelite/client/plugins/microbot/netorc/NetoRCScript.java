@@ -744,9 +744,20 @@ public class NetoRCScript extends Script {
                     sleepGaussian(150, 25); // 100 to 200 ms
                 }
                 Rs2Bank.withdrawAll(pureEss);
+                if (!Rs2Inventory.allPouchesFull()) {
+                    hoverInvItem(colossalPouch);
+                }
                 sleepUntil(Rs2Inventory::isFull);
-                Rs2Inventory.fillPouches();
-                sleepUntilOnClientThread(() -> !Rs2Inventory.isFull());
+                if (!Rs2Inventory.allPouchesFull()) {
+                    var pouchItem = Rs2Inventory.get(colossalPouch);
+                    if (pouchItem == null) {
+                        pouchItem = Rs2Inventory.get(ItemID.RCU_POUCH_COLOSSAL_DEGRADE);
+                    }
+                    if (pouchItem != null) {
+                        interactInventory(pouchItem, "Fill");
+                    }
+                    sleepUntilOnClientThread(() -> !Rs2Inventory.isFull());
+                }
             }
             if (!Rs2Inventory.isFull()) {
                 Rs2Bank.withdrawAll(pureEss);
