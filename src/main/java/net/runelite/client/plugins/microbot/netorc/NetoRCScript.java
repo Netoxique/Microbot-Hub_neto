@@ -29,6 +29,8 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
+import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
+import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
@@ -417,6 +419,15 @@ public class NetoRCScript extends Script {
                     return;
                 }
 
+                if (Rs2Inventory.hasItem(ItemID.RCU_POUCH_COLOSSAL_DEGRADE)) {
+                    if (Rs2Bank.isOpen()) {
+                        Rs2Keyboard.keyPress(KeyEvent.VK_ESCAPE);
+                        sleepUntil(() -> !Rs2Bank.isOpen(), 1200);
+                    }
+                    repairPouchesQuick();
+                    return;
+                }
+
                 if (Rs2Inventory.anyPouchUnknown()) {
                     if (Rs2Bank.isOpen()) {
                         Rs2Keyboard.keyPress(KeyEvent.VK_ESCAPE);
@@ -574,6 +585,71 @@ public class NetoRCScript extends Script {
         return true;
     }
 
+    private boolean repairPouchesQuick() {
+        if (!Rs2Inventory.hasDegradedPouch() && !Rs2Inventory.hasItem(ItemID.RCU_POUCH_COLOSSAL_DEGRADE)) return false;
+        Microbot.log("Attempting fast pouch repair...");
+
+        // 1. Proceed if the option 'Dark Mage' can be casted, else use the already implemented method
+        Rs2Tab.switchToMagicTab();
+        sleepUntil(() -> Rs2Tab.isCurrentTab(InterfaceTab.MAGIC), 2000);
+
+        int index = -1;
+        Widget npcContactWidget = Rs2Widget.getWidget(MagicAction.NPC_CONTACT.getWidgetId());
+        if (npcContactWidget != null) {
+            String[] actions = npcContactWidget.getActions();
+            if (actions != null) {
+                for (int i = 0; i < actions.length; i++) {
+                    if (actions[i] != null && actions[i].toLowerCase().contains("dark mage")) {
+                        index = i;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (index == -1) {
+            Microbot.log("Dark Mage option not found on NPC Contact widget. Falling back to default repair method.");
+            Rs2Magic.repairPouchesWithLunar();
+            return !Rs2Inventory.hasDegradedPouch();
+        }
+
+        // 2. Cast NPC, and wait for chat box 'Click here to continue'
+        String actionOption = npcContactWidget.getActions()[index];
+        if (!Rs2Magic.cast(MagicAction.NPC_CONTACT, actionOption, index + 1)) {
+            Microbot.log("Failed to cast NPC Contact option. Falling back to default repair method.");
+            Rs2Magic.repairPouchesWithLunar();
+            return !Rs2Inventory.hasDegradedPouch();
+        }
+
+        if (!sleepUntil(Rs2Dialogue::hasContinue, 6000)) {
+            Microbot.log("Timed out waiting for continue dialogue. Falling back to default repair method.");
+            Rs2Magic.repairPouchesWithLunar();
+            return !Rs2Inventory.hasDegradedPouch();
+        }
+
+        // 3. Press Space key, and wait for the text 'Can you repair my pouches?'
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+        if (!sleepUntil(() -> Rs2Dialogue.hasDialogueOption("Can you repair my pouches?"), 5000)) {
+            Microbot.log("Timed out waiting for dialogue option 'Can you repair my pouches?'.");
+            return false;
+        }
+
+        // 4. Press 1, and wait for chat box 'Click here to continue'
+        Rs2Keyboard.keyPress('1');
+        if (!sleepUntil(Rs2Dialogue::hasContinue, 5000)) {
+            Microbot.log("Timed out waiting for final continue dialogue.");
+            return false;
+        }
+
+        // 5. Done (Pouch should already be repaired without further confirmation)
+        // Dismiss the final continue dialogue and switch back to inventory
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+        sleep(500, 800);
+        Rs2Tab.switchToInventoryTab();
+
+        return !Rs2Inventory.hasDegradedPouch() && !Rs2Inventory.hasItem(ItemID.RCU_POUCH_COLOSSAL_DEGRADE);
+    }
+
     private boolean prepareBankingUiAndPouches() {
 		if (plugin.isBreakHandlerEnabled()) {
 			BreakHandlerScript.setLockState(true);
@@ -582,7 +658,7 @@ public class NetoRCScript extends Script {
         Rs2Tab.switchTo(InterfaceTab.INVENTORY);
 
 		if (Rs2Inventory.hasDegradedPouch()) {
-			Rs2Magic.repairPouchesWithLunar();
+			repairPouchesQuick();
 			return false;
 		}
 
