@@ -97,7 +97,7 @@ public class NetoSalvagingScript extends Script {
             sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
             sleepGaussian(600, 100);
             Rs2Player.logout();
-            shutdown();
+            Microbot.stopPlugin(NetoSalvagingPlugin.class);
             return;
         }
 
