@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.Notifier;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
@@ -12,9 +13,12 @@ import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 
 import javax.inject.Inject;
+import java.awt.Rectangle;
+import net.runelite.api.Point;
 import java.util.concurrent.TimeUnit;
 
 import static net.runelite.client.plugins.microbot.netosuperglassmake.NetoSuperglassMakeInfo.states.*;
@@ -72,7 +76,7 @@ public class NetoSuperglassMakeScript extends Script {
             } catch (Exception ex) {
                 Microbot.logStackTrace(this.getClass().getSimpleName(), ex);
             }
-        }, 0, 600, TimeUnit.MILLISECONDS);
+        }, 0, 30, TimeUnit.MILLISECONDS);
         return true;
     }
 
@@ -95,23 +99,24 @@ public class NetoSuperglassMakeScript extends Script {
             Rs2Bank.openBank();
             sleep(100, 200);
         }
+
         Rs2Bank.depositAll("Molten Glass");
-        sleepUntil(() -> !Rs2Inventory.contains("Molten Glass"), 100);
+
+        sleepUntil(() -> !Rs2Inventory.contains("Molten Glass"), 3000); // Wait for inventory to empty
+
         if (currentItem == NetoSuperglassMakeInfo.items.GiantSeaweed) {
-            if (Rs2Bank.count("Giant seaweed") < 3 || Rs2Bank.count("Bucket of sand") < 3) {
+            if (Rs2Bank.count("Giant seaweed") < 3 || Rs2Bank.count("Bucket of sand") < 18) {
                 notifier.notify("Out of materials");
                 while (super.isRunning()) {
                     sleep(1000);
                 }
             }
 
-            for (int i = 0; i < 3; i++) {
-                Rs2Bank.withdrawOne("Giant seaweed");
-            }
-
+            withdrawSeaweed("Giant seaweed", 3);
             Rs2Bank.withdrawX("Bucket of sand", 18);
+//            sleepUntil(() -> Rs2Inventory.count("Giant seaweed") >= 3 && Rs2Inventory.count("Bucket of sand") >= 18, 3000);
         } else {
-            if (Rs2Bank.count("Seaweed") < 3 || Rs2Bank.count("Bucket of sand") < 3) {
+            if (Rs2Bank.count("Seaweed") < 13 || Rs2Bank.count("Bucket of sand") < 13) {
                 notifier.notify("Out of materials");
                 while (super.isRunning()) {
                     sleep(1000);
@@ -120,37 +125,20 @@ public class NetoSuperglassMakeScript extends Script {
 
             Rs2Bank.withdrawX("Bucket of sand", 13);
             Rs2Bank.withdrawX(401, 13);
-
-
+//            sleepUntil(() -> Rs2Inventory.count("Seaweed") >= 13 && Rs2Inventory.count("Bucket of sand") >= 13, 3000);
         }
 
-        sleep(60, 100);
+        sleepGaussian(105, 22);
         Rs2Bank.closeBank();
-        while (Rs2Bank.isOpen()) {
-            sleep(40, 100);
-        }
-
-
+        sleepUntil(() -> !Rs2Bank.isOpen(), 1200);
     }
 
     private void glassblowing() {
-        superglassmake();
-        sleep(60, 100);
-        sleepUntil(() -> Rs2Inventory.contains("Molten Glass"), 100);
+        Rs2Tab.switchToMagicTab();
+        Rs2Magic.cast(MagicAction.SUPERGLASS_MAKE);
+        Rs2Bank.preHover();
+        sleep(600 * 2, 600 * 4);
     }
-
-    private void superglassmake() {
-        if (!oneTimeSpellBookCheck) {
-            Rs2Magic.oneTimeSpellBookCheck();
-            oneTimeSpellBookCheck = true;
-        }
-        if (Rs2Magic.quickCast(MagicAction.SUPERGLASS_MAKE)) {
-            Rs2Bank.preHover();
-            sleep(600 * 2, 600 * 4);
-        }
-
-    }
-
 
     private void picking() {
         if (!config.pickUpGlass()) {
@@ -161,7 +149,7 @@ public class NetoSuperglassMakeScript extends Script {
             sleep(60, 200);
         }
         Rs2Bank.depositAll("Molten Glass");
-        sleepUntil(() -> !Rs2Inventory.contains("Molten Glass"), 100);
+        sleepUntil(() -> !Rs2Inventory.contains("Molten Glass"), 3000);
         if (Rs2GroundItem.exists("Molten Glass", 1)) {
             sleep(60, 100);
             Rs2Bank.closeBank();
@@ -207,6 +195,24 @@ public class NetoSuperglassMakeScript extends Script {
             } else {
                 Microbot.log("No Smoke staff found in bank!");
             }
+        }
+    }
+
+    private void withdrawSeaweed(String name, int amount) {
+        for (int i = 0; i < amount; i++) {
+            Rs2ItemModel seaweed = Rs2Bank.findBankItem(name);
+            if (seaweed == null) break;
+
+            Rectangle bounds = Rs2Bank.itemBounds(seaweed);
+            if (bounds == null) break;
+
+            Point mousePos = Microbot.getClient().getMouseCanvasPosition();
+            if (bounds.contains(mousePos.getX(), mousePos.getY())) {
+                Microbot.getMouse().click(mousePos);
+            } else {
+                Rs2Bank.withdrawOne(seaweed.getId());
+            }
+            sleepGaussian(105, 22);
         }
     }
 }
