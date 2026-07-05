@@ -9,22 +9,34 @@ import net.runelite.client.config.*;
 public interface NetoSuperglassMakeConfig extends Config {
 
     @ConfigSection(
-            name = "General",
-            description = "General",
+            name = "Settings",
+            description = "Settings",
             position = 0,
             closedByDefault = false
     )
-    String generalSection = "general";
+    String settingsSection = "settings";
 
     @ConfigItem(
             keyName = "Seaweed type",
             name = "seaweed type",
             description = "Choose the type of seaweed",
             position = 0,
-            section = generalSection
+            section = settingsSection
     )
     default NetoSuperglassMakeInfo.items ITEM()
     {
         return NetoSuperglassMakeInfo.items.GiantSeaweed;
+    }
+
+    @ConfigItem(
+            keyName = "pickUpGlass",
+            name = "Pick up glass",
+            description = "Pick up glass from the floor",
+            position = 1,
+            section = settingsSection
+    )
+    default boolean pickUpGlass()
+    {
+        return false;
     }
 }

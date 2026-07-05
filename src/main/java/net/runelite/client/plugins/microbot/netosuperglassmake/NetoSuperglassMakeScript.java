@@ -5,12 +5,13 @@ import net.runelite.client.Notifier;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
-import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 
 import javax.inject.Inject;
@@ -24,14 +25,16 @@ public class NetoSuperglassMakeScript extends Script {
     @Inject
     private Notifier notifier;
 
+    private NetoSuperglassMakeConfig config;
+
     private NetoSuperglassMakeInfo.items currentItem;
 
     private boolean oneTimeSpellBookCheck = false;
 
     public boolean run(NetoSuperglassMakeConfig config) {
+        this.config = config;
         oneTimeSpellBookCheck = false;
         Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
-        Rs2AntibanSettings.actionCooldownChance = 0.2;
         currentItem = config.ITEM();
         Microbot.enableAutoRunOn = false;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
@@ -41,7 +44,10 @@ public class NetoSuperglassMakeScript extends Script {
 
                 switch (NetoSuperglassMakeInfo.botStatus) {
                     case Starting:
-
+                        NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Prep;
+                        break;
+                    case Prep:
+                        prep();
                         NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Banking;
                         break;
                     case Banking:
@@ -50,7 +56,11 @@ public class NetoSuperglassMakeScript extends Script {
                         break;
                     case Glassblowing:
                         glassblowing();
-                        NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Picking;
+                        if (config.pickUpGlass()) {
+                            NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Picking;
+                        } else {
+                            NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Banking;
+                        }
                         break;
                     case Picking:
                         picking();
@@ -76,13 +86,10 @@ public class NetoSuperglassMakeScript extends Script {
         if (Rs2Random.nextInt(0, 20, 1, true) == 30) {
             sleep(1000, 20000);
         }
-
-
     }
 
     private void banking() {
         takeBreak();
-
 
         while (!Rs2Bank.isOpen()) {
             Rs2Bank.openBank();
@@ -117,7 +124,6 @@ public class NetoSuperglassMakeScript extends Script {
 
         }
 
-
         sleep(60, 100);
         Rs2Bank.closeBank();
         while (Rs2Bank.isOpen()) {
@@ -147,6 +153,9 @@ public class NetoSuperglassMakeScript extends Script {
 
 
     private void picking() {
+        if (!config.pickUpGlass()) {
+            return;
+        }
         while (!Rs2Bank.isOpen()) {
             Rs2Bank.openBank();
             sleep(60, 200);
@@ -162,5 +171,42 @@ public class NetoSuperglassMakeScript extends Script {
             }
         }
 
+    }
+
+    private void prep() {
+        while (!Rs2Bank.isOpen()) {
+            Rs2Bank.openBank();
+            sleep(100, 300);
+        }
+
+        Rs2Bank.depositAll();
+        sleepUntil(() -> Rs2Inventory.isEmpty(), 2000);
+
+        if (Rs2Bank.hasItem("Astral rune")) {
+            Rs2Bank.withdrawAll("Astral rune");
+            sleepUntil(() -> Rs2Inventory.contains("Astral rune"), 2000);
+        }
+
+        boolean isWearingSmokeStaff = Rs2Equipment.isWearing(item -> {
+            String name = item.getName().toLowerCase();
+            return name.contains("smoke") && (name.contains("staff") || name.contains("battlestaff"));
+        });
+
+        if (!isWearingSmokeStaff) {
+            Rs2ItemModel smokeStaff = Rs2Bank.bankItems().stream()
+                    .filter(item -> {
+                        String name = item.getName().toLowerCase();
+                        return name.contains("smoke") && (name.contains("staff") || name.contains("battlestaff"));
+                    })
+                    .findFirst()
+                    .orElse(null);
+
+            if (smokeStaff != null) {
+                Rs2Bank.withdrawAndEquip(smokeStaff.getId());
+                sleepUntil(() -> Rs2Equipment.isWearing(smokeStaff.getId()), 2000);
+            } else {
+                Microbot.log("No Smoke staff found in bank!");
+            }
+        }
     }
 }

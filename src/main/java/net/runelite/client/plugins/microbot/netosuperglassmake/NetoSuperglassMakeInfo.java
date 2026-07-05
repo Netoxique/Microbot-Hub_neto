@@ -6,6 +6,7 @@ public class NetoSuperglassMakeInfo {
 
     public enum states {
         Starting,
+        Prep,
         Banking,
         Glassblowing,
         Picking,
