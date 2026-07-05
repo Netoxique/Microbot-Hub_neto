@@ -13,6 +13,8 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.api.GameObject;
 import net.runelite.api.WallObject;
+import net.runelite.api.TileObject;
+import net.runelite.api.ObjectComposition;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
@@ -24,6 +26,7 @@ import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.api.MenuAction;
+import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 
 import javax.inject.Inject;
 import java.awt.Rectangle;
@@ -57,6 +60,9 @@ public class NetoSuperglassMakeScript extends Script {
 
                 switch (NetoSuperglassMakeInfo.botStatus) {
                     case Starting:
+                        Rs2Camera.setPitch(1960 / 8);
+                        Rs2Camera.setYaw(1295 / 8);
+                        Rs2Camera.setZoom(2627);
                         NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Prep;
                         break;
                     case Prep:
@@ -265,8 +271,128 @@ public class NetoSuperglassMakeScript extends Script {
         return rect.width >= Microbot.getClient().getCanvasWidth() && rect.height >= Microbot.getClient().getCanvasHeight();
     }
 
+    private NewMenuEntry getObjectMenuEntry(TileObject object, String action) {
+        if (object == null) return null;
+        try {
+            ObjectComposition objComp = Rs2GameObject.convertToObjectComposition(object);
+            if (objComp == null) return null;
+
+            int param0;
+            int param1;
+            if (object instanceof GameObject) {
+                GameObject obj = (GameObject) object;
+                if (obj.sizeX() > 1) {
+                    param0 = obj.getLocalLocation().getSceneX() - obj.sizeX() / 2;
+                } else {
+                    param0 = obj.getLocalLocation().getSceneX();
+                }
+                if (obj.sizeY() > 1) {
+                    param1 = obj.getLocalLocation().getSceneY() - obj.sizeY() / 2;
+                } else {
+                    param1 = obj.getLocalLocation().getSceneY();
+                }
+            } else {
+                param0 = object.getLocalLocation().getSceneX();
+                param1 = object.getLocalLocation().getSceneY();
+            }
+
+            int index = 0;
+            String[] actions;
+            if (objComp.getImpostorIds() != null && objComp.getImpostor() != null) {
+                actions = objComp.getImpostor().getActions();
+            } else {
+                actions = objComp.getActions();
+            }
+
+            if (actions != null) {
+                for (int i = 0; i < actions.length; i++) {
+                    if (actions[i] == null) continue;
+                    if (action.equalsIgnoreCase(Rs2UiHelper.stripColTags(actions[i]))) {
+                        index = i;
+                        break;
+                    }
+                }
+            }
+
+            MenuAction menuAction = MenuAction.GAME_OBJECT_FIRST_OPTION;
+            if (index == 1) {
+                menuAction = MenuAction.GAME_OBJECT_SECOND_OPTION;
+            } else if (index == 2) {
+                menuAction = MenuAction.GAME_OBJECT_THIRD_OPTION;
+            } else if (index == 3) {
+                menuAction = MenuAction.GAME_OBJECT_FOURTH_OPTION;
+            } else if (index == 4) {
+                menuAction = MenuAction.GAME_OBJECT_FIFTH_OPTION;
+            }
+
+            int worldViewId = net.runelite.api.WorldView.TOPLEVEL;
+            try {
+                if (object.getWorldView() != null && !object.getWorldView().isTopLevel()) {
+                    net.runelite.api.WorldView worldView = Microbot.getClientThread().invoke(() -> Microbot.getClient().getLocalPlayer().getWorldView());
+                    if (worldView == null) {
+                        worldViewId = Microbot.getClient().getTopLevelWorldView().getId();
+                    } else {
+                        worldViewId = worldView.getId();
+                    }
+                }
+            } catch (Exception e) {
+                // Ignore and use TOPLEVEL
+            }
+
+            return new NewMenuEntry()
+                    .param0(param0)
+                    .param1(param1)
+                    .opcode(menuAction.getId())
+                    .identifier(object.getId())
+                    .itemId(-1)
+                    .option(action)
+                    .target(objComp.getName())
+                    .gameObject(object)
+                    .worldViewId(worldViewId);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private NewMenuEntry getHoveredBankEntry() {
+        GameObject bank = Rs2GameObject.findBank();
+        if (bank != null) {
+            Rectangle bounds = Rs2UiHelper.getObjectClickbox(bank);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return getObjectMenuEntry(bank, "Bank");
+            }
+        }
+
+        GameObject bankChest = Rs2GameObject.getGameObject("bank chest");
+        if (bankChest != null) {
+            Rectangle bounds = Rs2UiHelper.getObjectClickbox(bankChest);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return getObjectMenuEntry(bankChest, "Bank");
+            }
+        }
+
+        WallObject grandExchangeBooth = Rs2GameObject.findGrandExchangeBooth();
+        if (grandExchangeBooth != null) {
+            Rectangle bounds = Rs2UiHelper.getObjectClickbox(grandExchangeBooth);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return getObjectMenuEntry(grandExchangeBooth, "Bank");
+            }
+        }
+
+        return null;
+    }
+
     private boolean openBank() {
         if (Rs2Bank.isOpen()) return true;
+        NewMenuEntry entry = getHoveredBankEntry();
+        if (entry != null) {
+            java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
+            while (!Rs2Bank.isOpen()) {
+                Microbot.getMouse().click(new Point(currentPos.x, currentPos.y), entry);
+                sleepGaussian(105, 22);
+            }
+            return Rs2Bank.isOpen();
+        }
         if (isHoveringBank()) {
             java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
             while (!Rs2Bank.isOpen()) {
