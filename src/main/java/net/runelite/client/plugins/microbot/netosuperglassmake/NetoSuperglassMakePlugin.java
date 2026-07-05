@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.netosuperglassmake;
 
 import com.google.inject.Provides;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
@@ -11,6 +12,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.time.Instant;
 
 @PluginDescriptor(
         name = "Neto Superglass Make",
@@ -26,7 +28,10 @@ import java.awt.*;
 )
 @Slf4j
 public class NetoSuperglassMakePlugin extends Plugin {
-    public static final String version = "1.0.2";
+    public static final String version = "1.0.3";
+    @Getter
+    private Instant startTime;
+
     @Inject
     private NetoSuperglassMakeConfig config;
 
@@ -48,6 +53,7 @@ public class NetoSuperglassMakePlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
+        startTime = Instant.now();
         if (overlayManager != null) {
             overlayManager.add(netoSuperglassMakeOverlay);
         }
@@ -58,5 +64,9 @@ public class NetoSuperglassMakePlugin extends Plugin {
     protected void shutDown() {
         netoSuperglassMakeScript.shutdown();
         overlayManager.remove(netoSuperglassMakeOverlay);
+    }
+
+    public boolean isBreakHandlerEnabled() {
+        return net.runelite.client.plugins.microbot.Microbot.isPluginEnabled(net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin.class);
     }
 }

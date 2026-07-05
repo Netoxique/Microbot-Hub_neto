@@ -27,6 +27,10 @@ import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.api.MenuAction;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
+import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 
 import javax.inject.Inject;
 import java.awt.Rectangle;
@@ -40,6 +44,14 @@ import static net.runelite.client.plugins.microbot.netosuperglassmake.NetoSuperg
 public class NetoSuperglassMakeScript extends Script {
     @Inject
     private Notifier notifier;
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
+    @Inject
+    private NetoSuperglassMakePlugin plugin;
 
     private NetoSuperglassMakeConfig config;
 
@@ -53,8 +65,27 @@ public class NetoSuperglassMakeScript extends Script {
         Rs2Antiban.antibanSetupTemplates.applyUniversalAntibanSetup();
         currentItem = config.ITEM();
         Microbot.enableAutoRunOn = false;
+
+        breakManager.configure(config, "Neto Superglass Make");
+        worldHopManager.configure(config, "Neto Superglass Make");
+        runtimeDisable.configure(config, "Neto Superglass Make");
+
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
+
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(true);
+        }
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
+                // Check runtime limits
+                if (runtimeDisable.updateRuntime(NetoSuperglassMakePlugin.class)) return;
+
+                // Check if break is currently active
+                if (breakManager.updateBreakState()) return;
+
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
 
@@ -75,6 +106,14 @@ public class NetoSuperglassMakeScript extends Script {
                         break;
                     case Glassblowing:
                         glassblowing();
+                        if (pauseForBreakAfterGlassmaking()) {
+                            NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Banking;
+                            return;
+                        }
+                        if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+                            NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Banking;
+                            return;
+                        }
                         if (config.pickUpGlass()) {
                             NetoSuperglassMakeInfo.botStatus = NetoSuperglassMakeInfo.states.Picking;
                         } else {
@@ -97,6 +136,12 @@ public class NetoSuperglassMakeScript extends Script {
 
     @Override
     public void shutdown() {
+        if (plugin.isBreakHandlerEnabled()) {
+            BreakHandlerScript.setLockState(false);
+        }
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
         Rs2Antiban.resetAntibanSettings();
         super.shutdown();
     }
@@ -179,6 +224,13 @@ public class NetoSuperglassMakeScript extends Script {
         while (!Rs2Bank.isOpen()) {
             openBank();
             sleep(100, 300);
+        }
+
+        if (Microbot.getVarbitValue(net.runelite.api.Varbits.BANK_TAB_ONE_COUNT) > 0) {
+            if (Rs2Bank.getCurrentTab() != 1) {
+                Rs2Bank.openTab(1);
+                sleep(100, 300);
+            }
         }
 
         Rs2Bank.depositAll();
@@ -419,5 +471,23 @@ public class NetoSuperglassMakeScript extends Script {
                 .target(spell.getName()),
                 widget.getBounds()
         );
+    }
+
+    private boolean pauseForBreakAfterGlassmaking() {
+        if (breakManager.tryStartBreakAtSafePoint()) {
+            return true;
+        }
+
+        if (!plugin.isBreakHandlerEnabled()) {
+            return false;
+        }
+
+        BreakHandlerScript.setLockState(false);
+        if (BreakHandlerScript.isBreakActive() || BreakHandlerScript.breakIn <= 0) {
+            return true;
+        }
+
+        BreakHandlerScript.setLockState(true);
+        return false;
     }
 }
