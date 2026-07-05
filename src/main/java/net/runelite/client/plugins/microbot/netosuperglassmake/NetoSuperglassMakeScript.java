@@ -267,10 +267,12 @@ public class NetoSuperglassMakeScript extends Script {
 
     private boolean openBank() {
         if (Rs2Bank.isOpen()) return true;
-        if (isHoveringBank() && !Rs2Bank.isOpen()) {
+        if (isHoveringBank()) {
             java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
-            Microbot.getMouse().click(new Point(currentPos.x, currentPos.y));
-            sleepUntil(Rs2Bank::isOpen, 5000);
+            while (!Rs2Bank.isOpen()) {
+                Microbot.getMouse().click(new Point(currentPos.x, currentPos.y));
+                sleepGaussian(105, 22);
+            }
             return Rs2Bank.isOpen();
         }
         return Rs2Bank.openBank();
