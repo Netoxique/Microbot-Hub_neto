@@ -7,6 +7,12 @@ import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
+import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
+import net.runelite.client.plugins.microbot.util.npc.Rs2NpcModel;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
+import net.runelite.api.GameObject;
+import net.runelite.api.WallObject;
 import net.runelite.client.plugins.microbot.util.grounditem.Rs2GroundItem;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
@@ -96,8 +102,7 @@ public class NetoSuperglassMakeScript extends Script {
         takeBreak();
 
         while (!Rs2Bank.isOpen()) {
-            Rs2Bank.openBank();
-            sleep(100, 200);
+            openBank();
         }
 
         Rs2Bank.depositAll("Molten Glass");
@@ -145,7 +150,7 @@ public class NetoSuperglassMakeScript extends Script {
             return;
         }
         while (!Rs2Bank.isOpen()) {
-            Rs2Bank.openBank();
+            openBank();
             sleep(60, 200);
         }
         Rs2Bank.depositAll("Molten Glass");
@@ -163,7 +168,7 @@ public class NetoSuperglassMakeScript extends Script {
 
     private void prep() {
         while (!Rs2Bank.isOpen()) {
-            Rs2Bank.openBank();
+            openBank();
             sleep(100, 300);
         }
 
@@ -208,11 +213,63 @@ public class NetoSuperglassMakeScript extends Script {
 
             Point mousePos = Microbot.getClient().getMouseCanvasPosition();
             if (bounds.contains(mousePos.getX(), mousePos.getY())) {
-                Microbot.getMouse().click(mousePos);
+                java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
+                Microbot.getMouse().click(new Point(currentPos.x, currentPos.y));
             } else {
                 Rs2Bank.withdrawOne(seaweed.getId());
             }
             sleepGaussian(105, 22);
         }
+    }
+
+    private boolean isHoveringBank() {
+        GameObject bank = Rs2GameObject.findBank();
+        if (bank != null) {
+            Rectangle bounds = Rs2UiHelper.getObjectClickbox(bank);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return true;
+            }
+        }
+
+        GameObject bankChest = Rs2GameObject.getGameObject("bank chest");
+        if (bankChest != null) {
+            Rectangle bounds = Rs2UiHelper.getObjectClickbox(bankChest);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return true;
+            }
+        }
+
+        WallObject grandExchangeBooth = Rs2GameObject.findGrandExchangeBooth();
+        if (grandExchangeBooth != null) {
+            Rectangle bounds = Rs2UiHelper.getObjectClickbox(grandExchangeBooth);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return true;
+            }
+        }
+
+        Rs2NpcModel banker = Rs2Npc.getBankerNPC();
+        if (banker != null) {
+            Rectangle bounds = Rs2UiHelper.getActorClickbox(banker);
+            if (bounds != null && !isDefaultRectangle(bounds) && Rs2UiHelper.isMouseWithinRectangle(bounds)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private boolean isDefaultRectangle(Rectangle rect) {
+        return rect.width >= Microbot.getClient().getCanvasWidth() && rect.height >= Microbot.getClient().getCanvasHeight();
+    }
+
+    private boolean openBank() {
+        if (Rs2Bank.isOpen()) return true;
+        if (isHoveringBank() && !Rs2Bank.isOpen()) {
+            java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
+            Microbot.getMouse().click(new Point(currentPos.x, currentPos.y));
+            sleepUntil(Rs2Bank::isOpen, 5000);
+            return Rs2Bank.isOpen();
+        }
+        return Rs2Bank.openBank();
     }
 }
