@@ -144,7 +144,8 @@ public class NetoSuperglassMakeScript extends Script {
         Rs2Tab.switchToMagicTab();
         castSuperglassMake();
         Rs2Bank.preHover();
-        sleep(600 * 2, 600 * 4);
+//        sleep(600 * 2, 600 * 4);
+        sleepGaussian(1500, 150);
     }
 
     private void picking() {
