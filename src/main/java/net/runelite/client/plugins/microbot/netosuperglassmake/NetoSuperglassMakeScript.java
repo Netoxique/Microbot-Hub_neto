@@ -135,7 +135,6 @@ public class NetoSuperglassMakeScript extends Script {
 
         sleepGaussian(105, 22);
         Rs2Bank.closeBank();
-        sleepUntil(() -> !Rs2Bank.isOpen(), 1200);
     }
 
     private void glassblowing() {
