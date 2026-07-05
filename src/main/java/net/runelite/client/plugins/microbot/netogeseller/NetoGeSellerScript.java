@@ -10,11 +10,19 @@ import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
+import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.api.ItemID;
+import net.runelite.api.coords.WorldPoint;
 import java.awt.event.KeyEvent;
 import net.runelite.client.eventbus.Subscribe;
 import net.runelite.api.events.GrandExchangeOfferChanged;
@@ -32,6 +40,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 public class NetoGeSellerScript extends Script {
 
     private enum State {
+        TELEPORTING,
         BANKING,
         SELLING,
         WAITING_FOR_SELL
@@ -100,7 +109,7 @@ public class NetoGeSellerScript extends Script {
     }
 
     public boolean run() {
-        this.currentState = State.BANKING;
+        this.currentState = State.TELEPORTING;
         this.firstTimeOpeningBank = true;
         this.itemsToSellMap = parseItemsToSell(config.itemsToSell());
         this.hasUnsoldBankItems = true;
@@ -115,6 +124,9 @@ public class NetoGeSellerScript extends Script {
                 if (!super.run()) return;
 
                 switch (currentState) {
+                    case TELEPORTING:
+                        handleTeleporting();
+                        break;
                     case BANKING:
                         handleBanking();
                         break;
@@ -690,6 +702,159 @@ public class NetoGeSellerScript extends Script {
             prev.quantitySold = newQuantitySold;
             prev.spent = newSpent;
         }
+    }
+
+    private static final int[] RING_OF_WEALTH_IDS = {
+        ItemID.RING_OF_WEALTH_1,
+        ItemID.RING_OF_WEALTH_2,
+        ItemID.RING_OF_WEALTH_3,
+        ItemID.RING_OF_WEALTH_4,
+        ItemID.RING_OF_WEALTH_5
+    };
+
+    private static final java.util.List<String> FIRE_STAVES = java.util.List.of(
+            "Twinflame staff",
+            "Fire battlestaff",
+            "Mystic fire staff",
+            "Lava battlestaff",
+            "Mystic lava staff",
+            "Smoke battlestaff",
+            "Mystic smoke staff",
+            "Steam battlestaff",
+            "Mystic steam staff",
+            "Staff of fire"
+    );
+
+    private boolean isAtGrandExchange() {
+        WorldPoint gePoint = BankLocation.GRAND_EXCHANGE.getWorldPoint();
+        WorldPoint playerPoint = Rs2Player.getWorldLocation();
+        if (playerPoint == null) return false;
+        return playerPoint.distanceTo(gePoint) <= 15;
+    }
+
+    private boolean isWearingFireStaff() {
+        for (String staff : FIRE_STAVES) {
+            if (Rs2Equipment.isWearing(staff)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void handleTeleporting() {
+        if (isAtGrandExchange()) {
+            log.info("Already at Grand Exchange. Proceeding to banking.");
+            currentState = State.BANKING;
+            return;
+        }
+
+        if (!Rs2Bank.isOpen()) {
+            Microbot.status = "Opening Bank for Teleport Prep";
+            if (Rs2Bank.openBank()) {
+                sleepUntil(Rs2Bank::isOpen, 5000);
+            }
+            return;
+        }
+
+        // 1. Standard Spellbook Teleport
+        if (Rs2Magic.isSpellbook(Rs2Spellbook.MODERN)) {
+            boolean hasLaw = Rs2Inventory.hasItem(ItemID.LAW_RUNE) || Rs2Bank.hasItem(ItemID.LAW_RUNE);
+            boolean hasAir = Rs2Inventory.itemQuantity(ItemID.AIR_RUNE) >= 3 || Rs2Bank.hasItem(ItemID.AIR_RUNE);
+            boolean isFireStaffEquipped = isWearingFireStaff();
+            boolean hasFire = isFireStaffEquipped || Rs2Inventory.hasItem(ItemID.FIRE_RUNE) || Rs2Bank.hasItem(ItemID.FIRE_RUNE);
+
+            if (hasLaw && hasAir && hasFire) {
+                Microbot.status = "Withdrawing runes for Varrock Teleport";
+                if (!Rs2Inventory.hasItem(ItemID.LAW_RUNE)) {
+                    Rs2Bank.withdrawOne(ItemID.LAW_RUNE);
+                    sleep(600, 1000);
+                }
+                int airInInv = Rs2Inventory.itemQuantity(ItemID.AIR_RUNE);
+                if (airInInv < 3) {
+                    Rs2Bank.withdrawX(ItemID.AIR_RUNE, 3 - airInInv);
+                    sleep(600, 1000);
+                }
+                if (!isFireStaffEquipped && !Rs2Inventory.hasItem(ItemID.FIRE_RUNE)) {
+                    Rs2Bank.withdrawOne(ItemID.FIRE_RUNE);
+                    sleep(600, 1000);
+                }
+
+                if (Rs2Inventory.hasItem(ItemID.LAW_RUNE) && Rs2Inventory.itemQuantity(ItemID.AIR_RUNE) >= 3 && (isFireStaffEquipped || Rs2Inventory.hasItem(ItemID.FIRE_RUNE))) {
+                    Rs2Bank.closeBank();
+                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+                    Microbot.status = "Casting Varrock Teleport to G.E";
+                    boolean castSuccess = Rs2Magic.cast(MagicAction.VARROCK_TELEPORT, "Grand Exchange", 2);
+                    if (castSuccess) {
+                        sleepUntil(this::isAtGrandExchange, 6000);
+                        if (isAtGrandExchange()) {
+                            currentState = State.BANKING;
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+
+        // 2. Varrock Teleport Tablet
+        if (Rs2Inventory.hasItem(ItemID.VARROCK_TELEPORT) || Rs2Bank.hasItem(ItemID.VARROCK_TELEPORT)) {
+            Microbot.status = "Using Varrock Teleport Tablet";
+            if (!Rs2Inventory.hasItem(ItemID.VARROCK_TELEPORT)) {
+                Rs2Bank.withdrawOne(ItemID.VARROCK_TELEPORT);
+                sleep(600, 1000);
+            }
+            if (Rs2Inventory.hasItem(ItemID.VARROCK_TELEPORT)) {
+                Rs2Bank.closeBank();
+                sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+                boolean used = Rs2Inventory.interact(ItemID.VARROCK_TELEPORT, "Break");
+                if (used) {
+                    sleepUntil(this::isAtGrandExchange, 6000);
+                    if (isAtGrandExchange()) {
+                        currentState = State.BANKING;
+                        return;
+                    }
+                }
+            }
+        }
+
+        // 3. Ring of Wealth Teleport (1-5 charges, least charges first)
+        int targetRingId = -1;
+        for (int id : RING_OF_WEALTH_IDS) {
+            if (Rs2Inventory.hasItem(id)) {
+                targetRingId = id;
+                break;
+            }
+        }
+        if (targetRingId == -1) {
+            for (int id : RING_OF_WEALTH_IDS) {
+                if (Rs2Bank.hasItem(id)) {
+                    targetRingId = id;
+                    break;
+                }
+            }
+        }
+
+        if (targetRingId != -1) {
+            Microbot.status = "Using Ring of Wealth Teleport";
+            if (!Rs2Inventory.hasItem(targetRingId)) {
+                Rs2Bank.withdrawOne(targetRingId);
+                sleep(600, 1000);
+            }
+            if (Rs2Inventory.hasItem(targetRingId)) {
+                Rs2Bank.closeBank();
+                sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+                boolean used = Rs2Inventory.interact(targetRingId, "Grand Exchange");
+                if (used) {
+                    sleepUntil(this::isAtGrandExchange, 6000);
+                    if (isAtGrandExchange()) {
+                        currentState = State.BANKING;
+                        return;
+                    }
+                }
+            }
+        }
+
+        log.warn("All G.E teleport options unavailable. Falling back to default banking.");
+        currentState = State.BANKING;
     }
 
     @Override
