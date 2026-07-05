@@ -21,6 +21,9 @@ import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.api.MenuAction;
 
 import javax.inject.Inject;
 import java.awt.Rectangle;
@@ -139,7 +142,7 @@ public class NetoSuperglassMakeScript extends Script {
 
     private void glassblowing() {
         Rs2Tab.switchToMagicTab();
-        Rs2Magic.cast(MagicAction.SUPERGLASS_MAKE);
+        castSuperglassMake();
         Rs2Bank.preHover();
         sleep(600 * 2, 600 * 4);
     }
@@ -270,5 +273,22 @@ public class NetoSuperglassMakeScript extends Script {
             return Rs2Bank.isOpen();
         }
         return Rs2Bank.openBank();
+    }
+
+    private void castSuperglassMake() {
+        MagicAction spell = MagicAction.SUPERGLASS_MAKE;
+        net.runelite.api.widgets.Widget widget = Rs2Widget.getWidget(spell.getWidgetId());
+        if (widget == null) return;
+
+        Microbot.doInvoke(new NewMenuEntry()
+                .option("Cast")
+                .param0(-1)
+                .param1(spell.getWidgetId())
+                .opcode(MenuAction.CC_OP.getId())
+                .identifier(1)
+                .itemId(-1)
+                .target(spell.getName()),
+                widget.getBounds()
+        );
     }
 }
