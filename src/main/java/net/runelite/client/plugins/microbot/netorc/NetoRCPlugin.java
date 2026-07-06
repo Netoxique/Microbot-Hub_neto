@@ -125,14 +125,6 @@ public class NetoRCPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
-        if (Microbot.isLoggedIn()) {
-            if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR) && !hasRunecraftCape()) {
-                Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
-                Microbot.stopPlugin(this);
-                return;
-            }
-        }
-
         startTime = Instant.now();
         if (overlayManager != null) {
             overlayManager.add(netoRCOverlay);
@@ -157,7 +149,7 @@ public class NetoRCPlugin extends Plugin {
         return Microbot.isPluginEnabled(BreakHandlerPlugin.class);
     }
 
-    private boolean hasRunecraftCape() {
+    public boolean hasRunecraftCape() {
         return Rs2Equipment.isWearing(ItemID.SKILLCAPE_RUNECRAFTING, ItemID.SKILLCAPE_RUNECRAFTING_TRIMMED)
                 || Rs2Inventory.hasItem(ItemID.SKILLCAPE_RUNECRAFTING, ItemID.SKILLCAPE_RUNECRAFTING_TRIMMED);
     }

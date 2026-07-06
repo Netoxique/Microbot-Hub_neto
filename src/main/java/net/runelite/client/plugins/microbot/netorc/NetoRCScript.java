@@ -29,6 +29,7 @@ import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -46,6 +47,8 @@ import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
+import net.runelite.client.plugins.microbot.util.magic.Runes;
 
 import javax.inject.Inject;
 import java.awt.event.KeyEvent;
@@ -57,6 +60,7 @@ public class NetoRCScript extends Script {
     public static State state = State.BANKING;
 
     private int lumbyElite = -1;
+    private boolean isPrepped = false;
 
 	private volatile boolean forceDrinkAtFerox = false;
     private volatile boolean forceBankOnStart = true;
@@ -380,6 +384,211 @@ public class NetoRCScript extends Script {
         return !config.usePoh() && (forceDrinkAtFerox || needsRestore());
     }
 
+    private boolean hasRaimentsOfTheEyeEquipped() {
+        return Rs2Equipment.isWearing("Hat of the eye", false)
+                && Rs2Equipment.isWearing("Robe top of the eye", false)
+                && Rs2Equipment.isWearing("Robe bottoms of the eye", false)
+                && Rs2Equipment.isWearing("Boots of the eye", false);
+    }
+
+    private void handlePrep() {
+        if (!Rs2Bank.isOpen()) {
+            Rs2Bank.walkToBankAndUseBank();
+            sleepUntil(Rs2Bank::isOpen, 5000);
+            return;
+        }
+
+        Microbot.log("Starting preparation state...");
+
+        // 1. Deposit all inventory items
+        Rs2Bank.depositAll();
+        sleepGaussian(600, 200);
+
+        // 2. Check if the player has the "Raiments of the Eye" equipped.
+        // If not, deposit all worn items and sleep 1200 ms.
+        if (!hasRaimentsOfTheEyeEquipped()) {
+            Rs2Bank.depositEquipment();
+            sleep(1200);
+
+            // 2.a (if all worn items were deposit) Withdraw and equip the Raiments of the Eye set.
+            if (!Rs2Equipment.isWearing()) {
+                Rs2Bank.withdrawAndEquip("Hat of the eye");
+                sleepGaussian(600, 200);
+                Rs2Bank.withdrawAndEquip("Robe top of the eye");
+                sleepGaussian(600, 200);
+                Rs2Bank.withdrawAndEquip("Robe bottoms of the eye");
+                sleepGaussian(600, 200);
+                Rs2Bank.withdrawAndEquip("Boots of the eye");
+                sleepGaussian(600, 200);
+            }
+        }
+
+        // 3. Withdraw and equip "Sailors' amulet" (if found in bank and not already equipped)
+        if (!Teleports.SAILORS_AMULET.isWearing() && Rs2Bank.hasItem(Teleports.SAILORS_AMULET.firstItemId())) {
+            Rs2Bank.withdrawAndEquip(Teleports.SAILORS_AMULET.firstItemId());
+            sleepGaussian(600, 200);
+        }
+
+        // 4. Withdraw and equip "Ring of Dueling" (if found in bank and not already equipped)
+        if (!Teleports.FEROX_ENCLAVE.isWearing() && Rs2Bank.hasItem(Teleports.FEROX_ENCLAVE.getItemIds())) {
+            int leastChargedId = getLeastChargedTeleportId(Teleports.FEROX_ENCLAVE);
+            Rs2Bank.withdrawAndEquip(leastChargedId);
+            sleepGaussian(600, 200);
+        }
+
+        // 5. (if the player has 99 Runecraft) Withdraw and equip the Runecraft cape.
+        int runecraftLevel = Rs2Player.getRealSkillLevel(Skill.RUNECRAFT);
+        if (runecraftLevel >= 99 && !Rs2Equipment.isWearing("Runecraft cape", false)) {
+            if (Rs2Bank.hasItem("Runecraft cape")) {
+                Rs2Bank.withdrawAndEquip("Runecraft cape");
+                sleepGaussian(600, 200);
+            }
+        }
+
+        // 5.b Withdraw "Colossal Pouch"
+        if (!Rs2Inventory.contains(colossalPouch) && !Rs2Inventory.contains(ItemID.RCU_POUCH_COLOSSAL_DEGRADE)) {
+            if (Rs2Bank.hasItem(colossalPouch)) {
+                Rs2Bank.withdrawItem(colossalPouch);
+                sleepGaussian(600, 200);
+            } else if (Rs2Bank.hasItem(ItemID.RCU_POUCH_COLOSSAL_DEGRADE)) {
+                Rs2Bank.withdrawItem(ItemID.RCU_POUCH_COLOSSAL_DEGRADE);
+                sleepGaussian(600, 200);
+            }
+        }
+
+        // Rune-specific preparation
+        if (config.runeType() == RuneType.WRATH) {
+            // 6. Withdraw and equip "Regen bracelet" (if found in bank and not already equipped)
+            if (!Rs2Equipment.isWearing("Regen bracelet", false) && Rs2Bank.hasItem("Regen bracelet")) {
+                Rs2Bank.withdrawAndEquip("Regen bracelet");
+                sleepGaussian(600, 200);
+            }
+
+            // 7. Withdraw and equip "Anti-dragon shield" (if found in bank and not already equipped)
+            if (!Rs2Equipment.isWearing("Anti-dragon shield", false) && Rs2Bank.hasItem("Anti-dragon shield")) {
+                Rs2Bank.withdrawAndEquip("Anti-dragon shield");
+                sleepGaussian(600, 200);
+            }
+
+            // 8. Withdraw "Mythical Cape" (and equip ONLY if the player does not have 99 RC)
+            if (runecraftLevel >= 99) {
+                if (!Rs2Inventory.contains(mythCape)) {
+                    if (Rs2Bank.hasItem(mythCape)) {
+                        Rs2Bank.withdrawItem(mythCape);
+                        sleepGaussian(600, 200);
+                    }
+                }
+            } else {
+                if (!Rs2Equipment.isWearing(mythCape) && !Rs2Inventory.contains(mythCape)) {
+                    if (Rs2Bank.hasItem(mythCape)) {
+                        Rs2Bank.withdrawAndEquip(mythCape);
+                        sleepGaussian(600, 200);
+                    }
+                }
+            }
+        }
+
+        if (config.runeType() == RuneType.BLOOD) {
+            // 6. Withdraw and equip a valid fairy ring staff (if found in bank and not already equipped)
+            if (lumbyElite != 1 && !Rs2Equipment.isWearing(lunarStaff) && !Rs2Equipment.isWearing(dramenStaff)) {
+                if (Rs2Bank.hasItem(lunarStaff)) {
+                    Rs2Bank.withdrawAndEquip(lunarStaff);
+                    sleepGaussian(600, 200);
+                } else if (Rs2Bank.hasItem(dramenStaff)) {
+                    Rs2Bank.withdrawAndEquip(dramenStaff);
+                    sleepGaussian(600, 200);
+                }
+            }
+
+            // 7. (if the player does NOT have 99 Runecraft) Withdraw and equip the "Graceful Cape" / "Ardougne cloak" depending on settings
+            if (runecraftLevel < 99) {
+                if (config.usePoh()) {
+                    if (!Rs2Equipment.isWearing("Graceful cape", false) && Rs2Bank.hasItem("Graceful cape")) {
+                        Rs2Bank.withdrawAndEquip("Graceful cape");
+                        sleepGaussian(600, 200);
+                    }
+                } else {
+                    if (!Rs2Equipment.isWearing("Ardougne cloak", false) && Rs2Bank.hasItem("Ardougne cloak")) {
+                        Rs2Bank.withdrawAndEquip("Ardougne cloak");
+                        sleepGaussian(600, 200);
+                    }
+                }
+            }
+
+            // 8. (if the player has enabled POH in settings) Withdraw a valid house teleport
+            if (config.usePoh()) {
+                boolean hasPohTeleport = Teleports.CONSTRUCTION_CAPE.isWearing()
+                        || Teleports.CONSTRUCTION_CAPE.isInInventory()
+                        || Teleports.HOUSE_TAB.isInInventory()
+                        || (Rs2Inventory.hasRunePouch() && runecraftLevel >= 99);
+
+                if (!hasPohTeleport) {
+                    if (Rs2Bank.hasItem(Teleports.CONSTRUCTION_CAPE.getItemIds())) {
+                        if (runecraftLevel >= 99) {
+                            Rs2Bank.withdrawItem(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                            sleepUntil(Teleports.CONSTRUCTION_CAPE::isInInventory);
+                            sleepGaussian(600, 200);
+                        } else {
+                            Rs2Bank.withdrawAndEquip(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                            sleepUntil(Teleports.CONSTRUCTION_CAPE::isWearing);
+                            sleepGaussian(600, 200);
+                        }
+                    } else if (runecraftLevel >= 99 && Rs2Bank.hasRunePouch()) {
+                        Rs2Bank.withdrawRunePouch();
+                        sleepUntil(Rs2Inventory::hasRunePouch);
+                        sleepGaussian(600, 200);
+                    } else if (Rs2Bank.hasItem(Teleports.HOUSE_TAB.getItemIds())) {
+                        Rs2Bank.withdrawAll(Teleports.HOUSE_TAB.firstItemId());
+                        sleepUntil(Teleports.HOUSE_TAB::isInInventory);
+                        sleepGaussian(600, 200);
+                    }
+                }
+            }
+        }
+
+        // Common non-POH, non-99 setup: withdraw Rune Pouch
+        if (!config.usePoh() && runecraftLevel < 99) {
+            if (!Rs2Inventory.hasRunePouch() && Rs2Bank.hasRunePouch()) {
+                Rs2Bank.withdrawRunePouch();
+                sleepGaussian(600, 200);
+            }
+        }
+
+        // Rune Pouch Configuration (Air, Astral, Cosmic)
+        if (Rs2Inventory.hasRunePouch()) {
+            Rs2RunePouch.fullUpdate();
+            Map<Runes, Integer> requiredRunes = new HashMap<>();
+
+            int airNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.AIR));
+            int astralNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.ASTRAL));
+            int cosmicNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.COSMIC));
+
+            if (airNeeded > 0 || astralNeeded > 0 || cosmicNeeded > 0) {
+                int airToLoad = Rs2RunePouch.getQuantity(Runes.AIR) + Math.min(airNeeded, Rs2Bank.count(net.runelite.api.ItemID.AIR_RUNE));
+                int astralToLoad = Rs2RunePouch.getQuantity(Runes.ASTRAL) + Math.min(astralNeeded, Rs2Bank.count(net.runelite.api.ItemID.ASTRAL_RUNE));
+                int cosmicToLoad = Rs2RunePouch.getQuantity(Runes.COSMIC) + Math.min(cosmicNeeded, Rs2Bank.count(net.runelite.api.ItemID.COSMIC_RUNE));
+
+                requiredRunes.put(Runes.AIR, airToLoad);
+                requiredRunes.put(Runes.ASTRAL, astralToLoad);
+                requiredRunes.put(Runes.COSMIC, cosmicToLoad);
+
+                if (airToLoad > 0 || astralToLoad > 0 || cosmicToLoad > 0) {
+                    Microbot.log("Loading runes into Rune Pouch...");
+                    Rs2RunePouch.load(requiredRunes);
+                }
+            }
+        }
+
+        isPrepped = true;
+        forceBankOnStart = false; // Opened bank, prepped successfully
+        setState(State.BANKING);
+        if (Rs2Bank.isOpen()) {
+            Rs2Bank.closeBank();
+            sleepUntil(() -> !Rs2Bank.isOpen(), 1200);
+        }
+        Microbot.log("Preparation completed successfully!");
+    }
+
     public boolean run() {
         if (mainScheduledFuture != null && !mainScheduledFuture.isDone()) {
             mainScheduledFuture.cancel(true);
@@ -410,6 +619,15 @@ public class NetoRCScript extends Script {
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
                 if (!isCurrentRun(runId)) return;
+                
+                if (Rs2Player.getRealSkillLevel(Skill.RUNECRAFT) < 99
+                        && !Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)
+                        && !plugin.hasRunecraftCape()) {
+                    Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
+                    Microbot.stopPlugin(plugin);
+                    return;
+                }
+
                 long startTime = System.currentTimeMillis();
 
                 if (lumbyElite == -1) {
@@ -441,6 +659,9 @@ public class NetoRCScript extends Script {
                 do {
                     initialState = state;
                     switch (state) {
+                        case PREP:
+                            handlePrep();
+                            break;
                         case BANKING:
                             handleBanking();
                             break;
@@ -489,7 +710,8 @@ public class NetoRCScript extends Script {
     }
 
     public synchronized void resetToBanking() {
-        state = State.BANKING;
+        state = State.PREP;
+        isPrepped = false;
         lumbyElite = -1;
         forceDrinkAtFerox = false;
         forceBankOnStart = true;
@@ -686,18 +908,7 @@ public class NetoRCScript extends Script {
     }
 
     private void withdrawRuneTypeSupplies() {
-        if (config.runeType() == RuneType.WRATH) {
-            handleWrathReqEquip();
-        }
-
         if (config.runeType() == RuneType.BLOOD) {
-            ensureBloodStaff();
-
-            if (!config.usePoh() && !Rs2Equipment.isWearing("Ardougne cloak")) {
-                Rs2Bank.withdrawAndEquip("Ardougne cloak");
-                sleepGaussian(700, 200);
-            }
-
             if (!Rs2Inventory.contains(activeBloodEssence) && !Rs2Inventory.contains(inactiveBloodEssence)) {
                 if (!Rs2Bank.hasItem(activeBloodEssence)) {
                     Rs2Bank.withdrawItem(inactiveBloodEssence);
@@ -711,42 +922,11 @@ public class NetoRCScript extends Script {
         }
     }
 
-    private void ensureBloodStaff() {
-        if (lumbyElite == 1 || Rs2Equipment.isWearing(lunarStaff) || Rs2Equipment.isWearing(dramenStaff)) {
-            return;
-        }
-
-        if (Rs2Bank.hasItem(lunarStaff)) {
-            Microbot.log("Looking for and withdrawing lunar staff");
-            Rs2Bank.withdrawAndEquip(lunarStaff);
-            sleepUntil(() -> Rs2Equipment.isWearing(lunarStaff));
-            sleepGaussian(700, 200);
-        } else if (Rs2Bank.hasItem(dramenStaff)) {
-            Microbot.log("No lunar staff found, withdrawing dramen staff");
-            Rs2Bank.withdrawAndEquip(dramenStaff);
-            sleepUntil(() -> Rs2Equipment.isWearing(dramenStaff));
-            sleepGaussian(700, 200);
-        }
-    }
-
     private void ensureTravelItems(int runecraftLevel) {
-        if (runecraftLevel >= 99) {
-            if (!Rs2Equipment.isWearing("Runecraft cape")) {
-                Rs2Bank.withdrawAndEquip("Runecraft cape");
-                sleepGaussian(700, 200);
-            }
-        }
-
         if (config.usePoh()) {
             ensurePohTeleport(runecraftLevel);
-        } else {
-            if (runecraftLevel < 99 && !Rs2Inventory.hasRunePouch()) {
-                Rs2Bank.withdrawRunePouch();
-                sleepGaussian(700, 200);
-            }
         }
 
-        ensureEquippedTeleport(Teleports.SAILORS_AMULET);
         ensureEquippedTeleport(Teleports.FEROX_ENCLAVE);
     }
 
@@ -780,9 +960,20 @@ public class NetoRCScript extends Script {
     private void ensureEquippedTeleport(Teleports teleport) {
         if (!teleport.isWearing() && Rs2Bank.hasItem(teleport.getItemIds())) {
             Microbot.log("Withdrawing bank teleport " + teleport.getName());
-            Rs2Bank.withdrawAndEquip(teleport.firstItemId());
+            int leastChargedId = getLeastChargedTeleportId(teleport);
+            Rs2Bank.withdrawAndEquip(leastChargedId);
             sleepUntil(teleport::isWearing);
         }
+    }
+
+    private int getLeastChargedTeleportId(Teleports teleport) {
+        int[] itemIds = teleport.getItemIds();
+        for (int i = itemIds.length - 1; i >= 0; i--) {
+            if (Rs2Bank.hasItem(itemIds[i])) {
+                return itemIds[i];
+            }
+        }
+        return teleport.firstItemId();
     }
 
     private void finishBankingAndRoute() {
@@ -945,20 +1136,6 @@ public class NetoRCScript extends Script {
                 || !Rs2Inventory.contains(pureEss);
     }
 
-    private void handleWrathReqEquip() {
-        if (!Rs2Equipment.isWearing(dragonShield)) {
-            Microbot.log("Withdrawing " + dragonShield);
-            Rs2Bank.withdrawAndEquip(dragonShield);
-            sleepUntil(() -> Rs2Equipment.isWearing(dragonShield));
-            sleepGaussian(900, 200);
-        }
-        if (!Rs2Equipment.isWearing(mythCape) && !Rs2Inventory.contains(mythCape)) {
-            Microbot.log("Withdrawing " + mythCape);
-            Rs2Bank.withdrawItem(mythCape);
-            sleepUntil(() -> Rs2Inventory.contains(mythCape));
-            sleepGaussian(900, 200);
-        }
-    }
 
     private void teleportToPoh() {
         boolean teleportInitiated = false;
