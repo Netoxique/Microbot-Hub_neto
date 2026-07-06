@@ -30,6 +30,10 @@ import java.util.Arrays;
 import static net.runelite.client.plugins.microbot.util.Global.sleep;
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 
+import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.ItemID;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+
 import javax.inject.Inject;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -37,6 +41,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
+@Slf4j
 public class NetoLunarTannerScript extends Script {
 
     public static String combinedMessage = "";
@@ -46,6 +51,7 @@ public class NetoLunarTannerScript extends Script {
     private List<Hides> priorityList = new ArrayList<>();
     private Hides activeHide;
     private final Map<Hides, Integer> profitMap = new HashMap<>();
+    private int castsThisInventory = 0;
 
     @Inject
     private NetoLunarTannerPlugin plugin;
@@ -58,18 +64,20 @@ public class NetoLunarTannerScript extends Script {
 
     // State management
     private enum State {
+        PREP,
         TANNING,
         BANKING
     }
 
-    private State currentState = State.TANNING;
+    private State currentState = State.PREP;
 
     public boolean run(NetoLunarTannerConfig config) {
         startTime = System.currentTimeMillis();
         hidesTanned = 0;
         totalProfit = 0;
         activeHide = null;
-        currentState = State.TANNING;
+        currentState = State.PREP;
+        castsThisInventory = 0;
 
         List<Hides> parsed = parsePriorityList(config.hidePriority());
         if (parsed == null) {
@@ -122,49 +130,69 @@ public class NetoLunarTannerScript extends Script {
 
                 if (!super.run() || !Microbot.isLoggedIn()) return;
 
-                // Resume/pick active hide from inventory if activeHide is null but we have hides
-                if (activeHide == null) {
-                    for (Hides hide : priorityList) {
-                        if (Rs2Inventory.hasItem(hide.getName(), true)) {
-                            activeHide = hide;
-                            break;
-                        }
-                    }
+                if (currentState == State.PREP) {
+                    handlePrep();
+                    return;
                 }
 
-                if (activeHide != null && Rs2Inventory.hasItem(activeHide.getName(), true)) {
-                    int initialHideCount = Rs2Inventory.count(activeHide.getFinished());
-                    castTanLeatherHoverOptimized();
-
-                    // Wait for the inventory count to change indicating hides have been tanned
-                    while (Rs2Inventory.count(activeHide.getFinished()) == initialHideCount) {
-                        // Check the inventory count periodically without sleeping
-                        // This loop will exit once the count changes
+                if (currentState == State.TANNING) {
+                    // Wait for inventory to register hides (resolves race condition after closing bank)
+                    if (!hasHidesToTan()) {
+                        sleepUntil(this::hasHidesToTan, 2000);
                     }
 
-                    int hidesTannedThisAction = Rs2Inventory.count(activeHide.getFinished()) - initialHideCount;
-                    hidesTanned += hidesTannedThisAction;
-
-                    int profitPerHide = profitMap.getOrDefault(activeHide, 0);
-                    totalProfit += (long) profitPerHide * hidesTannedThisAction;
-
-                    calculateProfitAndDisplay();
-
-                    // Check if we just finished tanning an inventory of hides
-                    if (!Rs2Inventory.hasItem(activeHide.getName(), true) && Rs2Inventory.hasItem(activeHide.getFinished())) {
-                        if (pauseForBreakAfterTanning()) {
-                            activeHide = null;
-                            return;
+                    if (hasHidesToTan()) {
+                        // Find activeHide if null or not in inventory
+                        if (activeHide == null || !Rs2Inventory.hasItem(activeHide.getName(), true)) {
+                            for (Hides hide : priorityList) {
+                                if (Rs2Inventory.hasItem(hide.getName(), true)) {
+                                    activeHide = hide;
+                                    break;
+                                }
+                            }
                         }
 
-                        if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
-                            activeHide = null;
-                            return;
+                        if (activeHide != null && Rs2Inventory.hasItem(activeHide.getName(), true)) {
+                            int initialHideCount = Rs2Inventory.count(activeHide.getFinished());
+                            castTanLeatherHoverOptimized();
+
+                            // Wait for the inventory count to change indicating hides have been tanned
+                            while (Rs2Inventory.count(activeHide.getFinished()) == initialHideCount) {
+                                // Check the inventory count periodically without sleeping
+                            }
+
+                            int hidesTannedThisAction = Rs2Inventory.count(activeHide.getFinished()) - initialHideCount;
+                            hidesTanned += hidesTannedThisAction;
+
+                            int profitPerHide = profitMap.getOrDefault(activeHide, 0);
+                            totalProfit += (long) profitPerHide * hidesTannedThisAction;
+
+                            calculateProfitAndDisplay();
+
+                            castsThisInventory++;
+
+                            // Check if we just finished tanning an inventory of hides
+                            if (castsThisInventory >= 5 || !Rs2Inventory.hasItem(activeHide.getName(), true)) {
+                                if (pauseForBreakAfterTanning()) {
+                                    activeHide = null;
+                                    return;
+                                }
+
+                                if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+                                    activeHide = null;
+                                    return;
+                                }
+
+                                // Tanned all hides, transition to banking
+                                activeHide = null;
+                                bank();
+                            }
                         }
+                    } else {
+                        // No hides in inventory even after waiting -> bank for more
+                        activeHide = null;
+                        bank();
                     }
-                } else {
-                    activeHide = null;
-                    bank();
                 }
             } catch (Exception ex) {
                 System.out.println(ex.getMessage());
@@ -328,8 +356,8 @@ public class NetoLunarTannerScript extends Script {
 
             if (selectedHide != null) {
                 Rs2Bank.withdrawAll(selectedHide.getName());
-                Hides finalSelectedHide = selectedHide;
-                sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(finalSelectedHide.getName()));
+//                Hides finalSelectedHide = selectedHide;
+//                sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(finalSelectedHide.getName()));
                 activeHide = selectedHide;
             } else {
                 Microbot.showMessage("No more hides from the priority list found to tan.");
@@ -338,9 +366,149 @@ public class NetoLunarTannerScript extends Script {
             }
 
             Rs2Bank.closeBank();
+            sleepGaussian(105, 22);
             currentState = State.TANNING;
+            castsThisInventory = 0; // Reset cast counter for the new inventory
             calculateProfitAndDisplay();
         }
+    }
+
+    public static final List<String> FIRE_STAVES = List.of(
+            "Twinflame staff",
+            "Fire battlestaff",
+            "Mystic fire staff",
+            "Lava battlestaff",
+            "Mystic lava staff",
+            "Smoke battlestaff",
+            "Mystic smoke staff",
+            "Steam battlestaff",
+            "Mystic steam staff",
+            "Staff of fire"
+    );
+
+    private boolean isWearingFireStaff() {
+        for (String staff : FIRE_STAVES) {
+            if (Rs2Equipment.isWearing(staff)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private String findAvailableFireStaff() {
+        for (String staff : FIRE_STAVES) {
+            if (Rs2Inventory.hasItem(staff)) {
+                return staff;
+            }
+        }
+        for (String staff : FIRE_STAVES) {
+            if (Rs2Bank.hasItem(staff)) {
+                return staff;
+            }
+        }
+        return null;
+    }
+
+    private void handlePrep() {
+        Microbot.status = "Prep: Opening bank";
+        if (!Rs2Bank.isOpen()) {
+            Rs2Bank.openBank();
+            sleepUntil(Rs2Bank::isOpen, 5000);
+            if (!Rs2Bank.isOpen()) return;
+        }
+
+        // 2. Deposit all inventory items, if there's still any in inventory
+        if (!Rs2Inventory.isEmpty()) {
+            Microbot.status = "Prep: Depositing inventory";
+            Rs2Bank.depositAll();
+            sleepUntil(Rs2Inventory::isEmpty, 5000);
+            if (!Rs2Inventory.isEmpty()) return;
+        }
+
+        // 3. Withdraw and equip a valid fire staff
+        boolean isStaffEquipped = isWearingFireStaff();
+        if (!isStaffEquipped) {
+            String staffToEquip = findAvailableFireStaff();
+            if (staffToEquip == null) {
+                Microbot.showMessage("No valid fire staff found in inventory or bank.");
+                shutdown();
+                return;
+            }
+
+            if (Rs2Inventory.hasItem(staffToEquip)) {
+                Microbot.status = "Prep: Equipping fire staff from inventory";
+                Rs2Bank.wearItem(staffToEquip);
+                sleepUntil(this::isWearingFireStaff, 3000);
+            } else if (Rs2Bank.hasItem(staffToEquip)) {
+                Microbot.status = "Prep: Withdrawing and equipping fire staff";
+                Rs2Bank.withdrawAndEquip(staffToEquip);
+                sleepUntil(this::isWearingFireStaff, 3000);
+            }
+
+            if (!isWearingFireStaff()) {
+                log.warn("Failed to equip fire staff, retrying next loop.");
+                return;
+            }
+
+            Microbot.status = "Prep: Sleeping 1200 ms after equipping staff";
+            sleep(1200);
+        }
+
+        // 4. Deposit all inventory items, if there's still any
+        if (!Rs2Inventory.isEmpty()) {
+            Microbot.status = "Prep: Depositing remaining inventory";
+            Rs2Bank.depositAll();
+            sleepUntil(Rs2Inventory::isEmpty, 5000);
+            if (!Rs2Inventory.isEmpty()) return;
+        }
+
+        // 5. Withdraw-all Astral runes, Nature runes, Coins
+        boolean hasAstral = Rs2Inventory.hasItem(ItemID.ASTRAL_RUNE) || Rs2Bank.hasItem(ItemID.ASTRAL_RUNE);
+        boolean hasNature = Rs2Inventory.hasItem(ItemID.NATURE_RUNE) || Rs2Bank.hasItem(ItemID.NATURE_RUNE);
+        boolean hasCoins = Rs2Inventory.hasItem(ItemID.COINS_995) || Rs2Bank.hasItem(ItemID.COINS_995);
+
+        if (!hasAstral || !hasNature || !hasCoins) {
+            Microbot.showMessage("Missing required items (Astral runes, Nature runes, or Coins) in bank/inventory.");
+            shutdown();
+            return;
+        }
+
+        // Withdraw Astral runes
+        if (!Rs2Inventory.hasItem(ItemID.ASTRAL_RUNE)) {
+            Microbot.status = "Prep: Withdrawing Astral runes";
+            Rs2Bank.withdrawAll(ItemID.ASTRAL_RUNE);
+            sleepUntil(() -> Rs2Inventory.hasItem(ItemID.ASTRAL_RUNE), 3000);
+            if (!Rs2Inventory.hasItem(ItemID.ASTRAL_RUNE)) return;
+        }
+
+        // Withdraw Nature runes
+        if (!Rs2Inventory.hasItem(ItemID.NATURE_RUNE)) {
+            Microbot.status = "Prep: Withdrawing Nature runes";
+            Rs2Bank.withdrawAll(ItemID.NATURE_RUNE);
+            sleepUntil(() -> Rs2Inventory.hasItem(ItemID.NATURE_RUNE), 3000);
+            if (!Rs2Inventory.hasItem(ItemID.NATURE_RUNE)) return;
+        }
+
+        // Withdraw Coins
+        if (!Rs2Inventory.hasItem(ItemID.COINS_995)) {
+            Microbot.status = "Prep: Withdrawing Coins";
+            Rs2Bank.withdrawAll(ItemID.COINS_995);
+            sleepUntil(() -> Rs2Inventory.hasItem(ItemID.COINS_995), 3000);
+            if (!Rs2Inventory.hasItem(ItemID.COINS_995)) return;
+        }
+
+        log.info("Prep state completed successfully. Transitioning to TANNING.");
+        currentState = State.TANNING;
+        castsThisInventory = 0; // Reset cast counter
+    }
+
+    private boolean hasHidesToTan() {
+        for (Hides hide : priorityList) {
+            if (Rs2Inventory.hasItem(hide.getName(), true)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     @Override
@@ -355,7 +523,8 @@ public class NetoLunarTannerScript extends Script {
         hidesTanned = 0; // Reset the count of tanned hides
         totalProfit = 0; // Reset total profit
         combinedMessage = ""; // Reset the combined message
-        currentState = State.TANNING; // Reset the current state
+        currentState = State.PREP; // Reset the current state
+        castsThisInventory = 0; // Reset cast counter
         activeHide = null;
     }
 }
