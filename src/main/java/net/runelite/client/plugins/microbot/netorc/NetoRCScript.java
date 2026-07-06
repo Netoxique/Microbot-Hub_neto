@@ -999,34 +999,39 @@ public class NetoRCScript extends Script {
     }
 
     private void handleFillPouch() {
-        while (!Rs2Inventory.allPouchesFull() || !Rs2Inventory.isFull() && isRunning()) {
-            Microbot.log("Pouches are not full yet");
-            if (Rs2Bank.isOpen()) {
-                if (Rs2Inventory.contains(bloodRune)) {
-                    depositItem(bloodRune);
-                    sleepGaussian(150, 25); // 100 to 200 ms
-                }
-                if (Rs2Inventory.contains(wrathRune)) {
-                    depositItem(wrathRune);
-                    sleepGaussian(150, 25); // 100 to 200 ms
-                }
-                Rs2Bank.withdrawAll(pureEss);
-                if (!Rs2Inventory.allPouchesFull()) {
-                    hoverInvItem(colossalPouch);
-                }
-                sleepUntil(Rs2Inventory::isFull);
-                if (!Rs2Inventory.allPouchesFull()) {
-                    var pouchItem = Rs2Inventory.get(colossalPouch);
-                    if (pouchItem == null) {
-                        pouchItem = Rs2Inventory.get(ItemID.RCU_POUCH_COLOSSAL_DEGRADE);
-                    }
-                    if (pouchItem != null) {
-                        interactInventory(pouchItem, "Fill");
-                    }
-                    sleepUntilOnClientThread(() -> !Rs2Inventory.isFull());
-                }
+        if (Rs2Bank.isOpen()) {
+            if (Rs2Inventory.contains(bloodRune)) {
+                depositItem(bloodRune);
+                sleepGaussian(150, 25); // 100 to 200 ms
             }
-            if (!Rs2Inventory.isFull()) {
+            if (Rs2Inventory.contains(wrathRune)) {
+                depositItem(wrathRune);
+                sleepGaussian(150, 25); // 100 to 200 ms
+            }
+
+            for (int i = 0; i < 2; i++) {
+                if (!isRunning()) return;
+
+                Rs2Bank.withdrawAll(pureEss);
+
+                var pouchItem = Rs2Inventory.get(colossalPouch);
+                if (pouchItem == null) {
+                    pouchItem = Rs2Inventory.get(ItemID.RCU_POUCH_COLOSSAL_DEGRADE);
+                }
+
+                if (pouchItem != null) {
+                    hoverInvItem(pouchItem.getId());
+                }
+
+                sleepUntil(Rs2Inventory::isFull);
+
+                if (pouchItem != null) {
+                    interactInventory(pouchItem, "Fill");
+                }
+                sleepUntilOnClientThread(() -> !Rs2Inventory.isFull());
+            }
+
+            if (!Rs2Inventory.isFull() && isRunning()) {
                 Rs2Bank.withdrawAll(pureEss);
                 sleepUntil(Rs2Inventory::isFull);
             }
