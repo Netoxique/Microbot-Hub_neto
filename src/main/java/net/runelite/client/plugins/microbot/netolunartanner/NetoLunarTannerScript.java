@@ -33,6 +33,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ItemID;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
+import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 
 import javax.inject.Inject;
 import java.util.ArrayList;
@@ -360,8 +361,19 @@ public class NetoLunarTannerScript extends Script {
 //                sleepUntilOnClientThread(() -> Rs2Inventory.hasItem(finalSelectedHide.getName()));
                 activeHide = selectedHide;
             } else {
-                Microbot.showMessage("No more hides from the priority list found to tan.");
-                shutdown();
+                Rs2Bank.closeBank();
+                sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+                Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                    Microbot.getClient().addChatMessage(
+                            net.runelite.api.ChatMessageType.GAMEMESSAGE,
+                            "",
+                            "No more hides from the priority list found to tan.",
+                            ""
+                    );
+                    return null;
+                });
+                Rs2Player.logout();
+                Microbot.stopPlugin(plugin);
                 return;
             }
 
