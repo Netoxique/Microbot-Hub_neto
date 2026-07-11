@@ -14,7 +14,6 @@ import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farm
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingHandler;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingPatch;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingWorld;
-import net.runelite.client.plugins.microbot.util.Rs2InventorySetup;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -82,19 +81,8 @@ public class NetoHerbrunScript extends Script {
                     }
                 }
 
-                if (config.useInventorySetup()) {
-                    var inventorySetup = new Rs2InventorySetup(config.inventorySetup(), mainScheduledFuture);
-                    if (!inventorySetup.doesInventoryMatch() || !inventorySetup.doesEquipmentMatch()) {
-                        Rs2Walker.walkTo(Rs2Bank.getNearestBank().getWorldPoint(), 20);
-                        if (!inventorySetup.loadEquipment() || !inventorySetup.loadInventory()) {
-                            return;
-                        }
-                        Rs2Bank.closeBank();
-                    }
-                } else {
-                    if (!setupAutoInventory()) {
-                        return;
-                    }
+                if (!setupAutoInventory()) {
+                    return;
                 }
 
                 int allotmentRegions = allotmentsByRegion.size();
@@ -733,9 +721,6 @@ public class NetoHerbrunScript extends Script {
         Rs2Bank.depositAll();
         Rs2Inventory.waitForInventoryChanges(5000);
 
-        int herbPatchCount = (int) herbPatches.stream().filter(HerbPatch::isEnabled).count();
-        int allotmentLocationCount = countEnabledAllotmentFlowerLocations();
-
         boolean toolsOk = true;
         toolsOk &= Rs2Bank.withdrawX(ItemID.RAKE, 1);
         toolsOk &= Rs2Bank.withdrawX(ItemID.SPADE, 1);
@@ -749,20 +734,232 @@ public class NetoHerbrunScript extends Script {
             Rs2Bank.withdrawX(ItemID.FAIRY_ENCHANTED_SECATEURS, 1);
         }
 
-        boolean missingRunes = false;
-        missingRunes |= !Rs2Bank.withdrawX(ItemID.LAWRUNE, 20);
-        missingRunes |= !Rs2Bank.withdrawX(ItemID.AIRRUNE, 50);
-        missingRunes |= !Rs2Bank.withdrawX(ItemID.EARTHRUNE, 50);
-        missingRunes |= !Rs2Bank.withdrawX(ItemID.FIRERUNE, 50);
-        missingRunes |= !Rs2Bank.withdrawX(ItemID.WATERRUNE, 50);
-
-        if (missingRunes) {
-            log("Missing teleportation runes - cannot complete herb run");
-            return false;
+        // Determine all active regions for this run
+        Set<String> activeRegions = new java.util.HashSet<>();
+        for (HerbPatch patch : herbPatches) {
+            activeRegions.add(patch.getRegionName());
+        }
+        for (String region : allotmentsByRegion.keySet()) {
+            activeRegions.add(region);
+        }
+        for (String region : flowerByRegion.keySet()) {
+            activeRegions.add(region);
         }
 
-        if (config.enableMorytania() && Rs2Bank.hasItem(ItemID.ECTOPHIAL)) {
-            Rs2Bank.withdrawX(ItemID.ECTOPHIAL, 1);
+        List<String> regionsToRemove = new java.util.ArrayList<>();
+
+        boolean useCloak4 = false;
+        boolean useFarmingCape = false;
+        boolean useXeric = false;
+        int skillsNecklaceChargesNeeded = 0;
+
+        // 1. Evaluate Ardougne Cloak 4 vs Skills Necklace
+        if (activeRegions.contains("Ardougne")) {
+            if (Rs2Bank.hasItem("Ardougne cloak 4") || Rs2Inventory.hasItem("Ardougne cloak 4")) {
+                useCloak4 = true;
+            } else if (hasSkillsNecklaceInBankOrInventory()) {
+                skillsNecklaceChargesNeeded++;
+            } else {
+                log("Ardougne cloak 4 and Skills necklace not found - skipping Ardougne.");
+                regionsToRemove.add("Ardougne");
+            }
+        }
+
+        // 2. Evaluate Farming Guild Cape vs Skills Necklace
+        if (activeRegions.contains("Farming Guild")) {
+            if (Rs2Bank.hasItem("Farming cape") || Rs2Inventory.hasItem("Farming cape") ||
+                Rs2Bank.hasItem("Farming cape(t)") || Rs2Inventory.hasItem("Farming cape(t)")) {
+                useFarmingCape = true;
+            } else if (hasSkillsNecklaceInBankOrInventory()) {
+                skillsNecklaceChargesNeeded++;
+            } else {
+                log("Farming cape and Skills necklace not found - skipping Farming Guild.");
+                regionsToRemove.add("Farming Guild");
+            }
+        }
+
+        // 3. Evaluate Hosidius (Kourend) Xeric's Talisman vs Skills Necklace
+        if (activeRegions.contains("Kourend")) {
+            if (Rs2Bank.hasItem("Xeric's talisman") || Rs2Inventory.hasItem("Xeric's talisman")) {
+                useXeric = true;
+            } else if (hasSkillsNecklaceInBankOrInventory()) {
+                skillsNecklaceChargesNeeded++;
+            } else {
+                log("Xeric's talisman and Skills necklace not found - skipping Hosidius.");
+                regionsToRemove.add("Kourend");
+            }
+        }
+
+        // Remove skipped regions from activeRegions immediately
+        activeRegions.removeAll(regionsToRemove);
+
+        for (String region : activeRegions) {
+            boolean hasTeleport = false;
+            switch (region) {
+                case "Troll Stronghold":
+                    if (Rs2Bank.hasItem("Stony basalt") || Rs2Inventory.hasItem("Stony basalt")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Stony basalt")) {
+                            Rs2Bank.withdrawX("Stony basalt", 1);
+                        }
+                    }
+                    break;
+                case "Weiss":
+                    if (Rs2Bank.hasItem("Icy basalt") || Rs2Inventory.hasItem("Icy basalt")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Icy basalt")) {
+                            Rs2Bank.withdrawX("Icy basalt", 1);
+                        }
+                    }
+                    break;
+                case "Catherby":
+                    if (Rs2Bank.hasItem("Catherby teleport") || Rs2Inventory.hasItem("Catherby teleport")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Catherby teleport")) {
+                            Rs2Bank.withdrawX("Catherby teleport", 1);
+                        }
+                    } else if (Rs2Bank.count(ItemID.LAWRUNE) >= 1 && Rs2Bank.count(ItemID.AIRRUNE) >= 5) {
+                        hasTeleport = true;
+                        Rs2Bank.withdrawX(ItemID.LAWRUNE, 1);
+                        Rs2Bank.withdrawX(ItemID.AIRRUNE, 5);
+                    }
+                    break;
+                case "Morytania":
+                    if (Rs2Bank.hasItem("Ectophial") || Rs2Inventory.hasItem("Ectophial")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Ectophial")) {
+                            Rs2Bank.withdrawX("Ectophial", 1);
+                        }
+                    }
+                    break;
+                case "Civitas illa Fortis":
+                    String whistle = findQuetzalWhistle();
+                    if (whistle != null) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem(whistle)) {
+                            Rs2Bank.withdrawX(whistle, 1);
+                        }
+                    } else if (Rs2Bank.count(ItemID.LAWRUNE) >= 2 && Rs2Bank.count(ItemID.EARTHRUNE) >= 1 && Rs2Bank.count(ItemID.FIRERUNE) >= 1) {
+                        hasTeleport = true;
+                        Rs2Bank.withdrawX(ItemID.LAWRUNE, 2);
+                        Rs2Bank.withdrawX(ItemID.EARTHRUNE, 1);
+                        Rs2Bank.withdrawX(ItemID.FIRERUNE, 1);
+                    }
+                    break;
+                case "Ardougne":
+                    if (useCloak4) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Ardougne cloak 4")) {
+                            Rs2Bank.withdrawX("Ardougne cloak 4", 1);
+                        }
+                    } else {
+                        // Using Skills necklace
+                        hasTeleport = true;
+                    }
+                    break;
+                case "Farming Guild":
+                    if (useFarmingCape) {
+                        hasTeleport = true;
+                        String cape = Rs2Bank.hasItem("Farming cape") || Rs2Inventory.hasItem("Farming cape") ? "Farming cape" : "Farming cape(t)";
+                        if (!Rs2Inventory.hasItem(cape)) {
+                            Rs2Bank.withdrawX(cape, 1);
+                        }
+                    } else {
+                        // Using Skills necklace
+                        hasTeleport = true;
+                    }
+                    break;
+                case "Kourend":
+                    if (useXeric) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Xeric's talisman")) {
+                            Rs2Bank.withdrawX("Xeric's talisman", 1);
+                        }
+                    } else {
+                        // Using Skills necklace
+                        hasTeleport = true;
+                    }
+                    break;
+                case "Falador":
+                    String glory = findAmuletOfGloryWithLeastCharges();
+                    if (glory != null) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem(glory)) {
+                            Rs2Bank.withdrawX(glory, 1);
+                        }
+                    }
+                    break;
+                default:
+                    hasTeleport = true;
+                    break;
+            }
+
+            if (!hasTeleport) {
+                log("Missing teleport items for region: " + region + ". Skipping patch.");
+                regionsToRemove.add(region);
+            }
+        }
+
+        // Apply filtering of missing regions
+        if (!regionsToRemove.isEmpty()) {
+            herbPatches.removeIf(patch -> regionsToRemove.contains(patch.getRegionName()));
+            for (String r : regionsToRemove) {
+                allotmentsByRegion.remove(r);
+                flowerByRegion.remove(r);
+            }
+            activeRegions.removeAll(regionsToRemove);
+        }
+
+        // Withdraw Skills Necklace(s) if charges are needed
+        if (skillsNecklaceChargesNeeded > 0) {
+            int totalChargesInInventory = getSkillsNecklaceChargesInInventory();
+            while (totalChargesInInventory < skillsNecklaceChargesNeeded) {
+                String necklaceToWithdraw = findSkillsNecklaceWithLeastCharges();
+                if (necklaceToWithdraw == null) {
+                    log("Not enough Skills necklaces in bank to cover remaining charges!");
+                    if (activeRegions.contains("Ardougne") && !useCloak4) {
+                        log("Skipping Ardougne due to lack of Skills necklace charges.");
+                        regionsToRemove.add("Ardougne");
+                        activeRegions.remove("Ardougne");
+                        skillsNecklaceChargesNeeded--;
+                    } else if (activeRegions.contains("Farming Guild") && !useFarmingCape) {
+                        log("Skipping Farming Guild due to lack of Skills necklace charges.");
+                        regionsToRemove.add("Farming Guild");
+                        activeRegions.remove("Farming Guild");
+                        skillsNecklaceChargesNeeded--;
+                    } else if (activeRegions.contains("Kourend") && !useXeric) {
+                        log("Skipping Hosidius due to lack of Skills necklace charges.");
+                        regionsToRemove.add("Kourend");
+                        activeRegions.remove("Kourend");
+                        skillsNecklaceChargesNeeded--;
+                    }
+                } else {
+                    if (Rs2Bank.withdrawX(necklaceToWithdraw, 1)) {
+                        Rs2Inventory.waitForInventoryChanges(2000);
+                        totalChargesInInventory = getSkillsNecklaceChargesInInventory();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            // If any regions were removed due to lack of skills necklace charges during the while loop:
+            if (!regionsToRemove.isEmpty()) {
+                herbPatches.removeIf(patch -> regionsToRemove.contains(patch.getRegionName()));
+                for (String r : regionsToRemove) {
+                    allotmentsByRegion.remove(r);
+                    flowerByRegion.remove(r);
+                }
+            }
+        }
+
+        int herbPatchCount = (int) herbPatches.stream().filter(HerbPatch::isEnabled).count();
+        Set<String> activeAllotmentFlowerRegions = new java.util.HashSet<>(allotmentsByRegion.keySet());
+        activeAllotmentFlowerRegions.addAll(flowerByRegion.keySet());
+        int allotmentLocationCount = activeAllotmentFlowerRegions.size();
+
+        if (herbPatchCount == 0 && allotmentLocationCount == 0) {
+            log("No patches left to run.");
+            return false;
         }
 
         // Withdraw herb seeds
@@ -926,5 +1123,59 @@ public class NetoHerbrunScript extends Script {
         currentPhase = LocationPhase.HERB;
         handledAllotmentIds.clear();
         currentAllotmentId = -1;
+    }
+
+    private String findQuetzalWhistle() {
+        if (Rs2Bank.hasItem("Perfect quetzal whistle")) return "Perfect quetzal whistle";
+        if (Rs2Bank.hasItem("Enhanced quetzal whistle")) return "Enhanced quetzal whistle";
+        if (Rs2Bank.hasItem("Basic quetzal whistle")) return "Basic quetzal whistle";
+        if (Rs2Bank.hasItem("Quetzal whistle")) return "Quetzal whistle";
+        if (Rs2Inventory.hasItem("Perfect quetzal whistle")) return "Perfect quetzal whistle";
+        if (Rs2Inventory.hasItem("Enhanced quetzal whistle")) return "Enhanced quetzal whistle";
+        if (Rs2Inventory.hasItem("Basic quetzal whistle")) return "Basic quetzal whistle";
+        if (Rs2Inventory.hasItem("Quetzal whistle")) return "Quetzal whistle";
+        return null;
+    }
+
+    private String findSkillsNecklaceWithLeastCharges() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Skills necklace(" + i + ")";
+            if (Rs2Bank.hasItem(name)) {
+                return name;
+            }
+        }
+        return null;
+    }
+
+    private String findAmuletOfGloryWithLeastCharges() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Amulet of glory(" + i + ")";
+            if (Rs2Bank.hasItem(name)) {
+                return name;
+            }
+        }
+        if (Rs2Bank.hasItem("Eternal glory")) {
+            return "Eternal glory";
+        }
+        return null;
+    }
+
+    private int getSkillsNecklaceChargesInInventory() {
+        int totalCharges = 0;
+        for (int i = 1; i <= 6; i++) {
+            int count = Rs2Inventory.count("Skills necklace(" + i + ")");
+            totalCharges += count * i;
+        }
+        return totalCharges;
+    }
+
+    private boolean hasSkillsNecklaceInBankOrInventory() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Skills necklace(" + i + ")";
+            if (Rs2Bank.hasItem(name) || Rs2Inventory.hasItem(name)) {
+                return true;
+            }
+        }
+        return false;
     }
 }

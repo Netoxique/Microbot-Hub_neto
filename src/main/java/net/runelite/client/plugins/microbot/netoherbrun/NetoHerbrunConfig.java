@@ -1,7 +1,6 @@
 package net.runelite.client.plugins.microbot.netoherbrun;
 
 import net.runelite.client.config.*;
-import net.runelite.client.plugins.microbot.inventorysetups.InventorySetup;
 
 @ConfigGroup("neto-herbrun")
 public interface NetoHerbrunConfig extends Config {
@@ -22,10 +21,7 @@ public interface NetoHerbrunConfig extends Config {
     )
     default String GUIDE() {
         return "Automated Herb Runs across all patches\n\n" +
-                "Two Setup Options:\n" +
-                "1. Inventory Setup: Use your custom inventory configuration\n" +
-                "2. Auto Banking: Let the plugin handle everything!\n\n" +
-                "Auto Banking withdraws:\n" +
+                "Withdraws:\n" +
                 "• Farming tools (rake, spade, seed dibber, magic secateurs)\n" +
                 "• Teleportation runes (law, air, earth, fire, water)\n" +
                 "• Your selected herb seeds\n" +
@@ -35,46 +31,17 @@ public interface NetoHerbrunConfig extends Config {
     }
 
     @ConfigSection(
-            name = "Inventory Setup Method",
-            description = "Choose between inventory setup or auto banking",
+            name = "Inventory Setup",
+            description = "Setup your herb runs",
             position = 1
     )
-    String inventorySection = "inventory";
-
-    @ConfigItem(
-            keyName = "useInventorySetup",
-            name = "Use Inventory Setup",
-            description = "Enable to use RuneLite inventory setups | Disable for automatic banking",
-            section = inventorySection,
-            position = 0
-    )
-    default boolean useInventorySetup() {
-        return false;
-    }
-
-    @ConfigItem(
-            keyName = "inventorySetup",
-            name = "Inventory Setup Name",
-            description = "Select your pre-configured inventory setup",
-            section = inventorySection,
-            position = 1
-    )
-    default InventorySetup inventorySetup() {
-        return null;
-    }
-
-    @ConfigSection(
-            name = "Auto Banking Settings",
-            description = "Configure automatic banking options",
-            position = 2
-    )
-    String autoSection = "autobanking";
+    String inventorySetupSection = "inventorySetup";
 
     @ConfigItem(
             keyName = "herbSeedType",
             name = "Herb Seed Type",
             description = "Choose which herb seeds to plant",
-            section = autoSection,
+            section = inventorySetupSection,
             position = 0
     )
     default HerbSeedType herbSeedType() {
@@ -85,7 +52,7 @@ public interface NetoHerbrunConfig extends Config {
             keyName = "compostType",
             name = "Compost Type",
             description = "Type of compost to use (select NONE to disable composting)",
-            section = autoSection,
+            section = inventorySetupSection,
             position = 1
     )
     default CompostType compostType() {
@@ -96,7 +63,7 @@ public interface NetoHerbrunConfig extends Config {
             keyName = "allowPartialRuns",
             name = "Allow Partial Runs",
             description = "Allow herb runs with fewer seeds than patches available",
-            section = autoSection,
+            section = inventorySetupSection,
             position = 2
     )
     default boolean allowPartialRuns() {
@@ -107,7 +74,7 @@ public interface NetoHerbrunConfig extends Config {
             keyName = "dropEmptyBuckets",
             name = "Drop Empty Buckets",
             description = "Drop empty buckets after applying compost to patches",
-            section = autoSection,
+            section = inventorySetupSection,
             position = 3
     )
     default boolean dropEmptyBuckets() {
