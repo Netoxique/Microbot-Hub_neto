@@ -7,7 +7,6 @@ import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
 //import net.runelite.client.plugins.microbot.PluginConstants;
-import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -18,7 +17,7 @@ import java.awt.*;
         description = "A plugin to fish karambwans",
         tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
-        version = "1.1.0",
+        version = "1.2.7",
         minClientVersion = "2.0.0",
         enabledByDefault = false
 //        isExternal = PluginConstants.IS_EXTERNAL
@@ -53,7 +52,6 @@ public class NetoKaramPlugin extends Plugin {
     }
 
     protected void shutDown() {
-        BreakHandlerScript.setLockState(false);
         karambwansScript.shutdown();
         overlayManager.remove(karambwansOverlay);
     }

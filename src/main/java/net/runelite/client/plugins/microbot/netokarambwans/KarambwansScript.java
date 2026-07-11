@@ -7,11 +7,11 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.NpcID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
-import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerScript;
 import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.Activity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -23,15 +23,18 @@ import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 
+
+
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
+import java.util.stream.Collectors;
 
 import static net.runelite.client.plugins.microbot.netokarambwans.KarambwanInfo.botStatus;
 import static net.runelite.client.plugins.microbot.netokarambwans.KarambwanInfo.states;
 
 @Slf4j
 public class KarambwansScript extends Script {
-    public static double version = 1.2;
+    public static double version = 1.9;
     private static final int[] CONSTRUCTION_CAPE_IDS = {9789, 9790};
     private static final int[] CRAFTING_CAPE_IDS = {9780, 9781};
     private static final Map<Runes, Integer> RUNE_POUCH_RUNES = Map.of(
@@ -45,8 +48,6 @@ public class KarambwansScript extends Script {
 
     public boolean run(KarambwansConfig config) {
         Microbot.enableAutoRunOn = true;
-
-        BreakHandlerScript.setLockState(true);
 
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyRunecraftingSetup();
@@ -63,6 +64,8 @@ public class KarambwansScript extends Script {
             try {
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
+
+                log.info("[KarambwansDebug] Main Loop - Current botStatus: {}", botStatus);
 
                 switch (botStatus) {
                     case PREP:
@@ -194,12 +197,13 @@ public class KarambwansScript extends Script {
     }
 
     private void fishingLoop() {
-        BreakHandlerScript.setLockState(false);
-        if (BreakHandlerScript.isBreakActive() || BreakHandlerScript.breakIn <= 0) {
-            return;
-        }
+        log.info("[KarambwansDebug] fishingLoop: isFull={}, count={}, capacity={}, emptySlots={}, isAnimating={}, isInteracting={}",
+                 Rs2Inventory.isFull(), Rs2Inventory.count(), Rs2Inventory.capacity(), Rs2Inventory.emptySlotCount(),
+                 Rs2Player.isAnimating(), Rs2Player.isInteracting());
+        log.info("[KarambwansDebug] Inventory items: {}", Rs2Inventory.all().stream()
+                 .map(item -> item.getName() + " (id=" + item.getId() + ", slot=" + item.getSlot() + ")")
+                 .collect(Collectors.joining(", ")));
         if (Rs2Inventory.isFull()) {
-            BreakHandlerScript.setLockState(true);
             botStatus = states.WALKING_TO_BANK;
             return;
         }
@@ -209,13 +213,82 @@ public class KarambwansScript extends Script {
         }
         if (!Rs2Player.isInteracting() && !Rs2Player.isAnimating()) {
             interactWithFishingSpot();
-            Rs2Player.waitForAnimation();
+            sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.isFull(), 3000);
         }
     }
 
     private void walkToBank() {
-        WorldPoint nearestBank = Rs2Bank.getNearestBank().getWorldPoint();
-        Rs2Walker.walkTo(nearestBank, 20);
+        BankLocation nearestBankLoc = Rs2Bank.getNearestBank();
+        WorldPoint nearestBank = null;
+        if (nearestBankLoc != null) {
+            nearestBank = nearestBankLoc.getWorldPoint();
+        }
+        if (nearestBank == null) {
+            log.warn("[KarambwansDebug] Rs2Bank.getNearestBank() returned null! Attempting fallback teleport...");
+            if (teleportCraftingCape()) {
+                sleepUntil(() -> Rs2Bank.getNearestBank() != null, 5000);
+                nearestBankLoc = Rs2Bank.getNearestBank();
+                if (nearestBankLoc != null) {
+                    nearestBank = nearestBankLoc.getWorldPoint();
+                }
+            } else if (teleportConstructionCape()) {
+                sleepUntil(() -> Rs2Bank.getNearestBank() != null, 5000);
+                nearestBankLoc = Rs2Bank.getNearestBank();
+                if (nearestBankLoc != null) {
+                    nearestBank = nearestBankLoc.getWorldPoint();
+                }
+            }
+        }
+        if (nearestBank != null) {
+            walkTo(nearestBank, 10);
+        } else {
+            log.error("[KarambwansDebug] walkToBank: Could not find any bank location!");
+        }
+    }
+
+    private boolean teleportCraftingCape() {
+        for (int id : CRAFTING_CAPE_IDS) {
+            if (Rs2Equipment.isWearing(id)) {
+                log.info("[KarambwansDebug] Teleporting using worn Crafting Cape");
+                return Rs2Equipment.interact(id, "Teleport");
+            }
+            if (Rs2Inventory.contains(id)) {
+                log.info("[KarambwansDebug] Teleporting using Crafting Cape in inventory");
+                return Rs2Inventory.interact(id, "Teleport");
+            }
+        }
+        return false;
+    }
+
+    private boolean teleportConstructionCape() {
+        for (int id : CONSTRUCTION_CAPE_IDS) {
+            if (Rs2Equipment.isWearing(id)) {
+                log.info("[KarambwansDebug] Teleporting using worn Construction Cape");
+                return Rs2Equipment.interact(id, "Tele to POH");
+            }
+            if (Rs2Inventory.contains(id)) {
+                log.info("[KarambwansDebug] Teleporting using Construction Cape in inventory");
+                return Rs2Inventory.interact(id, "Tele to POH");
+            }
+        }
+        return false;
+    }
+
+    private void walkTo(WorldPoint dst, int distance) {
+        WorldPoint myLocation = Rs2Player.getWorldLocation();
+        if (myLocation == null) {
+            return;
+        }
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+
+        while (!future.isDone()) {
+            if (Rs2Player.getWorldLocation().distanceTo(dst) <= distance) {
+                Rs2Walker.setTarget(null);
+                future.cancel(true);
+                break;
+            }
+            sleep(100);
+        }
     }
 
     private void useBank() {
@@ -255,7 +328,7 @@ public class KarambwansScript extends Script {
         if (Rs2Bank.isOpen()) {
             Rs2Bank.closeBank(); sleepGaussian(600,200);
         }
-        Rs2Walker.walkTo(baitPoint);
+        walkTo(baitPoint, 5);
     }
 
     private void baitingLoop(KarambwansConfig config) {
@@ -271,7 +344,7 @@ public class KarambwansScript extends Script {
 
         if (!Rs2Player.isInteracting() && !Rs2Player.isAnimating()) {
             Rs2Npc.interact("Fishing spot", "Net"); // Generic name interaction is fine here
-            Rs2Player.waitForAnimation();
+            sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.isFull(), 3000);
             sleepGaussian(1500,1000);
         }
     }
@@ -280,8 +353,9 @@ public class KarambwansScript extends Script {
         if (Rs2Bank.isOpen()) {
             Rs2Bank.closeBank(); sleepGaussian(600,200);
         }
-        Rs2Walker.walkTo(fishingPoint, 15);
+        walkTo(fishingPoint, 10);
         interactWithFishingSpot();
+        sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.isFull(), 3000);
     }
 
     private void equipConstructionCape() {
