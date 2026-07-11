@@ -4,6 +4,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.ChatMessageType;
 import net.runelite.api.GrandExchangeOffer;
 import net.runelite.api.GrandExchangeOfferState;
+import net.runelite.api.MenuAction;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.widgets.Widget;
@@ -11,10 +12,13 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
+import net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeSlots;
 import net.runelite.client.plugins.microbot.util.grandexchange.Rs2GrandExchange;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
@@ -28,6 +32,7 @@ import net.runelite.client.eventbus.Subscribe;
 import net.runelite.api.events.GrandExchangeOfferChanged;
 
 import javax.inject.Inject;
+import java.awt.Rectangle;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Optional;
@@ -82,17 +87,42 @@ public class NetoGeSellerScript extends Script {
 
     private static class SlotState {
         int itemId;
+        int totalQuantity;
+        int price;
         int quantitySold;
         int spent;
+        GrandExchangeOfferState state;
+        long createdAtMillis;
 
-        SlotState(int itemId, int quantitySold, int spent) {
+        SlotState(int itemId, int totalQuantity, int price, int quantitySold, int spent, GrandExchangeOfferState state, long createdAtMillis) {
             this.itemId = itemId;
+            this.totalQuantity = totalQuantity;
+            this.price = price;
             this.quantitySold = quantitySold;
             this.spent = spent;
+            this.state = state;
+            this.createdAtMillis = createdAtMillis;
+        }
+    }
+
+    private static class RepostCandidate {
+        final int slotIndex;
+        final GrandExchangeSlots slot;
+        final int itemId;
+        final String itemName;
+        final GrandExchangeOfferState state;
+
+        RepostCandidate(int slotIndex, GrandExchangeSlots slot, int itemId, String itemName, GrandExchangeOfferState state) {
+            this.slotIndex = slotIndex;
+            this.slot = slot;
+            this.itemId = itemId;
+            this.itemName = itemName;
+            this.state = state;
         }
     }
 
     private final SlotState[] slotStates = new SlotState[8];
+    private static final int GE_COLLECT_BUTTON = 30474246;
 
     public int getTotalProfit() {
         return totalProfit;
@@ -298,6 +328,9 @@ public class NetoGeSellerScript extends Script {
         log.info("Grand Exchange open interaction succeeded. Waiting for GE interface.");
         boolean geOpen = sleepUntil(Rs2GrandExchange::isOpen);
         log.info("Grand Exchange open wait result={}, isOpen={}", geOpen, Rs2GrandExchange.isOpen());
+        if (handleTimedOutOffer()) {
+            return;
+        }
 
         boolean foundItemToSell = false;
         for (Rs2ItemModel item : Rs2Inventory.all(Rs2ItemModel::isTradeable)) {
@@ -374,6 +407,10 @@ public class NetoGeSellerScript extends Script {
         }
         sleepUntil(Rs2GrandExchange::isOpen);
 
+        if (handleTimedOutOffer()) {
+            return;
+        }
+
         if (Rs2GrandExchange.hasSoldOffer()) {
             log.info("handleWaitingForSell: Sold offer(s) detected. Collecting all to bank.");
             Rs2GrandExchange.collectAllToBank();
@@ -388,6 +425,218 @@ public class NetoGeSellerScript extends Script {
             sleepUntil(() -> !Rs2GrandExchange.isOpen());
             Microbot.stopPlugin(this.plugin);
         }
+    }
+
+    private boolean handleTimedOutOffer() {
+        RepostCandidate candidate = findTimedOutOffer();
+        if (candidate == null) {
+            return false;
+        }
+
+        if (candidate.state == GrandExchangeOfferState.SELLING) {
+            Microbot.status = "Reposting timed out " + candidate.itemName;
+            log.info("Offer for '{}' in slot {} timed out after {} seconds. Aborting offer.",
+                    candidate.itemName, candidate.slot, getOfferTimeoutSeconds());
+
+            if (!abortOfferSlot(candidate.slot)) {
+                log.warn("Failed to abort timed out offer '{}' in slot {}.", candidate.itemName, candidate.slot);
+                return false;
+            }
+
+            boolean cancelled = sleepUntil(() -> isSlotState(candidate.slotIndex, candidate.itemId, GrandExchangeOfferState.CANCELLED_SELL), 5000);
+            log.info("Timed out offer abort wait result={}, item='{}', slot={}", cancelled, candidate.itemName, candidate.slot);
+            if (!cancelled) {
+                return true;
+            }
+        }
+
+        Microbot.status = "Collecting timed out " + candidate.itemName;
+        log.info("Collecting timed out offer '{}' to inventory from the overview collect button.", candidate.itemName);
+        boolean collected = collectToInventoryFromOverview(candidate.slotIndex);
+        log.info("Timed out offer collect result={}, item='{}', slot={}", collected, candidate.itemName, candidate.slot);
+        if (!collected) {
+            return true;
+        }
+
+        slotStates[candidate.slotIndex] = null;
+        currentState = State.SELLING;
+        sleep(600, 1000);
+        return true;
+    }
+
+    private RepostCandidate findTimedOutOffer() {
+        long now = System.currentTimeMillis();
+        long timeoutMillis = getOfferTimeoutSeconds() * 1000L;
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null) return null;
+
+            int maxSlots = Math.min(offers.length, slotStates.length);
+            for (int i = 0; i < maxSlots; i++) {
+                GrandExchangeOffer offer = offers[i];
+                if (offer == null || offer.getItemId() <= 0) {
+                    continue;
+                }
+
+                GrandExchangeOfferState state = offer.getState();
+                if (state != GrandExchangeOfferState.SELLING && state != GrandExchangeOfferState.CANCELLED_SELL) {
+                    continue;
+                }
+
+                String itemName = Microbot.getItemManager().getItemComposition(offer.getItemId()).getName();
+                if (itemName == null || !itemsToSellMap.containsKey(itemName.toLowerCase())) {
+                    continue;
+                }
+
+                SlotState tracked = slotStates[i];
+                if (tracked == null || isDifferentOffer(tracked, offer)) {
+                    slotStates[i] = createSlotState(offer, now);
+                    continue;
+                }
+
+                applyOfferDelta(tracked, offer);
+                if (now - tracked.createdAtMillis >= timeoutMillis) {
+                    GrandExchangeSlots slot = GrandExchangeSlots.values()[i];
+                    return new RepostCandidate(i, slot, offer.getItemId(), itemName, state);
+                }
+            }
+
+            return null;
+        }).orElse(null);
+    }
+
+    private boolean abortOfferSlot(GrandExchangeSlots slot) {
+        if (slot == null) {
+            return false;
+        }
+        if (Rs2GrandExchange.isOfferScreenOpen()) {
+            Rs2GrandExchange.backToOverview();
+        }
+        Widget parent = getOfferSlotWidget(slot);
+        if (parent == null) {
+            return false;
+        }
+
+        NewMenuEntry menuEntry = new NewMenuEntry()
+                .option("Abort offer")
+                .target("")
+                .identifier(2)
+                .type(MenuAction.CC_OP)
+                .param0(2)
+                .param1(parent.getId())
+                .itemId(-1)
+                .forceLeftClick(false);
+        Rectangle bounds = parent.getBounds() != null && Rs2UiHelper.isRectangleWithinCanvas(parent.getBounds())
+                ? parent.getBounds()
+                : Rs2UiHelper.getDefaultRectangle();
+        Microbot.doInvoke(menuEntry, bounds);
+        sleep(250, 750);
+        return true;
+    }
+
+    private boolean collectToInventoryFromOverview(int slotIndex) {
+        if (Rs2GrandExchange.isOfferScreenOpen()) {
+            Rs2GrandExchange.backToOverview();
+        }
+        if (!Rs2GrandExchange.isOpen()) {
+            Rs2GrandExchange.openExchange();
+            sleepUntil(Rs2GrandExchange::isOpen, 5000);
+        }
+
+        Widget collectButton = Rs2Widget.getWidget(GE_COLLECT_BUTTON);
+        if (collectButton == null) {
+            log.warn("Grand Exchange collect button was not found.");
+            return false;
+        }
+
+        NewMenuEntry entry = new NewMenuEntry()
+                .option("Collect to inventory")
+                .target("")
+                .identifier(1)
+                .type(MenuAction.CC_OP)
+                .param0(0)
+                .param1(collectButton.getId())
+                .itemId(-1)
+                .forceLeftClick(false);
+        Rectangle bounds = collectButton.getBounds() != null && Rs2UiHelper.isRectangleWithinCanvas(collectButton.getBounds())
+                ? collectButton.getBounds()
+                : Rs2UiHelper.getDefaultRectangle();
+        Microbot.doInvoke(entry, bounds);
+        sleep(600, 1000);
+        return sleepUntil(() -> isSlotEmpty(slotIndex), 5000);
+    }
+
+    private Widget getOfferSlotWidget(GrandExchangeSlots slot) {
+        try {
+            java.lang.reflect.Method m = Class.forName("net.runelite.client.plugins.microbot.util.grandexchange.GrandExchangeWidget")
+                    .getDeclaredMethod("getSlot", GrandExchangeSlots.class);
+            m.setAccessible(true);
+            return (Widget) m.invoke(null, slot);
+        } catch (Exception e) {
+            log.error("Error retrieving Grand Exchange slot widget: ", e);
+            return null;
+        }
+    }
+
+    private boolean isSlotState(int slotIndex, int itemId, GrandExchangeOfferState expectedState) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null || slotIndex < 0 || slotIndex >= offers.length) {
+                return false;
+            }
+            GrandExchangeOffer offer = offers[slotIndex];
+            return offer != null && offer.getItemId() == itemId && offer.getState() == expectedState;
+        }).orElse(false);
+    }
+
+    private boolean isSlotEmpty(int slotIndex) {
+        return Microbot.getClientThread().runOnClientThreadOptional(() -> {
+            GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            if (offers == null || slotIndex < 0 || slotIndex >= offers.length) {
+                return false;
+            }
+            GrandExchangeOffer offer = offers[slotIndex];
+            return offer == null || offer.getState() == GrandExchangeOfferState.EMPTY;
+        }).orElse(false);
+    }
+
+    private int getOfferTimeoutSeconds() {
+        return Math.max(1, config.offerTimeoutSeconds());
+    }
+
+    private SlotState createSlotState(GrandExchangeOffer offer, long createdAtMillis) {
+        return new SlotState(
+                offer.getItemId(),
+                offer.getTotalQuantity(),
+                offer.getPrice(),
+                offer.getQuantitySold(),
+                offer.getSpent(),
+                offer.getState(),
+                createdAtMillis
+        );
+    }
+
+    private boolean isDifferentOffer(SlotState tracked, GrandExchangeOffer offer) {
+        return tracked.itemId != offer.getItemId()
+                || tracked.totalQuantity != offer.getTotalQuantity()
+                || tracked.price != offer.getPrice();
+    }
+
+    private void applyOfferDelta(SlotState tracked, GrandExchangeOffer offer) {
+        int newQuantitySold = offer.getQuantitySold();
+        int newSpent = offer.getSpent();
+
+        int deltaQuantity = newQuantitySold - tracked.quantitySold;
+        int deltaSpent = newSpent - tracked.spent;
+
+        if (deltaSpent > 0 || deltaQuantity > 0) {
+            if (deltaSpent > 0) {
+                totalProfit += deltaSpent;
+            }
+            tracked.quantitySold = newQuantitySold;
+            tracked.spent = newSpent;
+        }
+        tracked.state = offer.getState();
     }
 
     private boolean hasActiveOffers() {
@@ -640,11 +889,12 @@ public class NetoGeSellerScript extends Script {
     private void initializeSlotStates() {
         Microbot.getClientThread().runOnClientThreadOptional(() -> {
             GrandExchangeOffer[] offers = Microbot.getClient().getGrandExchangeOffers();
+            long now = System.currentTimeMillis();
             for (int i = 0; i < 8; i++) {
                 if (offers != null && i < offers.length) {
                     GrandExchangeOffer offer = offers[i];
                     if (offer != null && offer.getState() != GrandExchangeOfferState.EMPTY) {
-                        slotStates[i] = new SlotState(offer.getItemId(), offer.getQuantitySold(), offer.getSpent());
+                        slotStates[i] = createSlotState(offer, now);
                     } else {
                         slotStates[i] = null;
                     }
@@ -683,25 +933,13 @@ public class NetoGeSellerScript extends Script {
         }
 
         SlotState prev = slotStates[slot];
-        if (prev == null || prev.itemId != itemId) {
-            prev = new SlotState(itemId, offer.getQuantitySold(), offer.getSpent());
+        if (prev == null || isDifferentOffer(prev, offer)) {
+            prev = createSlotState(offer, System.currentTimeMillis());
             slotStates[slot] = prev;
             return;
         }
 
-        int newQuantitySold = offer.getQuantitySold();
-        int newSpent = offer.getSpent();
-
-        int deltaQuantity = newQuantitySold - prev.quantitySold;
-        int deltaSpent = newSpent - prev.spent;
-
-        if (deltaSpent > 0 || deltaQuantity > 0) {
-            if (deltaSpent > 0) {
-                totalProfit += deltaSpent;
-            }
-            prev.quantitySold = newQuantitySold;
-            prev.spent = newSpent;
-        }
+        applyOfferDelta(prev, offer);
     }
 
     private static final int[] RING_OF_WEALTH_IDS = {

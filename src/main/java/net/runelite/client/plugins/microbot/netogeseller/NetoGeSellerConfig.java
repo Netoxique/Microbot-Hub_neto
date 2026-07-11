@@ -15,10 +15,21 @@ public interface NetoGeSellerConfig extends Config {
     String generalSettings = "generalSettings";
 
     @ConfigItem(
+            keyName = "offerTimeoutSeconds",
+            name = "Repost Offer After",
+            description = "Seconds to wait before aborting and reposting an active sell offer",
+            position = 1,
+            section = generalSettings
+    )
+    default int offerTimeoutSeconds() {
+        return 60;
+    }
+
+    @ConfigItem(
             keyName = "itemsToSell",
             name = "Items to Sell",
             description = "Comma separated list of items to sell. Format: ItemName:KeepAmount (e.g. Magic log:100, Coal:500, Rune bar, Teak logs:>200)",
-            position = 1,
+            position = 2,
             section = generalSettings
     )
     default String itemsToSell() {
@@ -29,7 +40,7 @@ public interface NetoGeSellerConfig extends Config {
             keyName = "hotkey",
             name = "Insta-Sell Hotkey",
             description = "The hotkey configured in Flipping Utilities for setting price to low/insta-sell (usually 'n')",
-            position = 2,
+            position = 3,
             section = generalSettings
     )
     default String hotkey() {
