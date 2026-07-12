@@ -22,8 +22,10 @@ import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
-
-
+import javax.inject.Inject;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
@@ -35,6 +37,15 @@ import static net.runelite.client.plugins.microbot.netokarambwans.KarambwanInfo.
 @Slf4j
 public class KarambwansScript extends Script {
     public static double version = 1.9;
+
+    @Inject
+    private NetoKaramPlugin plugin;
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
     private static final int[] CONSTRUCTION_CAPE_IDS = {9789, 9790};
     private static final int[] CRAFTING_CAPE_IDS = {9780, 9781};
     private static final Map<Runes, Integer> RUNE_POUCH_RUNES = Map.of(
@@ -59,10 +70,22 @@ public class KarambwansScript extends Script {
 
         sleepGaussian(600, 200);
 
+        breakManager.configure(config, "Neto Karambwans");
+        worldHopManager.configure(config, "Neto Karambwans");
+        runtimeDisable.configure(config, "Neto Karambwans");
+
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
+
         Rs2Antiban.setActivity(Activity.CATCHING_RAW_KARAMBWAN);
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
-                if (!Microbot.isLoggedIn()) return;
+                if (!Microbot.isLoggedIn()) {
+                    if (runtimeDisable.updateRuntime(NetoKaramPlugin.class)) return;
+                    if (breakManager.updateBreakState()) return;
+                    return;
+                }
                 if (!super.run()) return;
 
                 log.info("[KarambwansDebug] Main Loop - Current botStatus: {}", botStatus);
@@ -80,6 +103,13 @@ public class KarambwansScript extends Script {
                         break;
                     case BANKING:
                         useBank();
+                        if (Rs2Bank.isOpen()) {
+                            Rs2Bank.closeBank();
+                            sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+                        }
+                        if (checkForBreakOrHop()) {
+                            return;
+                        }
                         botStatus = states.WALKING_TO_FISH;
                         break;
                     case WALKING_TO_FISH:
@@ -103,6 +133,9 @@ public class KarambwansScript extends Script {
 
     @Override
     public void shutdown() {
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
         super.shutdown();
     }
 
@@ -334,6 +367,9 @@ public class KarambwansScript extends Script {
     private void baitingLoop(KarambwansConfig config) {
         if (Rs2Inventory.itemQuantity(ItemID.TBWT_RAW_KARAMBWANJI) >= config.karambwanjiToFish()) {
             Rs2Inventory.dropAll("Raw shrimps");
+            if (checkForBreakOrHop()) {
+                return;
+            }
             botStatus = states.WALKING_TO_FISH;
             return;
         }
@@ -436,6 +472,22 @@ public class KarambwansScript extends Script {
                 return true;
             }
         }
+        return false;
+    }
+
+    private boolean checkForBreakOrHop() {
+        if (runtimeDisable.updateRuntime(NetoKaramPlugin.class)) {
+            return true;
+        }
+
+        if (breakManager.tryStartBreakAtSafePoint()) {
+            return true;
+        }
+
+        if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+            return true;
+        }
+
         return false;
     }
 }

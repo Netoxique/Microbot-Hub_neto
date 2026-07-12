@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.netokarambwans;
 
 import com.google.inject.Provides;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.Plugin;
@@ -11,6 +12,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
 import java.awt.*;
+import java.time.Instant;
 
 @PluginDescriptor(
         name = "Neto Karambwans",
@@ -24,6 +26,9 @@ import java.awt.*;
 )
 @Slf4j
 public class NetoKaramPlugin extends Plugin {
+    @Getter
+    private Instant startTime;
+
     @Inject
     private KarambwansConfig config;
     @Provides
@@ -44,6 +49,7 @@ public class NetoKaramPlugin extends Plugin {
 
     @Override
     protected void startUp() throws AWTException {
+        startTime = Instant.now();
         if (overlayManager != null) {
             overlayManager.add(karambwansOverlay);
         }
