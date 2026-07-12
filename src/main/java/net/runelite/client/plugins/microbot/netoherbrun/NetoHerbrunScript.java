@@ -10,10 +10,13 @@ import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Rs2Leprechaun;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.questhelper.config.ConfigKeys;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.CropState;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingHandler;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingPatch;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingWorld;
+import net.runelite.client.plugins.microbot.questhelper.requirements.runelite.RuneliteRequirement;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
@@ -113,7 +116,7 @@ public class NetoHerbrunScript extends Script {
 
             if (!currentPatch.isInRange(40)) {
                 NetoHerbrunPlugin.status = "Walking to " + currentPatch.getRegionName();
-                Rs2Walker.walkTo(currentPatch.getLocation(), 20);
+                walkTo(currentPatch.getLocation(), 7);
                 return;
             }
 
@@ -159,6 +162,24 @@ public class NetoHerbrunScript extends Script {
         }, 0, 1000, TimeUnit.MILLISECONDS);
 
         return true;
+    }
+
+    private void walkTo(WorldPoint destination, int distance) {
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if (destination == null || playerLocation == null || playerLocation.distanceTo(destination) <= distance) {
+            return;
+        }
+
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination));
+        while (!future.isDone()) {
+            playerLocation = Rs2Player.getWorldLocation();
+            if (playerLocation != null && playerLocation.distanceTo(destination) <= distance) {
+                Rs2Walker.setTarget(null);
+                future.cancel(true);
+                break;
+            }
+            sleep(100);
+        }
     }
 
     private void populatePatches() {
@@ -718,20 +739,57 @@ public class NetoHerbrunScript extends Script {
             return false;
         }
 
+        Rs2Bank.depositEquipment();
+        Rs2Inventory.waitForInventoryChanges(5000);
         Rs2Bank.depositAll();
         Rs2Inventory.waitForInventoryChanges(5000);
 
+        // Equip Farming Cape or Farmer's outfit
+        int farmingLevel = Microbot.getClient().getRealSkillLevel(Skill.FARMING);
+        if (farmingLevel == 99) {
+            if (Rs2Bank.hasItem(ItemID.SKILLCAPE_FARMING)) {
+                Rs2Bank.withdrawAndEquip(ItemID.SKILLCAPE_FARMING);
+            } else if (Rs2Bank.hasItem(ItemID.SKILLCAPE_FARMING_TRIMMED)) {
+                Rs2Bank.withdrawAndEquip(ItemID.SKILLCAPE_FARMING_TRIMMED);
+            }
+        } else {
+            // Equip Farmer's outfit if available
+            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_HAT_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_HAT_MALE);
+            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_HAT_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_HAT_FEMALE);
+
+            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_TORSO_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_TORSO_MALE);
+            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_TORSO_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_TORSO_FEMALE);
+
+            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_LEGS_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_LEGS_MALE);
+            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_LEGS_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_LEGS_FEMALE);
+
+            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_FEET_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_FEET_MALE);
+            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_FEET_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_FEET_FEMALE);
+        }
+
         boolean toolsOk = true;
-        toolsOk &= Rs2Bank.withdrawX(ItemID.RAKE, 1);
-        toolsOk &= Rs2Bank.withdrawX(ItemID.SPADE, 1);
-        toolsOk &= Rs2Bank.withdrawX(ItemID.DIBBER, 1);
+        toolsOk &= Rs2Bank.withdrawOne(ItemID.RAKE);
+        toolsOk &= Rs2Bank.withdrawOne(ItemID.SPADE);
+
+        boolean hasBarehandedSeedPlanting = new RuneliteRequirement(
+                configManager,
+                ConfigKeys.BARBARIAN_TRAINING_FINISHED_SEED_PLANTING.getKey()
+        ).check();
+        if (!hasBarehandedSeedPlanting) {
+            if (Rs2Bank.hasItem(ItemID.DIBBER) || Rs2Inventory.hasItem(ItemID.DIBBER)) {
+                toolsOk &= Rs2Bank.withdrawOne(ItemID.DIBBER);
+            } else {
+                log("No seed dibber found in bank or inventory. Assuming barehanded farming is unlocked via Barbarian Training.");
+            }
+        }
+
         if (!toolsOk) {
-            log("Missing farming tools in bank (rake/spade/dibber)");
+            log("Missing farming tools in bank (rake/spade)");
             return false;
         }
 
         if (Rs2Bank.hasItem(ItemID.FAIRY_ENCHANTED_SECATEURS)) {
-            Rs2Bank.withdrawX(ItemID.FAIRY_ENCHANTED_SECATEURS, 1);
+            Rs2Bank.withdrawAndEquip(ItemID.FAIRY_ENCHANTED_SECATEURS);
         }
 
         // Determine all active regions for this run
@@ -768,7 +826,8 @@ public class NetoHerbrunScript extends Script {
         // 2. Evaluate Farming Guild Cape vs Skills Necklace
         if (activeRegions.contains("Farming Guild")) {
             if (Rs2Bank.hasItem("Farming cape") || Rs2Inventory.hasItem("Farming cape") ||
-                Rs2Bank.hasItem("Farming cape(t)") || Rs2Inventory.hasItem("Farming cape(t)")) {
+                Rs2Bank.hasItem("Farming cape(t)") || Rs2Inventory.hasItem("Farming cape(t)") ||
+                Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING) || Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING_TRIMMED)) {
                 useFarmingCape = true;
             } else if (hasSkillsNecklaceInBankOrInventory()) {
                 skillsNecklaceChargesNeeded++;
@@ -800,7 +859,7 @@ public class NetoHerbrunScript extends Script {
                     if (Rs2Bank.hasItem("Stony basalt") || Rs2Inventory.hasItem("Stony basalt")) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem("Stony basalt")) {
-                            Rs2Bank.withdrawX("Stony basalt", 1);
+                            Rs2Bank.withdrawOne("Stony basalt");
                         }
                     }
                     break;
@@ -808,7 +867,7 @@ public class NetoHerbrunScript extends Script {
                     if (Rs2Bank.hasItem("Icy basalt") || Rs2Inventory.hasItem("Icy basalt")) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem("Icy basalt")) {
-                            Rs2Bank.withdrawX("Icy basalt", 1);
+                            Rs2Bank.withdrawOne("Icy basalt");
                         }
                     }
                     break;
@@ -816,11 +875,11 @@ public class NetoHerbrunScript extends Script {
                     if (Rs2Bank.hasItem("Catherby teleport") || Rs2Inventory.hasItem("Catherby teleport")) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem("Catherby teleport")) {
-                            Rs2Bank.withdrawX("Catherby teleport", 1);
+                            Rs2Bank.withdrawOne("Catherby teleport");
                         }
                     } else if (Rs2Bank.count(ItemID.LAWRUNE) >= 1 && Rs2Bank.count(ItemID.AIRRUNE) >= 5) {
                         hasTeleport = true;
-                        Rs2Bank.withdrawX(ItemID.LAWRUNE, 1);
+                        Rs2Bank.withdrawOne(ItemID.LAWRUNE);
                         Rs2Bank.withdrawX(ItemID.AIRRUNE, 5);
                     }
                     break;
@@ -828,7 +887,7 @@ public class NetoHerbrunScript extends Script {
                     if (Rs2Bank.hasItem("Ectophial") || Rs2Inventory.hasItem("Ectophial")) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem("Ectophial")) {
-                            Rs2Bank.withdrawX("Ectophial", 1);
+                            Rs2Bank.withdrawOne("Ectophial");
                         }
                     }
                     break;
@@ -837,20 +896,20 @@ public class NetoHerbrunScript extends Script {
                     if (whistle != null) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem(whistle)) {
-                            Rs2Bank.withdrawX(whistle, 1);
+                            Rs2Bank.withdrawOne(whistle);
                         }
                     } else if (Rs2Bank.count(ItemID.LAWRUNE) >= 2 && Rs2Bank.count(ItemID.EARTHRUNE) >= 1 && Rs2Bank.count(ItemID.FIRERUNE) >= 1) {
                         hasTeleport = true;
                         Rs2Bank.withdrawX(ItemID.LAWRUNE, 2);
-                        Rs2Bank.withdrawX(ItemID.EARTHRUNE, 1);
-                        Rs2Bank.withdrawX(ItemID.FIRERUNE, 1);
+                        Rs2Bank.withdrawOne(ItemID.EARTHRUNE);
+                        Rs2Bank.withdrawOne(ItemID.FIRERUNE);
                     }
                     break;
                 case "Ardougne":
                     if (useCloak4) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem("Ardougne cloak 4")) {
-                            Rs2Bank.withdrawX("Ardougne cloak 4", 1);
+                            Rs2Bank.withdrawOne("Ardougne cloak 4");
                         }
                     } else {
                         // Using Skills necklace
@@ -860,9 +919,12 @@ public class NetoHerbrunScript extends Script {
                 case "Farming Guild":
                     if (useFarmingCape) {
                         hasTeleport = true;
-                        String cape = Rs2Bank.hasItem("Farming cape") || Rs2Inventory.hasItem("Farming cape") ? "Farming cape" : "Farming cape(t)";
-                        if (!Rs2Inventory.hasItem(cape)) {
-                            Rs2Bank.withdrawX(cape, 1);
+                        if (!Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING) && 
+                            !Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING_TRIMMED) && 
+                            !Rs2Inventory.hasItem("Farming cape") && 
+                            !Rs2Inventory.hasItem("Farming cape(t)")) {
+                            String cape = Rs2Bank.hasItem("Farming cape") ? "Farming cape" : "Farming cape(t)";
+                            Rs2Bank.withdrawOne(cape);
                         }
                     } else {
                         // Using Skills necklace
@@ -873,7 +935,7 @@ public class NetoHerbrunScript extends Script {
                     if (useXeric) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem("Xeric's talisman")) {
-                            Rs2Bank.withdrawX("Xeric's talisman", 1);
+                            Rs2Bank.withdrawOne("Xeric's talisman");
                         }
                     } else {
                         // Using Skills necklace
@@ -885,7 +947,7 @@ public class NetoHerbrunScript extends Script {
                     if (glory != null) {
                         hasTeleport = true;
                         if (!Rs2Inventory.hasItem(glory)) {
-                            Rs2Bank.withdrawX(glory, 1);
+                            Rs2Bank.withdrawOne(glory);
                         }
                     }
                     break;
@@ -934,7 +996,7 @@ public class NetoHerbrunScript extends Script {
                         skillsNecklaceChargesNeeded--;
                     }
                 } else {
-                    if (Rs2Bank.withdrawX(necklaceToWithdraw, 1)) {
+                    if (Rs2Bank.withdrawOne(necklaceToWithdraw)) {
                         Rs2Inventory.waitForInventoryChanges(2000);
                         totalChargesInInventory = getSkillsNecklaceChargesInInventory();
                     } else {
@@ -1006,7 +1068,7 @@ public class NetoHerbrunScript extends Script {
         // Withdraw compost (bottomless only — non-bottomless comes from leprechaun)
         CompostType compostType = config.compostType();
         if (compostType != CompostType.NONE && compostType.isBottomless()) {
-            if (!Rs2Bank.withdrawX(compostType.getItemId(), 1)) {
+            if (!Rs2Bank.withdrawOne(compostType.getItemId())) {
                 log("Failed to withdraw bottomless compost bucket");
                 return false;
             }
