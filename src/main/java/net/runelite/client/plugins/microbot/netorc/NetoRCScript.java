@@ -405,10 +405,18 @@ public class NetoRCScript extends Script {
         sleepGaussian(600, 200);
 
         // 2. Check if the player has the "Raiments of the Eye" equipped.
-        // If not, deposit all worn items and sleep 1200 ms.
+        // If not, deposit all worn items and wait until nothing is equipped.
         if (!hasRaimentsOfTheEyeEquipped()) {
-            Rs2Bank.depositEquipment();
-            sleep(1200);
+            if (Rs2Equipment.isWearing()) {
+                if (!Rs2Bank.depositEquipment()) {
+                    Microbot.log("Failed to deposit worn equipment");
+                    return;
+                }
+                if (!sleepUntil(() -> !Rs2Equipment.isWearing(), 5000)) {
+                    Microbot.log("Timeout waiting for worn equipment to be deposited");
+                    return;
+                }
+            }
 
             // 2.a (if all worn items were deposit) Withdraw and equip the Raiments of the Eye set.
             if (!Rs2Equipment.isWearing()) {
