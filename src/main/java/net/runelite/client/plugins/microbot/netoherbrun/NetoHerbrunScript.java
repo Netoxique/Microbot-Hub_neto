@@ -243,16 +243,30 @@ public class NetoHerbrunScript extends Script {
             }
 
             currentPatch = herbPatches.stream()
-                    .filter(patch -> patch.isEnabled() && Objects.equals(patch.getRegionName(), "Weiss"))
-                    .findFirst()
-                    .orElseGet(() -> herbPatches.stream()
-                            .filter(HerbPatch::isEnabled)
-                            .findFirst()
-                            .orElse(null));
+                    .filter(HerbPatch::isEnabled)
+                    .min(Comparator.comparingInt(NetoHerbrunScript::getPatchVisitPriority))
+                    .orElse(null);
 
             if (currentPatch != null) {
                 herbPatches.remove(currentPatch);
             }
+        }
+    }
+
+    private static int getPatchVisitPriority(HerbPatch patch) {
+        switch (patch.getRegionName()) {
+            case "Weiss":
+                return 0;
+            case "Troll Stronghold":
+                return 1;
+            case "Catherby":
+                return 2;
+            case "Civitas illa Fortis":
+                return 3;
+            case "Farming Guild":
+                return Integer.MAX_VALUE;
+            default:
+                return 4;
         }
     }
 
@@ -739,8 +753,16 @@ public class NetoHerbrunScript extends Script {
             return false;
         }
 
-        Rs2Bank.depositEquipment();
-        Rs2Inventory.waitForInventoryChanges(5000);
+        if (Rs2Equipment.isWearing()) {
+            if (!Rs2Bank.depositEquipment()) {
+                log("Failed to deposit worn equipment");
+                return false;
+            }
+            if (!sleepUntil(() -> !Rs2Equipment.isWearing(), 5000)) {
+                log("Timeout waiting for worn equipment to be deposited");
+                return false;
+            }
+        }
         Rs2Bank.depositAll();
         Rs2Inventory.waitForInventoryChanges(5000);
 
@@ -754,17 +776,7 @@ public class NetoHerbrunScript extends Script {
             }
         } else {
             // Equip Farmer's outfit if available
-            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_HAT_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_HAT_MALE);
-            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_HAT_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_HAT_FEMALE);
-
-            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_TORSO_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_TORSO_MALE);
-            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_TORSO_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_TORSO_FEMALE);
-
-            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_LEGS_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_LEGS_MALE);
-            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_LEGS_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_LEGS_FEMALE);
-
-            if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_FEET_MALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_FEET_MALE);
-            else if (Rs2Bank.hasItem(ItemID.TITHE_REWARD_FEET_FEMALE)) Rs2Bank.withdrawAndEquip(ItemID.TITHE_REWARD_FEET_FEMALE);
+            equipFarmersOutfit();
         }
 
         boolean toolsOk = true;
@@ -946,8 +958,8 @@ public class NetoHerbrunScript extends Script {
                     String glory = findAmuletOfGloryWithLeastCharges();
                     if (glory != null) {
                         hasTeleport = true;
-                        if (!Rs2Inventory.hasItem(glory)) {
-                            Rs2Bank.withdrawOne(glory);
+                        if (!Rs2Inventory.hasItem(glory, true)) {
+                            Rs2Bank.withdrawOne(glory, true);
                         }
                     }
                     break;
@@ -1165,6 +1177,63 @@ public class NetoHerbrunScript extends Script {
         return seedsWithdrawn > 0;
     }
 
+    private void equipFarmersOutfit() {
+        String[][] outfitPieces = {
+                {"Farmer's strawhat"},
+                {"Farmer's jacket", "Farmer's shirt"},
+                {"Farmer's boro trousers"},
+                {"Farmer's boots"}
+        };
+        List<String> withdrawnPieces = new ArrayList<>();
+
+        for (String[] names : outfitPieces) {
+            if (Rs2Equipment.isWearing(names)) {
+                continue;
+            }
+            for (String itemName : names) {
+                if (!Rs2Bank.hasItem(itemName)) {
+                    continue;
+                }
+                if (Rs2Bank.withdrawOne(itemName)) {
+                    withdrawnPieces.add(itemName);
+                    sleepUntil(() -> Rs2Inventory.hasItem(itemName), 5000);
+                } else {
+                    log("Failed to withdraw Farmer's outfit item " + itemName);
+                }
+                break;
+            }
+        }
+
+        if (withdrawnPieces.isEmpty()) {
+            return;
+        }
+        if (!Rs2Bank.closeBank()) {
+            log("Failed to close the bank before equipping Farmer's outfit");
+            return;
+        }
+
+        for (String itemName : withdrawnPieces) {
+            if (!sleepUntil(() -> Rs2Inventory.hasItem(itemName), 5000)) {
+                log("Farmer's outfit item did not appear in inventory: " + itemName);
+                continue;
+            }
+            for (int attempt = 0; attempt < 2 && !Rs2Equipment.isWearing(itemName); attempt++) {
+                if (!Rs2Inventory.interact(itemName, "Wear")) {
+                    log("Failed to issue Wear action for Farmer's outfit item " + itemName);
+                    break;
+                }
+                sleepUntil(() -> Rs2Equipment.isWearing(itemName), 3000);
+            }
+            if (!Rs2Equipment.isWearing(itemName)) {
+                log("Farmer's outfit item was not equipped: " + itemName);
+            }
+        }
+
+        if (!Rs2Bank.openBank() || !sleepUntil(Rs2Bank::isOpen, 10000)) {
+            log("Failed to reopen the bank after equipping Farmer's outfit");
+        }
+    }
+
     private int countEnabledAllotmentFlowerLocations() {
         int count = 0;
         if (config.enableArdougne()) count++;
@@ -1212,12 +1281,12 @@ public class NetoHerbrunScript extends Script {
     private String findAmuletOfGloryWithLeastCharges() {
         for (int i = 1; i <= 6; i++) {
             String name = "Amulet of glory(" + i + ")";
-            if (Rs2Bank.hasItem(name)) {
+            if (Rs2Bank.hasItem(name, true)) {
                 return name;
             }
         }
-        if (Rs2Bank.hasItem("Eternal glory")) {
-            return "Eternal glory";
+        if (Rs2Bank.hasItem("Amulet of eternal glory", true)) {
+            return "Amulet of eternal glory";
         }
         return null;
     }
