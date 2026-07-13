@@ -527,6 +527,18 @@ public class NetoMahoganyHomesScript extends Script {
                 return;
             }
             WorldPoint contractLocation = getClosestContractLocation();
+            int walkingDistance = new Rs2WorldPoint(Rs2Player.getWorldLocation()).distanceToPath(contractLocation);
+            if (walkingDistance > 50) {
+                if (Rs2Magic.canCast(Rs2Spells.ARDOUGNE_TELEPORT)) {
+                    log("NPC is too far (%d tiles), teleporting to Ardougne...", walkingDistance);
+                    Rs2Magic.cast(Rs2Spells.ARDOUGNE_TELEPORT);
+                    sleepUntil(() -> !Rs2Player.isAnimating());
+                    sleep(600, 1200);
+                    contractLocation = ContractLocation.MAHOGANY_HOMES_ARDOUGNE.getLocation();
+                } else {
+                    log("NPC is too far (%d tiles), but cannot teleport to Ardougne. Walking anyway...", walkingDistance);
+                }
+            }
             if (contractLocation.distanceTo2D(Rs2Player.getWorldLocation()) > 10) {
                 log("Walking to contract NPC");
                 Rs2Walker.walkWithState(contractLocation, 5);
