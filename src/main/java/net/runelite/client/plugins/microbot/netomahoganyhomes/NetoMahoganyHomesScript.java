@@ -81,7 +81,7 @@ public class NetoMahoganyHomesScript extends Script {
                 if (prepState == PrepState.NOT_STARTED) {
                     Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
                     Rs2Camera.setZoom(238);
-                    Rs2Camera.setPitch(350); // 2800 client pitch / 8
+                    Rs2Camera.setPitch(2800); // 2800 client pitch / 8
                 }
 
                 if (prepState != PrepState.FINISHED) {
