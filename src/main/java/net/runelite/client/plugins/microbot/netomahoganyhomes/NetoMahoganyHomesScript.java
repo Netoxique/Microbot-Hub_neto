@@ -5,6 +5,7 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.*;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
@@ -89,7 +90,6 @@ public class NetoMahoganyHomesScript extends Script {
                     return;
                 }
 
-                checkPlankSack();
                 fix();
                 finish();
                 getNewContract();
@@ -148,23 +148,17 @@ public class NetoMahoganyHomesScript extends Script {
 
     // Tasks section
 
-    private void checkPlankSack() {
-        if(plugin.getConfig().usePlankSack() && plugin.getPlankCount() == -1) {
-            if (Rs2Inventory.contains(ItemID.PLANK_SACK)) {
-                Rs2ItemModel plankSack = Rs2Inventory.get(ItemID.PLANK_SACK);
-                if (plankSack != null) {
-                    Rs2Inventory.interact(plankSack, "Check");
-                    sleep(Rs2Random.randomGaussian(800, 200));
-                }
-            }
-        }
-    }
-
     private int planksInPlankSack() {
-        if (plugin.getPlankCount() == -1) {
+        if (!plugin.getConfig().usePlankSack() || !Rs2Inventory.contains(ItemID.PLANK_SACK)) {
             return 0;
         }
-        return plugin.getPlankCount();
+        return Microbot.getVarbitValue(VarbitID.PLANK_SACK_PLAIN)
+                + Microbot.getVarbitValue(VarbitID.PLANK_SACK_OAK)
+                + Microbot.getVarbitValue(VarbitID.PLANK_SACK_TEAK)
+                + Microbot.getVarbitValue(VarbitID.PLANK_SACK_MAHOGANY)
+                + Microbot.getVarbitValue(VarbitID.PLANK_SACK_CAMPHOR)
+                + Microbot.getVarbitValue(VarbitID.PLANK_SACK_IRONWOOD)
+                + Microbot.getVarbitValue(VarbitID.PLANK_SACK_ROSEWOOD);
     }
 
     private void fix() {
@@ -959,14 +953,6 @@ public class NetoMahoganyHomesScript extends Script {
                 sleepUntil(() -> Rs2Inventory.contains(ItemID.PLANK_SACK), 1800);
             }
         }
-        if (plugin.getConfig().usePlankSack() && plugin.getPlankCount() == -1) {
-            Rs2ItemModel plankSack = Rs2Inventory.get(ItemID.PLANK_SACK);
-            if (plankSack != null) {
-                Rs2Inventory.interact(plankSack, "Check");
-                sleepUntil(() -> plugin.getPlankCount() != -1, 3000);
-            }
-        }
-
         // Handle teleport runes and Rune pouch
         boolean hasRunePouch = Rs2Inventory.hasRunePouch() || Rs2Bank.hasRunePouch();
 
