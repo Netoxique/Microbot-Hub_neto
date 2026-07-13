@@ -483,7 +483,8 @@ public class NetoMahoganyHomesScript extends Script {
         }
 
         activeNoellaDownStairsId = NetoMahoganyHomesNavigation.getNoellaDownStairsForUpStairs(stairsId);
-        return useStairsById(stairsId, 1, true);
+        return useStairsById(stairsId, 1,
+                NetoMahoganyHomesNavigation.shouldWalkToNoellaUpStairs(stairsId));
     }
 
     private boolean useNoellaDownStairs(int expectedPlane) {

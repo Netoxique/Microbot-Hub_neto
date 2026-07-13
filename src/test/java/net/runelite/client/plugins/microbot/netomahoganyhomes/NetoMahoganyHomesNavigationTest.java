@@ -45,6 +45,14 @@ class NetoMahoganyHomesNavigationTest {
     }
 
     @Test
+    void onlySecondNoellaUpStairsBypassesExplicitWalking() {
+        assertTrue(NetoMahoganyHomesNavigation.shouldWalkToNoellaUpStairs(
+                NetoMahoganyHomesNavigation.NOELLA_FIRST_UP_STAIRS));
+        assertFalse(NetoMahoganyHomesNavigation.shouldWalkToNoellaUpStairs(
+                NetoMahoganyHomesNavigation.NOELLA_SECOND_UP_STAIRS));
+    }
+
+    @Test
     void unreachableGeometricallyCloseTargetIsNotReached() {
         assertFalse(NetoMahoganyHomesNavigation.isRepairDestinationReached(
                 1, 1, Integer.MAX_VALUE, 3));

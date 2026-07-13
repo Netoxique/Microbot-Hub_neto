@@ -50,4 +50,8 @@ final class NetoMahoganyHomesNavigation {
         }
         return -1;
     }
+
+    static boolean shouldWalkToNoellaUpStairs(int upStairsId) {
+        return upStairsId != NOELLA_SECOND_UP_STAIRS;
+    }
 }
