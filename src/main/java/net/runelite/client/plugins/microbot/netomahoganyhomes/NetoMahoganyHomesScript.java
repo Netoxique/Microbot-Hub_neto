@@ -8,6 +8,7 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
@@ -71,9 +72,11 @@ public class NetoMahoganyHomesScript extends Script {
     }
 
     private PrepState prepState = PrepState.NOT_STARTED;
+    private int activeNoellaDownStairsId = -1;
 
     public boolean run(NetoMahoganyHomesConfig config) {
         prepState = PrepState.NOT_STARTED;
+        activeNoellaDownStairsId = -1;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!Microbot.isLoggedIn()) return;
@@ -192,11 +195,6 @@ public class NetoMahoganyHomesScript extends Script {
             return;
         }
 
-        if (handleFloorTransition(object.getWorldLocation().getPlane())) {
-            return;
-        }
-
-
         // Find the closest walkable tile around the object
         Rs2WorldPoint objectLocation = Rs2Tile.getNearestWalkableTile(object);
 
@@ -204,15 +202,21 @@ public class NetoMahoganyHomesScript extends Script {
         int pathDistance = objectLocation != null ? objectLocation.distanceToPath(playerLocation.getWorldPoint()) : Integer.MAX_VALUE;
         log("Local Path Distance: " + pathDistance);
 
+        if (handleFloorTransition(object.getWorldLocation(), pathDistance)) {
+            return;
+        }
+
         if (pathDistance > 20) {
             if (openDoorToObject(object, objectLocation)) {
                 return;
             }
             log("Local Path Distance is too far or unreachable, switching to WebWalker.");
 
-            WalkerState state = walkToRepairObject(object.getWorldLocation());
+            WorldPoint walkTarget = objectLocation != null ? objectLocation.getWorldPoint() : object.getWorldLocation();
+
+            WalkerState state = walkToRepairObject(walkTarget);
             if (state == WalkerState.UNREACHABLE) {
-                if (Rs2Player.getWorldLocation().getPlane() != object.getWorldLocation().getPlane()) {
+                if (Rs2Player.getWorldLocation().getPlane() > 0) {
                     tryToUseLadder();
                 } else {
                     log("All pathing failed, trying to interact anyways.");
@@ -233,9 +237,11 @@ public class NetoMahoganyHomesScript extends Script {
 
         while (!future.isDone()) {
             WorldPoint playerLocation = Rs2Player.getWorldLocation();
-            if (playerLocation != null
-                    && playerLocation.getPlane() == destination.getPlane()
-                    && playerLocation.distanceTo2D(destination) <= REPAIR_OBJECT_REACHED_DISTANCE) {
+            int pathDistance = playerLocation != null
+                    ? new Rs2WorldPoint(destination).distanceToPath(playerLocation)
+                    : Integer.MAX_VALUE;
+            if (playerLocation != null && NetoMahoganyHomesNavigation.isRepairDestinationReached(
+                    playerLocation.getPlane(), destination.getPlane(), pathDistance, REPAIR_OBJECT_REACHED_DISTANCE)) {
                 Rs2Walker.setTarget(null, "netomahoganyhomes:repair-object-within-three-tiles");
                 future.cancel(true);
                 return WalkerState.ARRIVED;
@@ -334,6 +340,10 @@ public class NetoMahoganyHomesScript extends Script {
     private void tryToUseLadder() {
         log("Walker missing transport, trying to find ladder manually.");
         int plane = Rs2Player.getWorldLocation().getPlane();
+        if (plugin.getCurrentHome() == Home.NOELLA && plane == 1) {
+            useNoellaDownStairs(0);
+            return;
+        }
         var closestLadder = Microbot.getRs2TileObjectCache().query().withIds(Arrays.stream(plugin.getCurrentHome().getLadders()).mapToInt(Integer::intValue).toArray()).nearest();
         if (closestLadder != null && closestLadder.click()) {
             sleepUntil(() -> Rs2Player.getWorldLocation().getPlane() != plane, 5000);
@@ -354,46 +364,6 @@ public class NetoMahoganyHomesScript extends Script {
         }
     }
 
-    private int getUpLadderId(Home home) {
-        switch (home) {
-            case MARIAH:
-            case LEELA:
-                return 11794;
-            case NORMAN:
-                return 24082;
-            case LARRY:
-                return 24075;
-            case JEFF:
-                return 11789;
-            case BOB:
-                return 11797;
-            case ROSS:
-                return 16683;
-            default:
-                return -1;
-        }
-    }
-
-    private int getDownLadderId(Home home) {
-        switch (home) {
-            case MARIAH:
-            case LEELA:
-                return 11802;
-            case NORMAN:
-                return 24085;
-            case LARRY:
-                return 24076;
-            case JEFF:
-                return 11793;
-            case BOB:
-                return 11799;
-            case ROSS:
-                return 16679;
-            default:
-                return -1;
-        }
-    }
-
     private boolean handleFloorTransition(int targetPlane) {
         Home currentHome = plugin.getCurrentHome();
         if (currentHome == null) {
@@ -405,21 +375,18 @@ public class NetoMahoganyHomesScript extends Script {
             return false;
         }
 
-        int ladderId;
         int expectedPlane;
         if (currentPlane == 0 && targetPlane == 1) {
-            ladderId = getUpLadderId(currentHome);
             expectedPlane = 1;
         } else if (currentPlane == 1 && targetPlane == 0) {
-            ladderId = getDownLadderId(currentHome);
             expectedPlane = 0;
         } else {
             log("Unsupported %s floor transition from plane %d to plane %d.", currentHome.getName(), currentPlane, targetPlane);
             return true;
         }
 
-        if (ladderId == -1) {
-            return false;
+        if (currentHome == Home.NOELLA && currentPlane == 1 && expectedPlane == 0) {
+            return useNoellaDownStairs(expectedPlane);
         }
 
         // Open Mariah's door before going down the ladder
@@ -428,22 +395,159 @@ public class NetoMahoganyHomesScript extends Script {
         }
 
         var ladder = Microbot.getRs2TileObjectCache().query()
-                .withId(ladderId)
+                .withIds(Arrays.stream(currentHome.getLadders()).mapToInt(Integer::intValue).toArray())
                 .where(obj -> obj.getWorldLocation().getPlane() == currentPlane)
                 .nearest();
         if (ladder == null) {
-            log("%s ladder %d was not found on plane %d; retrying.", currentHome.getName(), ladderId, currentPlane);
+            log("%s ladder was not found on plane %d; retrying.", currentHome.getName(), currentPlane);
             return true;
         }
 
-        log("Using %s ladder %d to move from plane %d to plane %d.", currentHome.getName(), ladderId, currentPlane, expectedPlane);
+        return interactWithStairs(ladder, expectedPlane, false);
+    }
+
+    private boolean handleFloorTransition(WorldPoint targetLocation, int localPathDistance) {
+        Home currentHome = plugin.getCurrentHome();
+        if (currentHome == null) {
+            return false;
+        }
+
+        int currentPlane = Rs2Player.getWorldLocation().getPlane();
+        int targetPlane = targetLocation.getPlane();
+
+        if (currentHome == Home.NOELLA) {
+            if (currentPlane == targetPlane) {
+                if (currentPlane == 1 && !NetoMahoganyHomesNavigation.isReachablePath(localPathDistance)) {
+                    log("Noella repair target is in the other upstairs section; returning to the first floor.");
+                    return useNoellaDownStairs(0);
+                }
+                return false;
+            }
+            if (currentPlane == 0 && targetPlane == 1) {
+                return useNoellaUpStairs(targetLocation);
+            }
+            if (currentPlane == 1 && targetPlane == 0) {
+                return useNoellaDownStairs(0);
+            }
+        }
+
+        if (currentPlane == targetPlane) {
+            return false;
+        }
+
+        int expectedPlane = targetPlane;
+
+        // Open Mariah's door before going down the ladder
+        if (currentHome == Home.MARIAH && currentPlane == 1 && expectedPlane == 0) {
+            openMariahDoorIfClosed();
+        }
+
+        var ladders = Microbot.getRs2TileObjectCache().query()
+                .withIds(Arrays.stream(currentHome.getLadders()).mapToInt(Integer::intValue).toArray())
+                .where(obj -> obj.getWorldLocation().getPlane() == currentPlane)
+                .toList();
+        if (ladders.isEmpty()) {
+            log("%s ladder was not found on plane %d; retrying.", currentHome.getName(), currentPlane);
+            return true;
+        }
+
+        var ladder = ladders.stream()
+                .min(Comparator.comparingInt(obj -> obj.getWorldLocation().distanceTo2D(targetLocation)))
+                .orElse(null);
+        if (ladder == null) {
+            return true;
+        }
+
+        boolean walkWhenDistant = !NetoMahoganyHomesNavigation.shouldDirectlyInteractWithStairs(currentHome);
+        return interactWithStairs(ladder, expectedPlane, walkWhenDistant);
+    }
+
+    private boolean useNoellaUpStairs(WorldPoint targetLocation) {
+        Rs2TileObjectModel firstUpperStairs = findStairs(
+                NetoMahoganyHomesNavigation.NOELLA_FIRST_DOWN_STAIRS, 1);
+        Rs2TileObjectModel secondUpperStairs = findStairs(
+                NetoMahoganyHomesNavigation.NOELLA_SECOND_DOWN_STAIRS, 1);
+
+        WorldPoint firstSectionReference = firstUpperStairs != null
+                ? firstUpperStairs.getWorldLocation()
+                : getStairsLocation(NetoMahoganyHomesNavigation.NOELLA_FIRST_UP_STAIRS, 0);
+        WorldPoint secondSectionReference = secondUpperStairs != null
+                ? secondUpperStairs.getWorldLocation()
+                : getStairsLocation(NetoMahoganyHomesNavigation.NOELLA_SECOND_UP_STAIRS, 0);
+
+        int stairsId = NetoMahoganyHomesNavigation.selectNoellaUpStairs(
+                targetLocation, firstSectionReference, secondSectionReference);
+        if (stairsId == -1) {
+            log("Noella upstairs section could not be identified for target %s; retrying.", targetLocation);
+            return true;
+        }
+
+        activeNoellaDownStairsId = NetoMahoganyHomesNavigation.getNoellaDownStairsForUpStairs(stairsId);
+        return useStairsById(stairsId, 1, true);
+    }
+
+    private boolean useNoellaDownStairs(int expectedPlane) {
+        Rs2TileObjectModel stairs = activeNoellaDownStairsId == -1
+                ? null
+                : findStairs(activeNoellaDownStairsId, 1);
+        if (stairs == null) {
+            stairs = Microbot.getRs2TileObjectCache().query()
+                    .withIds(
+                            NetoMahoganyHomesNavigation.NOELLA_FIRST_DOWN_STAIRS,
+                            NetoMahoganyHomesNavigation.NOELLA_SECOND_DOWN_STAIRS)
+                    .where(obj -> obj.getWorldLocation().getPlane() == 1)
+                    .nearest();
+        }
+        if (stairs == null) {
+            log("Noella upstairs stairs were not found in the object cache; retrying.");
+            return true;
+        }
+
+        activeNoellaDownStairsId = stairs.getId();
+        return interactWithStairs(stairs, expectedPlane, false);
+    }
+
+    private boolean useStairsById(int stairsId, int expectedPlane, boolean walkWhenDistant) {
+        int currentPlane = Rs2Player.getWorldLocation().getPlane();
+        Rs2TileObjectModel stairs = findStairs(stairsId, currentPlane);
+        if (stairs == null) {
+            log("%s ladder %d was not found on plane %d; retrying.", plugin.getCurrentHome().getName(), stairsId, currentPlane);
+            return true;
+        }
+        return interactWithStairs(stairs, expectedPlane, walkWhenDistant);
+    }
+
+    private Rs2TileObjectModel findStairs(int stairsId, int plane) {
+        return Microbot.getRs2TileObjectCache().query()
+                .withId(stairsId)
+                .where(obj -> obj.getWorldLocation().getPlane() == plane)
+                .nearest();
+    }
+
+    private WorldPoint getStairsLocation(int stairsId, int plane) {
+        Rs2TileObjectModel stairs = findStairs(stairsId, plane);
+        return stairs != null ? stairs.getWorldLocation() : null;
+    }
+
+    private boolean interactWithStairs(Rs2TileObjectModel ladder, int expectedPlane, boolean walkWhenDistant) {
+        Home currentHome = plugin.getCurrentHome();
+        int currentPlane = Rs2Player.getWorldLocation().getPlane();
+
+        if (walkWhenDistant && ladder.getWorldLocation().distanceTo(Rs2Player.getWorldLocation()) > 4) {
+            log("Walking to %s ladder at %s...", currentHome.getName(), ladder.getWorldLocation());
+            Rs2Walker.walkTo(ladder.getWorldLocation());
+            sleepUntil(() -> ladder.getWorldLocation().distanceTo(Rs2Player.getWorldLocation()) <= 4, 10000);
+            return true;
+        }
+
+        log("Using %s ladder %d to move from plane %d to plane %d.", currentHome.getName(), ladder.getId(), currentPlane, expectedPlane);
         if (!ladder.click()) {
-            log("Failed to interact with %s ladder %d; retrying.", currentHome.getName(), ladderId);
+            log("Failed to interact with %s ladder %d; retrying.", currentHome.getName(), ladder.getId());
             return true;
         }
 
         if (!sleepUntil(() -> Rs2Player.getWorldLocation().getPlane() == expectedPlane, 5000)) {
-            log("%s ladder %d did not reach plane %d; retrying.", currentHome.getName(), ladderId, expectedPlane);
+            log("%s ladder %d did not reach plane %d; retrying.", currentHome.getName(), ladder.getId(), expectedPlane);
         }
         sleep(Rs2Random.randomGaussian(300, 50));
 
