@@ -5,16 +5,6 @@ import net.runelite.client.config.*;
 import java.awt.*;
 
 @ConfigGroup(NetoMahoganyHomesConfig.GROUP_NAME)
-@ConfigInformation("<h2>S-1D Home Raider</h2>\n" +
-        "<h3>BETA PREVIEW 6</h3>\n" +
-        "<p>1. <strong>Start anywhere:</strong> Just make sure to have teleports, saw and a hammer.</p>\n" +
-        "<p>2. <strong>Contracts:</strong> Select your desired contract <em>BEFORE</em> starting.</p>\n" +
-        "<p>3. <strong>Supplies:</strong> Stock up on the correct planks and Steel bars in the bank, the bot will handle resupplying on its own</p>\n" +
-        "<p></p>\n" +
-		"<p><strong>NOTES:</strong></p>\n" +
-		"<p>- If somehow it get's stuck, enable the overlay in the options below and shift+click the option to reset the state.</p>\n" +
-		"<p></p>\n" +
-        "<p><strong>FEEDBACK:</strong> If you encounter any bugs or need assistance, shoot a message in Discord</p>\n" )
 public interface NetoMahoganyHomesConfig extends Config
 {
     String GROUP_NAME = "NetoMahoganyHomesBot";
@@ -24,10 +14,21 @@ public interface NetoMahoganyHomesConfig extends Config
     String HINT_ARROW_KEY = "displayHintArrows";
 
     @ConfigItem(
+            keyName = "instructions",
+            name = "Instructions",
+            description = "Editable instructions. Click reset to restore default.",
+            position = 0
+    )
+    default String instructions()
+    {
+        return "Contracts: Select your desired contract BEFORE starting.";
+    }
+
+    @ConfigItem(
             keyName = WORLD_MAP_KEY,
             name = "Display World Map Icon",
             description = "Configures whether an icon will be displayed on the world map showing where to go for your current contract",
-            position = 0,
+            position = 1,
             hidden = true
     )
     default boolean worldMapIcon()
@@ -40,7 +41,7 @@ public interface NetoMahoganyHomesConfig extends Config
             keyName = TIER_KEY,
             name = "Contract Tier",
             description = "Configures the tier of contract you would like to complete",
-            position = 1
+            position = 2
     )
     default ContractTeirEnum currentTier()
     {
@@ -52,7 +53,7 @@ public interface NetoMahoganyHomesConfig extends Config
             keyName = "useNpcContact",
             name = "Use NPC Contact",
             description = "Configures whether or not to use the NPC Contact spell to start a new contract",
-            position = 2
+            position = 3
     )
     default boolean useNpcContact()
     {
@@ -64,7 +65,7 @@ public interface NetoMahoganyHomesConfig extends Config
             keyName = "usePlankSack",
             name = "Use Plank Sack",
             description = "Configures whether or not to use the Plank Sack to store planks",
-            position = 3
+            position = 4
     )
     default boolean usePlankSack()
     {

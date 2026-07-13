@@ -507,6 +507,14 @@ public class NetoMahoganyHomesScript extends Script {
                         sleepUntil(() -> !Rs2Dialogue.isInDialogue(), Rs2Dialogue::clickContinue, 6000, 300);
                         sleep(Rs2Random.randomGaussian(800, 100));
 
+                        if (Rs2Player.getWorldLocation().getPlane() == 1 && Home.JESS.getArea().contains2D(Rs2Player.getWorldLocation())) {
+                            log("Climbing down stairs at Jess's home...");
+                            var stairs = Microbot.getRs2TileObjectCache().query().withId(16685).nearest();
+                            if (stairs != null && stairs.click()) {
+                                sleepUntil(() -> Rs2Player.getWorldLocation().getPlane() == 0, 5000);
+                                sleep(Rs2Random.randomGaussian(600, 100));
+                            }
+                        }
                     }
                 } else {
                     log("Local NPC path distance is too far, switching to WebWalker.");
