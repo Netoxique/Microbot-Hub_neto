@@ -8,6 +8,9 @@ import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.shortestpath.ShortestPathPlugin;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
+import net.runelite.client.plugins.microbot.util.camera.Rs2Camera;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.coords.Rs2WorldPoint;
@@ -74,6 +77,12 @@ public class NetoMahoganyHomesScript extends Script {
             try {
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
+
+                if (prepState == PrepState.NOT_STARTED) {
+                    Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+                    Rs2Camera.setZoom(238);
+                    Rs2Camera.setPitch(350); // 2800 client pitch / 8
+                }
 
                 if (prepState != PrepState.FINISHED) {
                     executePrep();
@@ -189,7 +198,7 @@ public class NetoMahoganyHomesScript extends Script {
             return;
         }
 
-        if (handleHosidiusFloorTransition(object.getWorldLocation().getPlane())) {
+        if (handleFloorTransition(object.getWorldLocation().getPlane())) {
             return;
         }
 
@@ -203,11 +212,6 @@ public class NetoMahoganyHomesScript extends Script {
 
         if (pathDistance > 20) {
             if (openDoorToObject(object, objectLocation)) {
-                return;
-            }
-            if (plugin.getCurrentHome().equals(Home.ROSS)) {
-                log("Ross home, trying to use ladder.");
-                tryToUseLadder();
                 return;
             }
             log("Local Path Distance is too far or unreachable, switching to WebWalker.");
@@ -356,9 +360,49 @@ public class NetoMahoganyHomesScript extends Script {
         }
     }
 
-    private boolean handleHosidiusFloorTransition(int targetPlane) {
+    private int getUpLadderId(Home home) {
+        switch (home) {
+            case MARIAH:
+            case LEELA:
+                return 11794;
+            case NORMAN:
+                return 24082;
+            case LARRY:
+                return 24075;
+            case JEFF:
+                return 11789;
+            case BOB:
+                return 11797;
+            case ROSS:
+                return 16683;
+            default:
+                return -1;
+        }
+    }
+
+    private int getDownLadderId(Home home) {
+        switch (home) {
+            case MARIAH:
+            case LEELA:
+                return 11802;
+            case NORMAN:
+                return 24085;
+            case LARRY:
+                return 24076;
+            case JEFF:
+                return 11793;
+            case BOB:
+                return 11799;
+            case ROSS:
+                return 16679;
+            default:
+                return -1;
+        }
+    }
+
+    private boolean handleFloorTransition(int targetPlane) {
         Home currentHome = plugin.getCurrentHome();
-        if (currentHome != Home.MARIAH && currentHome != Home.LEELA) {
+        if (currentHome == null) {
             return false;
         }
 
@@ -370,14 +414,18 @@ public class NetoMahoganyHomesScript extends Script {
         int ladderId;
         int expectedPlane;
         if (currentPlane == 0 && targetPlane == 1) {
-            ladderId = HOSIDIUS_UP_LADDER_ID;
+            ladderId = getUpLadderId(currentHome);
             expectedPlane = 1;
         } else if (currentPlane == 1 && targetPlane == 0) {
-            ladderId = HOSIDIUS_DOWN_LADDER_ID;
+            ladderId = getDownLadderId(currentHome);
             expectedPlane = 0;
         } else {
             log("Unsupported %s floor transition from plane %d to plane %d.", currentHome.getName(), currentPlane, targetPlane);
             return true;
+        }
+
+        if (ladderId == -1) {
+            return false;
         }
 
         // Open Mariah's door before going down the ladder
@@ -428,7 +476,7 @@ public class NetoMahoganyHomesScript extends Script {
                     }
                 }
             }
-            if (handleHosidiusFloorTransition(0)) {
+            if (handleFloorTransition(0)) {
                 return;
             }
             var npc = Microbot.getRs2NpcCache().query().withId(plugin.getCurrentHome().getNpcId()).nearest();

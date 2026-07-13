@@ -15,7 +15,7 @@ enum Home
     JESS(new WorldArea(2611, 3290, 14, 7, 0), "Upstairs of the building south of the church in East Ardougne",
             NpcID.JESS, new WorldPoint(2621, 3292, 0), RequiredMaterialsByTier.JESS, HotspotObjects.JESS, 17026, 16685),
     NOELLA(new WorldArea(2652, 3317, 15, 8, 0), "North of East Ardougne market",
-            NpcID.NOELLA, new WorldPoint(2659, 3322, 0), RequiredMaterialsByTier.NOELLA, HotspotObjects.NOELLA, 17026, 16685, 15645, 15648),
+            NpcID.NOELLA, new WorldPoint(2657, 3321, 0), RequiredMaterialsByTier.NOELLA, HotspotObjects.NOELLA, 17026, 16685, 15645, 15648),
     ROSS(new WorldArea(2609, 3313, 11, 9, 0), "North of the church in East Ardougne",
             NpcID.ROSS, new WorldPoint(2613, 3316, 0), RequiredMaterialsByTier.ROSS, HotspotObjects.ROSS, 16683, 16679),
 
@@ -39,9 +39,9 @@ enum Home
     BOB(new WorldArea(3234, 3482, 10, 10, 0), "North-east Varrock, opposite the church",
             NpcID.BOB_10414, new WorldPoint(3238, 3486, 0), RequiredMaterialsByTier.BOB, HotspotObjects.BOB, 11797, 11799),
     JEFF(new WorldArea(3235, 3445, 10, 12, 0), "Middle of Varrock, west of the museum",
-            NpcID.JEFF_10415, new WorldPoint(3239, 3450, 0), RequiredMaterialsByTier.JEFF, HotspotObjects.JEFF, 11789, 11793),
+            NpcID.JEFF_10415, new WorldPoint(3240, 3451, 0), RequiredMaterialsByTier.JEFF, HotspotObjects.JEFF, 11789, 11793),
     SARAH(new WorldArea(3232, 3381, 8, 7, 0), "Along the south wall of Varrock",
-            NpcID.SARAH_10416, new WorldPoint(3235, 3384, 0), RequiredMaterialsByTier.SARAH, HotspotObjects.SARAH);
+            NpcID.SARAH_10416, new WorldPoint(3235, 3385, 0), RequiredMaterialsByTier.SARAH, HotspotObjects.SARAH);
 
 
     private final WorldArea area;
