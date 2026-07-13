@@ -19,13 +19,15 @@ import java.time.Instant;
         description = "A plugin to fish karambwans",
         tags = {"blood", "rc", "rune", "wrath"},
         authors = {"Neoxic"},
-        version = "1.2.7",
+        version = NetoKaramPlugin.version,
         minClientVersion = "2.0.0",
         enabledByDefault = false
 //        isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class NetoKaramPlugin extends Plugin {
+    public static final String version = "1.2.9";
+
     @Getter
     private Instant startTime;
 

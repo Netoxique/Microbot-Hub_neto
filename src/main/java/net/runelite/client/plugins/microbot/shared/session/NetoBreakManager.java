@@ -1,8 +1,10 @@
 package net.runelite.client.plugins.microbot.shared.session;
 
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
-import net.runelite.client.plugins.microbot.util.security.Login;
+import net.runelite.client.plugins.microbot.util.security.LoginManager;
+import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.ui.ClientUI;
 
 import javax.inject.Inject;
@@ -18,6 +20,7 @@ public class NetoBreakManager {
     private static final int LOGIN_TIMEOUT_MS = 15_000;
     private static final int LOGOUT_RETRY_DELAY_MS = 10_000;
     private static final int LOGIN_RETRY_DELAY_MS = 10_000;
+    private static final int GAMEPLAY_READY_STABILIZATION_MS = 1_000;
 
     private final Random random = new Random();
 
@@ -31,6 +34,7 @@ public class NetoBreakManager {
     private int breakWorld = -1;
     private int totalBreaks = 0;
     private String originalTitle = "";
+    private long gameplayReadySinceMillis = 0;
 
     @Inject
     public NetoBreakManager() {
@@ -52,12 +56,12 @@ public class NetoBreakManager {
         breakActive = false;
         breakWorld = -1;
         totalBreaks = 0;
+        gameplayReadySinceMillis = 0;
         restoreTitle();
     }
 
     public boolean updateBreakState() {
         long now = System.currentTimeMillis();
-        boolean isActive;
         long endsAt;
         long nextLogout;
         long nextLogin;
@@ -68,7 +72,6 @@ public class NetoBreakManager {
                 ensurePlayTimer();
                 return false;
             }
-            isActive = breakActive;
             endsAt = breakEndsAtMillis;
             nextLogout = nextLogoutAttemptAtMillis;
             nextLogin = nextLoginAttemptAtMillis;
@@ -85,9 +88,11 @@ public class NetoBreakManager {
         }
 
         if (Microbot.isLoggedIn()) {
-            log("break window ended while still logged in. Scheduling next playtime.");
-            finishBreak();
-            return false;
+            if (isGameplayReady()) {
+                finishBreak();
+                return false;
+            }
+            return true;
         }
 
         if (now >= nextLogin) {
@@ -95,11 +100,8 @@ public class NetoBreakManager {
                 nextLoginAttemptAtMillis = now + LOGIN_RETRY_DELAY_MS;
             }
             log("break complete, logging back into world " + world + ".");
-            new Login(world);
-            if (sleepUntil(() -> {
-                Microbot.getBlockingEventManager().shouldBlockAndProcess();
-                return Microbot.isLoggedIn();
-            }, LOGIN_TIMEOUT_MS)) {
+            LoginManager.login(world);
+            if (sleepUntil(this::isGameplayReady, LOGIN_TIMEOUT_MS)) {
                 finishBreak();
             }
         }
@@ -175,8 +177,35 @@ public class NetoBreakManager {
             nextLogoutAttemptAtMillis = 0;
             nextLoginAttemptAtMillis = 0;
             scheduleNextPlayTimer();
+            gameplayReadySinceMillis = 0;
         }
         restoreTitle();
+    }
+
+    private boolean isGameplayReady() {
+        boolean blockingEventActive = Microbot.getBlockingEventManager().shouldBlockAndProcess();
+        boolean loggedIn = Microbot.isLoggedIn();
+        boolean welcomeScreenVisible = loggedIn && Rs2Widget.isWidgetVisible(InterfaceID.WelcomeScreen.PLAY);
+        boolean playerReady = loggedIn && !welcomeScreenVisible && Rs2Player.getWorldLocation() != null;
+        boolean readyNow = isGameplayReady(loggedIn, welcomeScreenVisible, blockingEventActive, playerReady);
+        long now = System.currentTimeMillis();
+
+        synchronized (this) {
+            if (!readyNow) {
+                gameplayReadySinceMillis = 0;
+                return false;
+            }
+            if (gameplayReadySinceMillis == 0) {
+                gameplayReadySinceMillis = now;
+                return false;
+            }
+            return now - gameplayReadySinceMillis >= GAMEPLAY_READY_STABILIZATION_MS;
+        }
+    }
+
+    static boolean isGameplayReady(boolean loggedIn, boolean welcomeScreenVisible,
+                                   boolean blockingEventActive, boolean playerReady) {
+        return loggedIn && !welcomeScreenVisible && !blockingEventActive && playerReady;
     }
 
     private void requestLogout() {

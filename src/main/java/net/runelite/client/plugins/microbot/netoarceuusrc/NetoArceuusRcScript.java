@@ -190,18 +190,21 @@ public class NetoArceuusRcScript extends Script {
                 myLocation.getX(), myLocation.getY(), myLocation.getPlane(),
                 dst.getX(), dst.getY(), dst.getPlane());
 
-        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+        try {
+            var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
 
-        while (!future.isDone()) {
-            if (Rs2Player.getWorldLocation().distanceTo(dst) <= REACHED_DISTANCE) {
-                Rs2Walker.setTarget(null);
-                future.cancel(true);
-                break;
+            while (!future.isDone()) {
+                WorldPoint currentLocation = Rs2Player.getWorldLocation();
+                if (currentLocation != null && currentLocation.distanceTo(dst) <= REACHED_DISTANCE) {
+                    Rs2Walker.setTarget(null);
+                    future.cancel(true);
+                    break;
+                }
+                sleep(100);
             }
-            sleep(100);
+        } finally {
+            BreakHandlerScript.setLockState(false);
         }
-
-        BreakHandlerScript.setLockState(false);
     }
 
     private void executeTask() {

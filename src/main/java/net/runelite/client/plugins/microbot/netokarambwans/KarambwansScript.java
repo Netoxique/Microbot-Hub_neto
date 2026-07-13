@@ -46,6 +46,9 @@ public class KarambwansScript extends Script {
     private NetoWorldHopManager worldHopManager;
     @Inject
     private NetoRuntimeDisable runtimeDisable;
+    private static final int CAMERA_PITCH = 512;
+    private static final int CAMERA_YAW = 0;
+    private static final int CAMERA_ZOOM = 230;
     private static final int[] CONSTRUCTION_CAPE_IDS = {9789, 9790};
     private static final int[] CRAFTING_CAPE_IDS = {9780, 9781};
     private static final Map<Runes, Integer> RUNE_POUCH_RUNES = Map.of(
@@ -55,20 +58,16 @@ public class KarambwansScript extends Script {
     );
     private final WorldPoint fishingPoint = new WorldPoint(2899, 3118, 0);
     private final WorldPoint baitPoint = new WorldPoint(2804, 3006, 0);
+    private boolean cameraSet = false;
 
 
     public boolean run(KarambwansConfig config) {
+        cameraSet = false;
         Microbot.enableAutoRunOn = true;
 
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyRunecraftingSetup();
         Rs2Antiban.setActivity(Activity.GENERAL_FISHING);
-
-        Rs2Camera.setZoom(230);
-        Rs2Camera.setPitch(512);
-        Rs2Camera.setYaw(0);
-
-        sleepGaussian(600, 200);
 
         breakManager.configure(config, "Neto Karambwans");
         worldHopManager.configure(config, "Neto Karambwans");
@@ -87,6 +86,11 @@ public class KarambwansScript extends Script {
                     return;
                 }
                 if (!super.run()) return;
+
+                if (!cameraSet) {
+                    setCameraPosition(CAMERA_PITCH, CAMERA_YAW, CAMERA_ZOOM);
+                    cameraSet = true;
+                }
 
                 log.info("[KarambwansDebug] Main Loop - Current botStatus: {}", botStatus);
 
@@ -113,8 +117,9 @@ public class KarambwansScript extends Script {
                         botStatus = states.WALKING_TO_FISH;
                         break;
                     case WALKING_TO_FISH:
-                        walkToFish();
-                        botStatus = states.FISHING;
+                        if (walkToFish()) {
+                            botStatus = states.FISHING;
+                        }
                         break;
                     case GETTING_BAIT:
                         setupBaitFishing();
@@ -129,6 +134,14 @@ public class KarambwansScript extends Script {
             }
         }, 0, 600, TimeUnit.MILLISECONDS);
         return true;
+    }
+
+    private void setCameraPosition(int pitch, int yaw, int zoom) {
+        Microbot.getClientThread().invokeLater(() -> {
+            Microbot.getClient().setCameraPitchTarget(pitch);
+            Microbot.getClient().setCameraYawTarget(yaw);
+        });
+        Rs2Camera.setZoom(zoom);
     }
 
     @Override
@@ -307,21 +320,27 @@ public class KarambwansScript extends Script {
         return false;
     }
 
-    private void walkTo(WorldPoint dst, int distance) {
+    private boolean walkTo(WorldPoint dst, int distance) {
         WorldPoint myLocation = Rs2Player.getWorldLocation();
         if (myLocation == null) {
-            return;
+            return false;
+        }
+        if (myLocation.distanceTo(dst) <= distance) {
+            return true;
         }
         var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
 
         while (!future.isDone()) {
-            if (Rs2Player.getWorldLocation().distanceTo(dst) <= distance) {
+            WorldPoint currentLocation = Rs2Player.getWorldLocation();
+            if (currentLocation != null && currentLocation.distanceTo(dst) <= distance) {
                 Rs2Walker.setTarget(null);
                 future.cancel(true);
-                break;
+                return true;
             }
             sleep(100);
         }
+        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+        return currentLocation != null && currentLocation.distanceTo(dst) <= distance;
     }
 
     private void useBank() {
@@ -350,8 +369,8 @@ public class KarambwansScript extends Script {
         );
     }
 
-    private void interactWithFishingSpot() {
-        Rs2Npc.interact(NpcID._0_45_48_KARAMBWAN, "Fish");
+    private boolean interactWithFishingSpot() {
+        return Rs2Npc.interact(NpcID._0_45_48_KARAMBWAN, "Fish");
     }
 
     private void setupBaitFishing() {
@@ -385,13 +404,22 @@ public class KarambwansScript extends Script {
         }
     }
 
-    private void walkToFish() {
+    private boolean walkToFish() {
         if (Rs2Bank.isOpen()) {
             Rs2Bank.closeBank(); sleepGaussian(600,200);
         }
-        walkTo(fishingPoint, 10);
-        interactWithFishingSpot();
-        sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.isFull(), 3000);
+        boolean reachedFishingArea = walkTo(fishingPoint, 10);
+        if (!reachedFishingArea) {
+            log.warn("[KarambwansDebug] Failed to reach fishing area; retrying walking state.");
+            return false;
+        }
+        boolean fishingInteractionStarted = interactWithFishingSpot();
+        boolean fishingStarted = sleepUntil(() -> Rs2Player.isAnimating() || Rs2Inventory.isFull(), 3000);
+        return shouldAdvanceToFishing(reachedFishingArea, fishingInteractionStarted || fishingStarted);
+    }
+
+    static boolean shouldAdvanceToFishing(boolean reachedFishingArea, boolean fishingStarted) {
+        return reachedFishingArea || fishingStarted;
     }
 
     private void equipConstructionCape() {
