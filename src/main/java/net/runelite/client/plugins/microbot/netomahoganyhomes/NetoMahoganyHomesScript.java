@@ -100,7 +100,7 @@ public class NetoMahoganyHomesScript extends Script {
             } catch (Exception ex) {
                 System.out.println(ex.getMessage());
             }
-        }, 0, 600, TimeUnit.MILLISECONDS);
+        }, 0, 50, TimeUnit.MILLISECONDS);
         return true;
     }
 
@@ -268,7 +268,7 @@ public class NetoMahoganyHomesScript extends Script {
                 String newAction = Objects.requireNonNull(Hotspot.getByObjectId(object.getId())).getRequiredAction();
                 return !newAction.equals(action);
             }, 5000);
-            sleep(200, 600);
+            sleep(Rs2Random.randomGaussian(300, 50));
         }
 
     }
@@ -343,7 +343,7 @@ public class NetoMahoganyHomesScript extends Script {
         var closestLadder = Microbot.getRs2TileObjectCache().query().withIds(Arrays.stream(plugin.getCurrentHome().getLadders()).mapToInt(Integer::intValue).toArray()).nearest();
         if (closestLadder != null && closestLadder.click()) {
             sleepUntil(() -> Rs2Player.getWorldLocation().getPlane() != plane, 5000);
-            sleep(200, 600);
+            sleep(Rs2Random.randomGaussian(300, 50));
         }
     }
 
@@ -451,7 +451,7 @@ public class NetoMahoganyHomesScript extends Script {
         if (!sleepUntil(() -> Rs2Player.getWorldLocation().getPlane() == expectedPlane, 5000)) {
             log("%s ladder %d did not reach plane %d; retrying.", currentHome.getName(), ladderId, expectedPlane);
         }
-        sleep(200, 600);
+        sleep(Rs2Random.randomGaussian(300, 50));
 
         // Open Mariah's door after climbing up the ladder to plane 1
         if (currentHome == Home.MARIAH && Rs2Player.getWorldLocation().getPlane() == 1) {
@@ -476,12 +476,13 @@ public class NetoMahoganyHomesScript extends Script {
                     }
                 }
             }
-            if (handleFloorTransition(0)) {
+            int npcPlane = (plugin.getCurrentHome() == Home.NORMAN || plugin.getCurrentHome() == Home.JESS) ? 1 : 0;
+            if (handleFloorTransition(npcPlane)) {
                 return;
             }
             var npc = Microbot.getRs2NpcCache().query().withId(plugin.getCurrentHome().getNpcId()).nearest();
-            if (npc == null && Rs2Player.getWorldLocation().getPlane() > 0) {
-                log("We are on the wrong floor, Trying to find ladder to go down");
+            if (npc == null && Rs2Player.getWorldLocation().getPlane() != npcPlane) {
+                log("We are on the wrong floor, Trying to find ladder to change floors");
                 int playerPlane = Rs2Player.getWorldLocation().getPlane();
 
                 var ladders = Microbot.getRs2TileObjectCache().query()
@@ -494,7 +495,7 @@ public class NetoMahoganyHomesScript extends Script {
                         .orElse(null);
                     if (closestLadder2 != null && closestLadder2.click()) {
                             sleepUntil(
-                                    () -> Rs2Player.getWorldLocation().getPlane() == 0
+                                    () -> Rs2Player.getWorldLocation().getPlane() == npcPlane
                                     , 5000);
                             return;
                     }
@@ -510,7 +511,7 @@ public class NetoMahoganyHomesScript extends Script {
                             plugin.setCurrentHome(null);
                         }
                         sleepUntil(() -> !Rs2Dialogue.isInDialogue(), Rs2Dialogue::clickContinue, 6000, 300);
-                        sleep(600, 1200);
+                        sleep(Rs2Random.randomGaussian(800, 100));
 
                     }
                 } else {
@@ -569,7 +570,7 @@ public class NetoMahoganyHomesScript extends Script {
         sleepUntil(Rs2Dialogue::hasContinue, 5000);
         sleep(400, 800);
         sleepUntil(() -> !Rs2Dialogue.isInDialogue(), Rs2Dialogue::clickContinue, 6000, 300);
-        sleep(1200, 2200);
+        sleep(Rs2Random.randomGaussian(800, 100));
     }
 
     // Bank if we need to
