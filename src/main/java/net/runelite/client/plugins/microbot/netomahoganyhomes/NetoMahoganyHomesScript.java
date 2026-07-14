@@ -73,14 +73,20 @@ public class NetoMahoganyHomesScript extends Script {
 
     private PrepState prepState = PrepState.NOT_STARTED;
     private int activeNoellaDownStairsId = -1;
+    private Home lastHome = null;
 
     public boolean run(NetoMahoganyHomesConfig config) {
         prepState = PrepState.NOT_STARTED;
         activeNoellaDownStairsId = -1;
+        lastHome = null;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!Microbot.isLoggedIn()) return;
                 if (!super.run()) return;
+
+                if (plugin.getCurrentHome() != null) {
+                    lastHome = plugin.getCurrentHome();
+                }
 
                 if (prepState == PrepState.NOT_STARTED) {
                     Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
@@ -633,6 +639,15 @@ public class NetoMahoganyHomesScript extends Script {
     // Get new contract
     private void getNewContract() {
         if (plugin.getCurrentHome() == null) {
+            if (Rs2Player.getWorldLocation().getPlane() == 1 && Home.JESS.getArea().contains2D(Rs2Player.getWorldLocation())) {
+                log("Climbing down stairs at Jess's home...");
+                var stairs = Microbot.getRs2TileObjectCache().query().withId(16685).nearest();
+                if (stairs != null && stairs.click()) {
+                    sleepUntil(() -> Rs2Player.getWorldLocation().getPlane() == 0, 5000);
+                    sleep(Rs2Random.randomGaussian(600, 100));
+                }
+                return;
+            }
             if(plugin.getConfig().useNpcContact()){
                 if (Rs2Magic.npcContact("amy")) {
                     handleContractDialogue();
@@ -640,16 +655,21 @@ public class NetoMahoganyHomesScript extends Script {
                 return;
             }
             WorldPoint contractLocation = getClosestContractLocation();
-            int walkingDistance = new Rs2WorldPoint(Rs2Player.getWorldLocation()).distanceToPath(contractLocation);
-            if (walkingDistance > 50) {
-                if (Rs2Magic.canCast(Rs2Spells.ARDOUGNE_TELEPORT)) {
-                    log("NPC is too far (%d tiles), teleporting to Ardougne...", walkingDistance);
-                    Rs2Magic.cast(Rs2Spells.ARDOUGNE_TELEPORT);
-                    sleepUntil(() -> !Rs2Player.isAnimating());
-                    sleep(600, 1200);
-                    contractLocation = ContractLocation.MAHOGANY_HOMES_ARDOUGNE.getLocation();
+            boolean shouldWalk = shouldWalkToNewContract(lastHome);
+            if (!shouldWalk) {
+                int distanceToArdougne = ContractLocation.MAHOGANY_HOMES_ARDOUGNE.getLocation().distanceTo2D(Rs2Player.getWorldLocation());
+                if (distanceToArdougne > 50) {
+                    if (Rs2Magic.canCast(Rs2Spells.ARDOUGNE_TELEPORT)) {
+                        log("Teleporting to Ardougne for new contract...");
+                        Rs2Magic.cast(Rs2Spells.ARDOUGNE_TELEPORT);
+                        sleepUntil(() -> !Rs2Player.isAnimating());
+                        sleep(600, 1200);
+                        contractLocation = ContractLocation.MAHOGANY_HOMES_ARDOUGNE.getLocation();
+                    } else {
+                        log("Cannot teleport to Ardougne. Walking anyway...");
+                    }
                 } else {
-                    log("NPC is too far (%d tiles), but cannot teleport to Ardougne. Walking anyway...", walkingDistance);
+                    contractLocation = ContractLocation.MAHOGANY_HOMES_ARDOUGNE.getLocation();
                 }
             }
             if (contractLocation.distanceTo2D(Rs2Player.getWorldLocation()) > 10) {
@@ -677,6 +697,18 @@ public class NetoMahoganyHomesScript extends Script {
 
         }
 
+    }
+
+    private boolean shouldWalkToNewContract(Home lastCompleted) {
+        if (lastCompleted == null) {
+            WorldPoint contractLocation = getClosestContractLocation();
+            return contractLocation != null && contractLocation.distanceTo2D(Rs2Player.getWorldLocation()) <= 50;
+        }
+        return lastCompleted == Home.NOELLA
+                || lastCompleted == Home.JESS
+                || lastCompleted == Home.MARIAH
+                || lastCompleted == Home.BOB
+                || lastCompleted == Home.JEFF;
     }
 
     public void handleContractDialogue() {
