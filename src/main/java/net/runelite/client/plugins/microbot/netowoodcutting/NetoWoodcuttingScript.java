@@ -3,6 +3,7 @@ package net.runelite.client.plugins.microbot.netowoodcutting;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.AnimationID;
 import net.runelite.api.GameObject;
+import net.runelite.api.ChatMessageType;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
@@ -12,6 +13,7 @@ import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
@@ -116,8 +118,10 @@ public class NetoWoodcuttingScript extends Script {
     public boolean run(NetoWoodcuttingConfig config) {
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyWoodcuttingSetup();
-        Rs2AntibanSettings.dynamicActivity = true;
-        Rs2AntibanSettings.dynamicIntensity = true;
+        Rs2AntibanSettings.dynamicActivity = false;
+        Rs2AntibanSettings.dynamicIntensity = false;
+        Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+        woodcuttingScriptState = WoodcuttingScriptState.PREP;
         activeTree = config.TREE();
         activeLocation = null;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
@@ -257,7 +261,9 @@ public class NetoWoodcuttingScript extends Script {
         }
 
         if (!getActiveTree().hasRequiredLevel()) {
-            Microbot.showMessage("You do not have the required woodcutting level to cut this tree. " + Rs2Player.getRealSkillLevel(Skill.WOODCUTTING));
+            Microbot.getClientThread().invoke(() -> {
+                Microbot.getClient().addChatMessage(ChatMessageType.ENGINE, "", "<col=ff0000>You do not have the required woodcutting level to cut this tree. " + Rs2Player.getRealSkillLevel(Skill.WOODCUTTING) + "</col>", "");
+            });
             shutdown();
             return true;
         }
