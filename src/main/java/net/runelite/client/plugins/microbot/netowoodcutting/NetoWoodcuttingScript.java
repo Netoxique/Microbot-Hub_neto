@@ -241,10 +241,6 @@ public class NetoWoodcuttingScript extends Script {
         }
 
         if (woodcuttingScriptState != WoodcuttingScriptState.PREP) {
-            if (initialPlayerLocation == null) {
-                initialPlayerLocation = Rs2Player.getWorldLocation();
-            }
-
             if (returnPoint == null) {
                 returnPoint = Rs2Player.getWorldLocation();
             }
@@ -679,6 +675,27 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private void handlePrep(NetoWoodcuttingConfig config) {
+        WorldPoint prifTarget = new WorldPoint(3294, 6060, 0);
+        WorldPoint guildTarget = new WorldPoint(1588, 3483, 0);
+        WorldPoint playerLoc = Rs2Player.getWorldLocation();
+
+        if (playerLoc != null) {
+            if (playerLoc.distanceTo(prifTarget) <= 4) {
+                Microbot.log("Prep State: Already near Prifddinas destination. Completing prep...");
+                initialPlayerLocation = playerLoc;
+                returnPoint = playerLoc;
+                woodcuttingScriptState = config.firemakeOnly() ? WoodcuttingScriptState.FIREMAKING : WoodcuttingScriptState.WOODCUTTING;
+                return;
+            }
+            if (playerLoc.distanceTo(guildTarget) <= 4) {
+                Microbot.log("Prep State: Already near Woodcutting Guild destination. Completing prep...");
+                initialPlayerLocation = playerLoc;
+                returnPoint = playerLoc;
+                woodcuttingScriptState = config.firemakeOnly() ? WoodcuttingScriptState.FIREMAKING : WoodcuttingScriptState.WOODCUTTING;
+                return;
+            }
+        }
+
         Microbot.log("Prep State: Walking to nearest bank...");
         BankLocation nearestBank = Rs2Bank.getNearestBank();
         boolean isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
@@ -779,6 +796,7 @@ public class NetoWoodcuttingScript extends Script {
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
 
+        boolean reached = false;
         if (isPrifddinas) {
             if (Rs2Inventory.hasItem(59409)) {
                 Microbot.log("Prep State: Teleporting to Prifddinas...");
@@ -792,7 +810,7 @@ public class NetoWoodcuttingScript extends Script {
             WorldPoint targetPoint = new WorldPoint(3294, 6060, 0);
             Microbot.log("Prep State: Walking to Prifddinas destination...");
             Rs2Walker.walkTo(targetPoint);
-            sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(targetPoint) <= 4, 60000);
+            reached = sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(targetPoint) <= 4, 60000);
         } else {
             if (teleportItemName != null && Rs2Inventory.hasItem(teleportItemName)) {
                 Microbot.log("Prep State: Teleporting to Woodcutting Guild...");
@@ -806,18 +824,22 @@ public class NetoWoodcuttingScript extends Script {
             WorldPoint targetPoint = new WorldPoint(1588, 3483, 0);
             Microbot.log("Prep State: Walking to Woodcutting Guild destination...");
             Rs2Walker.walkTo(targetPoint);
-            sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(targetPoint) <= 4, 60000);
+            reached = sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(targetPoint) <= 4, 60000);
         }
 
-        initialPlayerLocation = Rs2Player.getWorldLocation();
-        returnPoint = Rs2Player.getWorldLocation();
+        if (reached) {
+            initialPlayerLocation = Rs2Player.getWorldLocation();
+            returnPoint = Rs2Player.getWorldLocation();
 
-        if (config.firemakeOnly()) {
-            woodcuttingScriptState = WoodcuttingScriptState.FIREMAKING;
+            if (config.firemakeOnly()) {
+                woodcuttingScriptState = WoodcuttingScriptState.FIREMAKING;
+            } else {
+                woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+            }
+            Microbot.log("Prep State: Preparation complete! Next state: " + woodcuttingScriptState);
         } else {
-            woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+            Microbot.log("Prep State: Failed to reach the destination target.");
         }
-        Microbot.log("Prep State: Preparation complete! Next state: " + woodcuttingScriptState);
     }
 
     @Override
