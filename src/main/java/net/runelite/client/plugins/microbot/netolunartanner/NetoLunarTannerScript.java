@@ -524,8 +524,16 @@ public class NetoLunarTannerScript extends Script {
         sleep(2000, 3000);
 
         Microbot.status = "Lunar Switch: Walking to bank";
-        if (!Rs2Bank.walkToBankAndUseBank()) {
-            return false;
+        if (hasSkillsNecklace) {
+            if (!Rs2Bank.openBank()) {
+                if (!Rs2Bank.walkToBankAndUseBank()) {
+                    return false;
+                }
+            }
+        } else {
+            if (!Rs2Bank.walkToBankAndUseBank()) {
+                return false;
+            }
         }
 
         return true;
