@@ -30,6 +30,8 @@ import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
 import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
+import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 
 import java.util.*;
 import java.util.Arrays;
@@ -74,11 +76,13 @@ public class NetoMahoganyHomesScript extends Script {
     private PrepState prepState = PrepState.NOT_STARTED;
     private int activeNoellaDownStairsId = -1;
     private Home lastHome = null;
+    private Home teleportCompletedForHome = null;
 
     public boolean run(NetoMahoganyHomesConfig config) {
         prepState = PrepState.NOT_STARTED;
         activeNoellaDownStairsId = -1;
         lastHome = null;
+        teleportCompletedForHome = null;
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (!Microbot.isLoggedIn()) return;
@@ -86,6 +90,8 @@ public class NetoMahoganyHomesScript extends Script {
 
                 if (plugin.getCurrentHome() != null) {
                     lastHome = plugin.getCurrentHome();
+                } else {
+                    teleportCompletedForHome = null;
                 }
 
                 if (prepState == PrepState.NOT_STARTED) {
@@ -614,6 +620,7 @@ public class NetoMahoganyHomesScript extends Script {
                         sleepUntil(Rs2Dialogue::hasContinue, 10000);
                         if (Rs2Dialogue.hasDialogueText("Please excuse me, I'm rather busy.")) {
                             plugin.setCurrentHome(null);
+                            teleportCompletedForHome = null;
                         }
                         sleepUntil(() -> !Rs2Dialogue.isInDialogue(), Rs2Dialogue::clickContinue, 6000, 300);
                         sleep(Rs2Random.randomGaussian(800, 100));
@@ -858,6 +865,56 @@ public class NetoMahoganyHomesScript extends Script {
         return home == Home.BOB || home == Home.JEFF || home == Home.SARAH;
     }
 
+    private boolean isArdougneHome(Home home) {
+        return home == Home.JESS || home == Home.NOELLA || home == Home.ROSS;
+    }
+
+    private boolean isFaladorHome(Home home) {
+        return home == Home.LARRY || home == Home.NORMAN || home == Home.TAU;
+    }
+
+    private boolean breakTeleportTablet(String tabletName, Home currentHome) {
+        WorldPoint initialLocation = Rs2Player.getWorldLocation();
+        if (initialLocation == null || !Rs2Inventory.interact(tabletName, "Break")) {
+            log("Failed to break %s tablet; retrying.", tabletName);
+            return false;
+        }
+
+        boolean locationChanged = sleepUntil(() -> {
+            WorldPoint location = Rs2Player.getWorldLocation();
+            return location != null && location.distanceTo2D(initialLocation) > 10;
+        }, 8000);
+        if (!locationChanged) {
+            log("%s tablet did not change the player's location; retrying.", tabletName);
+            return false;
+        }
+
+        teleportCompletedForHome = currentHome;
+        sleep(600, 1200);
+        return true;
+    }
+
+    private boolean useXericsGladeTeleport(Home currentHome) {
+        WorldPoint initialLocation = Rs2Player.getWorldLocation();
+        if (initialLocation == null || !Rs2Equipment.interact("Xeric's talisman", "Xeric's Glade")) {
+            log("Failed to use Xeric's talisman; retrying.");
+            return false;
+        }
+
+        boolean locationChanged = sleepUntil(() -> {
+            WorldPoint location = Rs2Player.getWorldLocation();
+            return location != null && location.distanceTo2D(initialLocation) > 10;
+        }, 8000);
+        if (!locationChanged) {
+            log("Xeric's talisman did not change the player's location; retrying.");
+            return false;
+        }
+
+        teleportCompletedForHome = currentHome;
+        sleep(600, 1200);
+        return true;
+    }
+
     // Walk to current home
     private void walkToHome() {
         Home currentHome = plugin.getCurrentHome();
@@ -865,13 +922,67 @@ public class NetoMahoganyHomesScript extends Script {
                 && plugin.distanceBetween(currentHome.getArea(), Rs2Player.getWorldLocation()) > 0
                 && !isMissingItems()) {
 
-            if (isVarrockHome(currentHome) && Rs2Player.getWorldLocation().distanceTo(currentHome.getLocation()) > 100) {
-                if (Rs2Magic.canCast(Rs2Spells.VARROCK_TELEPORT)) {
-                    log("Teleporting to Varrock Square before walking...");
-                    Rs2Magic.cast(Rs2Spells.VARROCK_TELEPORT);
-                    sleepUntil(() -> !Rs2Player.isAnimating());
-                    sleep(600, 1200);
-                    return;
+            if (plugin.getConfig().useNpcContact()) {
+                if (teleportCompletedForHome != currentHome
+                        && isVarrockHome(currentHome)
+                        && Rs2Player.getWorldLocation().distanceTo(currentHome.getLocation()) > 50) {
+                    if (Rs2Inventory.hasItem("Varrock teleport")) {
+                        log("Breaking Varrock teleport tablet before walking...");
+                        if (!breakTeleportTablet("Varrock teleport", currentHome)) {
+                            return;
+                        }
+                    }
+                }
+                if (teleportCompletedForHome != currentHome
+                        && isArdougneHome(currentHome)
+                        && Rs2Player.getWorldLocation().distanceTo(currentHome.getLocation()) > 50) {
+                    if (Rs2Inventory.hasItem("Ardougne teleport")) {
+                        log("Breaking Ardougne teleport tablet before walking...");
+                        if (!breakTeleportTablet("Ardougne teleport", currentHome)) {
+                            return;
+                        }
+                    }
+                }
+                if (teleportCompletedForHome != currentHome
+                        && isFaladorHome(currentHome)
+                        && Rs2Player.getWorldLocation().distanceTo(currentHome.getLocation()) > 50) {
+                    if (Rs2Inventory.hasItem("Falador teleport")) {
+                        log("Breaking Falador teleport tablet before walking...");
+                        if (!breakTeleportTablet("Falador teleport", currentHome)) {
+                            return;
+                        }
+                    }
+                }
+                boolean isHosidiusHome = currentHome == Home.BARBARA || currentHome == Home.LEELA || currentHome == Home.MARIAH;
+                if (teleportCompletedForHome != currentHome
+                        && isHosidiusHome
+                        && Rs2Player.getWorldLocation().distanceTo(currentHome.getLocation()) > 50) {
+                    if (Rs2Equipment.isWearing("Xeric's talisman")) {
+                        log("Teleporting to Xeric's Glade using talisman...");
+                        if (!useXericsGladeTeleport(currentHome)) {
+                            return;
+                        }
+                    } else if (Rs2Inventory.hasItem("Xeric's talisman")) {
+                        log("Equipping Xeric's talisman to teleport...");
+                        Rs2Inventory.wield("Xeric's talisman");
+                        sleepUntil(() -> Rs2Equipment.isWearing("Xeric's talisman"), 1800);
+                        if (Rs2Equipment.isWearing("Xeric's talisman")) {
+                            log("Teleporting to Xeric's Glade using talisman...");
+                            if (!useXericsGladeTeleport(currentHome)) {
+                                return;
+                            }
+                        }
+                    }
+                }
+            } else {
+                if (isVarrockHome(currentHome) && Rs2Player.getWorldLocation().distanceTo(currentHome.getLocation()) > 100) {
+                    if (Rs2Magic.canCast(Rs2Spells.VARROCK_TELEPORT)) {
+                        log("Teleporting to Varrock Square before walking...");
+                        Rs2Magic.cast(Rs2Spells.VARROCK_TELEPORT);
+                        sleepUntil(() -> !Rs2Player.isAnimating());
+                        sleep(600, 1200);
+                        return;
+                    }
                 }
             }
 
@@ -918,6 +1029,109 @@ public class NetoMahoganyHomesScript extends Script {
         super.shutdown();
     }
 
+    private boolean handleLunarSpellbookSwitch() {
+        Microbot.status = "Lunar Switch: Walking to bank";
+        if (!Rs2Bank.walkToBankAndUseBank()) {
+            return false;
+        }
+
+        // Deposit inventory so we have space and don't carry extra stuff
+        if (!Rs2Inventory.isEmpty()) {
+            Rs2Bank.depositAll();
+            sleepUntil(Rs2Inventory::isEmpty, 5000);
+            if (!Rs2Inventory.isEmpty()) return false;
+        }
+
+        if (!Rs2Bank.hasItem("Moonclan teleport")) {
+            Microbot.showMessage("Missing Moonclan teleport in bank.");
+            shutdown();
+            return false;
+        }
+
+        Rs2ItemModel skillsNecklace = Rs2Bank.bankItems().stream()
+                .filter(item -> item.getName().toLowerCase().contains("skills necklace"))
+                .min(Comparator.comparingInt(Rs2ItemModel::getQuantity))
+                .orElse(null);
+
+        if (skillsNecklace == null && !Rs2Bank.hasItem("Varrock teleport")) {
+            Microbot.showMessage("Missing Skills necklace or Varrock teleport in bank.");
+            shutdown();
+            return false;
+        }
+
+        Rs2Bank.withdrawOne("Moonclan teleport");
+        sleepUntil(() -> Rs2Inventory.hasItem("Moonclan teleport"), 3000);
+        if (!Rs2Inventory.hasItem("Moonclan teleport")) return false;
+
+        boolean hasSkillsNecklace = false;
+        String necklaceName = "";
+        if (skillsNecklace != null) {
+            necklaceName = skillsNecklace.getName();
+            Rs2Bank.withdrawOne(necklaceName);
+            String finalNecklaceName = necklaceName;
+            sleepUntil(() -> Rs2Inventory.hasItem(finalNecklaceName), 3000);
+            if (Rs2Inventory.hasItem(necklaceName)) {
+                hasSkillsNecklace = true;
+            }
+        } else {
+            Rs2Bank.withdrawOne("Varrock teleport");
+            sleepUntil(() -> Rs2Inventory.hasItem("Varrock teleport"), 3000);
+            if (!Rs2Inventory.hasItem("Varrock teleport")) return false;
+        }
+
+        Rs2Bank.closeBank();
+        sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+        if (Rs2Bank.isOpen()) return false;
+
+        Microbot.status = "Lunar Switch: Teleporting to Moonclan";
+        Rs2Inventory.interact("Moonclan teleport", "Break");
+        WorldPoint initialLoc = Rs2Player.getWorldLocation();
+        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(initialLoc) > 50, 8000);
+        sleep(2000, 3000);
+
+        WorldPoint altarTile = new WorldPoint(2156, 3865, 0);
+        Microbot.status = "Lunar Switch: Walking to Altar";
+        if (!Rs2Walker.walkTo(altarTile, 2)) {
+            if (Rs2Player.getWorldLocation().distanceTo(altarTile) > 6) {
+                return false;
+            }
+        }
+
+        Microbot.status = "Lunar Switch: Praying at Altar";
+        Rs2GameObject.interact(34771, "Pray");
+        sleepUntil(() -> Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR), 5000);
+
+        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)) {
+            log("Failed to confirm player is on Lunar Spellbook.");
+            return false;
+        }
+
+        if (hasSkillsNecklace) {
+            Microbot.status = "Lunar Switch: Teleporting to Farming Guild";
+            String finalNecklaceName = necklaceName;
+            boolean success = Rs2Inventory.interact(finalNecklaceName, "Farming Guild");
+            if (!success) {
+                if (Rs2Inventory.interact(finalNecklaceName, "Rub")) {
+                    sleepUntil(() -> Rs2Dialogue.hasDialogueOption("Farming Guild"), 3000);
+                    Rs2Dialogue.clickOption("Farming Guild");
+                }
+            }
+        } else {
+            Microbot.status = "Lunar Switch: Teleporting to Varrock";
+            Rs2Inventory.interact("Varrock teleport", "Break");
+        }
+
+        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(altarTile) > 50, 8000);
+        sleep(2000, 3000);
+
+        Microbot.status = "Lunar Switch: Walking to bank";
+        if (!Rs2Bank.walkToBankAndUseBank()) {
+            return false;
+        }
+
+        return true;
+    }
+
     private void executePrep() {
         if (prepState == PrepState.FINISHED) return;
 
@@ -933,6 +1147,11 @@ public class NetoMahoganyHomesScript extends Script {
         switch (prepState) {
             case NOT_STARTED:
                 log("Starting Mahogany Homes Prep state...");
+                if (plugin.getConfig().useNpcContact() && !Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)) {
+                    if (!handleLunarSpellbookSwitch()) {
+                        return;
+                    }
+                }
                 if (Rs2Bank.isOpen()) {
                     prepState = PrepState.DEPOSITING_EQUIPMENT;
                 } else {
@@ -1113,19 +1332,45 @@ public class NetoMahoganyHomesScript extends Script {
         // Handle teleport runes and Rune pouch
         boolean hasRunePouch = Rs2Inventory.hasRunePouch() || Rs2Bank.hasRunePouch();
 
-        // Check total count across bank, inventory, and Rune pouch (if owned)
-        int currentLaw = Rs2Inventory.count(ItemID.LAW_RUNE) + Rs2Bank.count(ItemID.LAW_RUNE) + (hasRunePouch ? Rs2RunePouch.getQuantity(Runes.LAW) : 0);
-        int currentSteam = Rs2Inventory.count(ItemID.STEAM_RUNE) + Rs2Bank.count(ItemID.STEAM_RUNE) + (hasRunePouch ? Rs2RunePouch.getQuantity(Runes.STEAM) : 0);
-        int currentDust = Rs2Inventory.count(ItemID.DUST_RUNE) + Rs2Bank.count(ItemID.DUST_RUNE) + (hasRunePouch ? Rs2RunePouch.getQuantity(Runes.DUST) : 0);
+        if (plugin.getConfig().useNpcContact()) {
+            if (!hasRunePouch) {
+                log("Rune pouch is required when NPC Contact is enabled!");
+                Microbot.showMessage("Rune pouch is required when NPC Contact is enabled! Stopping plugin.");
+                Microbot.stopPlugin(plugin);
+                return;
+            }
 
-        if (currentLaw < 100 || currentSteam < 100 || currentDust < 100) {
-            log("Missing required teleport runes! Law: %d, Steam: %d, Dust: %d", currentLaw, currentSteam, currentDust);
-            Microbot.showMessage("Not enough teleport runes! Stopping plugin.");
-            Microbot.stopPlugin(plugin);
-            return;
-        }
+            int currentAir = Rs2Inventory.count(ItemID.AIR_RUNE) + Rs2Bank.count(ItemID.AIR_RUNE) + Rs2RunePouch.getQuantity(Runes.AIR);
+            int currentAstral = Rs2Inventory.count(ItemID.ASTRAL_RUNE) + Rs2Bank.count(ItemID.ASTRAL_RUNE) + Rs2RunePouch.getQuantity(Runes.ASTRAL);
+            int currentCosmic = Rs2Inventory.count(ItemID.COSMIC_RUNE) + Rs2Bank.count(ItemID.COSMIC_RUNE) + Rs2RunePouch.getQuantity(Runes.COSMIC);
 
-        if (hasRunePouch) {
+            if (currentAir < 100 || currentAstral < 100 || currentCosmic < 100) {
+                log("Missing required NPC contact runes! Air: %d, Astral: %d, Cosmic: %d", currentAir, currentAstral, currentCosmic);
+                Microbot.showMessage("Not enough NPC contact runes! Stopping plugin.");
+                Microbot.stopPlugin(plugin);
+                return;
+            }
+
+            boolean hasVarrockTab = Rs2Inventory.hasItem("Varrock teleport") || Rs2Bank.hasItem("Varrock teleport");
+            boolean hasArdougneTab = Rs2Inventory.hasItem("Ardougne teleport") || Rs2Bank.hasItem("Ardougne teleport");
+            boolean hasFaladorTab = Rs2Inventory.hasItem("Falador teleport") || Rs2Bank.hasItem("Falador teleport");
+
+            if (!hasVarrockTab || !hasArdougneTab || !hasFaladorTab) {
+                log("Missing required teleport tablets! Varrock: %b, Ardougne: %b, Falador: %b", hasVarrockTab, hasArdougneTab, hasFaladorTab);
+                Microbot.showMessage("Missing required teleport tablets! Stopping plugin.");
+                Microbot.stopPlugin(plugin);
+                return;
+            }
+
+            boolean hasXeric = Rs2Equipment.isWearing("Xeric's talisman") || Rs2Inventory.hasItem("Xeric's talisman") || Rs2Bank.hasItem("Xeric's talisman");
+            if (!hasXeric) {
+                log("Xeric's talisman is required when NPC Contact is enabled!");
+                Microbot.showMessage("Xeric's talisman is required when NPC Contact is enabled! Stopping plugin.");
+                Microbot.stopPlugin(plugin);
+                return;
+            }
+
+            // Withdraw Rune pouch
             if (!Rs2Inventory.hasRunePouch()) {
                 log("Withdrawing Rune pouch...");
                 Rs2Bank.withdrawRunePouch();
@@ -1136,58 +1381,121 @@ public class NetoMahoganyHomesScript extends Script {
                 Rs2RunePouch.fullUpdate();
                 Map<Runes, Integer> requiredRunes = new HashMap<>();
 
-                int lawNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.LAW));
-                int steamNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.STEAM));
-                int dustNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.DUST));
+                int airNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.AIR));
+                int astralNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.ASTRAL));
+                int cosmicNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.COSMIC));
 
-                // Only load if any required rune is below 1000
-                if (lawNeeded > 0 || steamNeeded > 0 || dustNeeded > 0) {
-                    int lawToLoad = Rs2RunePouch.getQuantity(Runes.LAW) + Math.min(lawNeeded, Rs2Bank.count(ItemID.LAW_RUNE));
-                    int steamToLoad = Rs2RunePouch.getQuantity(Runes.STEAM) + Math.min(steamNeeded, Rs2Bank.count(ItemID.STEAM_RUNE));
-                    int dustToLoad = Rs2RunePouch.getQuantity(Runes.DUST) + Math.min(dustNeeded, Rs2Bank.count(ItemID.DUST_RUNE));
+                if (airNeeded > 0 || astralNeeded > 0 || cosmicNeeded > 0) {
+                    int airToLoad = Rs2RunePouch.getQuantity(Runes.AIR) + Math.min(airNeeded, Rs2Bank.count(ItemID.AIR_RUNE));
+                    int astralToLoad = Rs2RunePouch.getQuantity(Runes.ASTRAL) + Math.min(astralNeeded, Rs2Bank.count(ItemID.ASTRAL_RUNE));
+                    int cosmicToLoad = Rs2RunePouch.getQuantity(Runes.COSMIC) + Math.min(cosmicNeeded, Rs2Bank.count(ItemID.COSMIC_RUNE));
 
-                    if (lawToLoad > 0) requiredRunes.put(Runes.LAW, lawToLoad);
-                    if (steamToLoad > 0) requiredRunes.put(Runes.STEAM, steamToLoad);
-                    if (dustToLoad > 0) requiredRunes.put(Runes.DUST, dustToLoad);
+                    if (airToLoad > 0) requiredRunes.put(Runes.AIR, airToLoad);
+                    if (astralToLoad > 0) requiredRunes.put(Runes.ASTRAL, astralToLoad);
+                    if (cosmicToLoad > 0) requiredRunes.put(Runes.COSMIC, cosmicToLoad);
 
                     if (!requiredRunes.isEmpty()) {
-                        log("Loading Law, Steam, and Dust runes into Rune Pouch...");
+                        log("Loading Air, Astral, and Cosmic runes into Rune Pouch...");
                         Rs2RunePouch.load(requiredRunes);
                     }
                 }
             }
+
+            // Withdraw-all each tablet if they are not in inventory
+            if (!Rs2Inventory.hasItem("Varrock teleport")) {
+                Rs2Bank.withdrawAll("Varrock teleport");
+                sleepUntil(() -> Rs2Inventory.hasItem("Varrock teleport"), 1800);
+            }
+            if (!Rs2Inventory.hasItem("Ardougne teleport")) {
+                Rs2Bank.withdrawAll("Ardougne teleport");
+                sleepUntil(() -> Rs2Inventory.hasItem("Ardougne teleport"), 1800);
+            }
+            if (!Rs2Inventory.hasItem("Falador teleport")) {
+                Rs2Bank.withdrawAll("Falador teleport");
+                sleepUntil(() -> Rs2Inventory.hasItem("Falador teleport"), 1800);
+            }
+
+            // Equip Xeric's talisman
+            if (Rs2Bank.hasItem("Xeric's talisman") || Rs2Inventory.hasItem("Xeric's talisman")) {
+                withdrawAndEquipItem("Xeric's talisman");
+            }
         } else {
-            // Withdraw runes directly to inventory up to 1,000 of each
-            int lawInv = Rs2Inventory.count(ItemID.LAW_RUNE);
-            int steamInv = Rs2Inventory.count(ItemID.STEAM_RUNE);
-            int dustInv = Rs2Inventory.count(ItemID.DUST_RUNE);
+            // Check total count across bank, inventory, and Rune pouch (if owned)
+            int currentLaw = Rs2Inventory.count(ItemID.LAW_RUNE) + Rs2Bank.count(ItemID.LAW_RUNE) + (hasRunePouch ? Rs2RunePouch.getQuantity(Runes.LAW) : 0);
+            int currentSteam = Rs2Inventory.count(ItemID.STEAM_RUNE) + Rs2Bank.count(ItemID.STEAM_RUNE) + (hasRunePouch ? Rs2RunePouch.getQuantity(Runes.STEAM) : 0);
+            int currentDust = Rs2Inventory.count(ItemID.DUST_RUNE) + Rs2Bank.count(ItemID.DUST_RUNE) + (hasRunePouch ? Rs2RunePouch.getQuantity(Runes.DUST) : 0);
 
-            if (lawInv < 1000) {
-                int toWithdraw = Math.min(1000 - lawInv, Rs2Bank.count(ItemID.LAW_RUNE));
-                if (toWithdraw > 0) {
-                    Rs2Bank.withdrawX(ItemID.LAW_RUNE, toWithdraw);
-                    sleepUntil(() -> Rs2Inventory.count(ItemID.LAW_RUNE) >= lawInv + toWithdraw, 1800);
-                }
+            if (currentLaw < 100 || currentSteam < 100 || currentDust < 100) {
+                log("Missing required teleport runes! Law: %d, Steam: %d, Dust: %d", currentLaw, currentSteam, currentDust);
+                Microbot.showMessage("Not enough teleport runes! Stopping plugin.");
+                Microbot.stopPlugin(plugin);
+                return;
             }
-            if (steamInv < 1000) {
-                int toWithdraw = Math.min(1000 - steamInv, Rs2Bank.count(ItemID.STEAM_RUNE));
-                if (toWithdraw > 0) {
-                    Rs2Bank.withdrawX(ItemID.STEAM_RUNE, toWithdraw);
-                    sleepUntil(() -> Rs2Inventory.count(ItemID.STEAM_RUNE) >= steamInv + toWithdraw, 1800);
-                }
-            }
-            if (dustInv < 1000) {
-                int toWithdraw = Math.min(1000 - dustInv, Rs2Bank.count(ItemID.DUST_RUNE));
-                if (toWithdraw > 0) {
-                    Rs2Bank.withdrawX(ItemID.DUST_RUNE, toWithdraw);
-                    sleepUntil(() -> Rs2Inventory.count(ItemID.DUST_RUNE) >= dustInv + toWithdraw, 1800);
-                }
-            }
-        }
 
-        // If "Xeric's talisman" is found, withdraw and equip it
-        if (Rs2Bank.hasItem("Xeric's talisman") || Rs2Inventory.hasItem("Xeric's talisman")) {
-            withdrawAndEquipItem("Xeric's talisman");
+            if (hasRunePouch) {
+                if (!Rs2Inventory.hasRunePouch()) {
+                    log("Withdrawing Rune pouch...");
+                    Rs2Bank.withdrawRunePouch();
+                    sleepUntil(Rs2Inventory::hasRunePouch, 1800);
+                }
+
+                if (Rs2Inventory.hasRunePouch()) {
+                    Rs2RunePouch.fullUpdate();
+                    Map<Runes, Integer> requiredRunes = new HashMap<>();
+
+                    int lawNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.LAW));
+                    int steamNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.STEAM));
+                    int dustNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.DUST));
+
+                    // Only load if any required rune is below 1000
+                    if (lawNeeded > 0 || steamNeeded > 0 || dustNeeded > 0) {
+                        int lawToLoad = Rs2RunePouch.getQuantity(Runes.LAW) + Math.min(lawNeeded, Rs2Bank.count(ItemID.LAW_RUNE));
+                        int steamToLoad = Rs2RunePouch.getQuantity(Runes.STEAM) + Math.min(steamNeeded, Rs2Bank.count(ItemID.STEAM_RUNE));
+                        int dustToLoad = Rs2RunePouch.getQuantity(Runes.DUST) + Math.min(dustNeeded, Rs2Bank.count(ItemID.DUST_RUNE));
+
+                        if (lawToLoad > 0) requiredRunes.put(Runes.LAW, lawToLoad);
+                        if (steamToLoad > 0) requiredRunes.put(Runes.STEAM, steamToLoad);
+                        if (dustToLoad > 0) requiredRunes.put(Runes.DUST, dustToLoad);
+
+                        if (!requiredRunes.isEmpty()) {
+                            log("Loading Law, Steam, and Dust runes into Rune Pouch...");
+                            Rs2RunePouch.load(requiredRunes);
+                        }
+                    }
+                }
+            } else {
+                // Withdraw runes directly to inventory up to 1,000 of each
+                int lawInv = Rs2Inventory.count(ItemID.LAW_RUNE);
+                int steamInv = Rs2Inventory.count(ItemID.STEAM_RUNE);
+                int dustInv = Rs2Inventory.count(ItemID.DUST_RUNE);
+
+                if (lawInv < 1000) {
+                    int toWithdraw = Math.min(1000 - lawInv, Rs2Bank.count(ItemID.LAW_RUNE));
+                    if (toWithdraw > 0) {
+                        Rs2Bank.withdrawX(ItemID.LAW_RUNE, toWithdraw);
+                        sleepUntil(() -> Rs2Inventory.count(ItemID.LAW_RUNE) >= lawInv + toWithdraw, 1800);
+                    }
+                }
+                if (steamInv < 1000) {
+                    int toWithdraw = Math.min(1000 - steamInv, Rs2Bank.count(ItemID.STEAM_RUNE));
+                    if (toWithdraw > 0) {
+                        Rs2Bank.withdrawX(ItemID.STEAM_RUNE, toWithdraw);
+                        sleepUntil(() -> Rs2Inventory.count(ItemID.STEAM_RUNE) >= steamInv + toWithdraw, 1800);
+                    }
+                }
+                if (dustInv < 1000) {
+                    int toWithdraw = Math.min(1000 - dustInv, Rs2Bank.count(ItemID.DUST_RUNE));
+                    if (toWithdraw > 0) {
+                        Rs2Bank.withdrawX(ItemID.DUST_RUNE, toWithdraw);
+                        sleepUntil(() -> Rs2Inventory.count(ItemID.DUST_RUNE) >= dustInv + toWithdraw, 1800);
+                    }
+                }
+            }
+
+            // If "Xeric's talisman" is found, withdraw and equip it
+            if (Rs2Bank.hasItem("Xeric's talisman") || Rs2Inventory.hasItem("Xeric's talisman")) {
+                withdrawAndEquipItem("Xeric's talisman");
+            }
         }
     }
 }
