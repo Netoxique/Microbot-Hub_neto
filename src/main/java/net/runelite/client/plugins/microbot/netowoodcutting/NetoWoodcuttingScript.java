@@ -4,6 +4,8 @@ import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.AnimationID;
 import net.runelite.api.GameObject;
 import net.runelite.api.ChatMessageType;
+import net.runelite.api.Quest;
+import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
@@ -744,6 +746,15 @@ public class NetoWoodcuttingScript extends Script {
 
         Microbot.log("Prep State: Preparing travel teleport item...");
         boolean isPrifddinas = Rs2Random.between(1, 100) <= 75;
+
+        if (isPrifddinas) {
+            boolean isSongOfTheElvesFinished = Rs2Player.getQuestState(Quest.SONG_OF_THE_ELVES) == QuestState.FINISHED;
+            if (!isSongOfTheElvesFinished) {
+                Microbot.log("Prep State: Song of the Elves quest is not completed. Defaulting to Woodcutting Guild.");
+                isPrifddinas = false;
+            }
+        }
+
         int teleportItemId = -1;
         String teleportItemName = null;
 
@@ -753,7 +764,7 @@ public class NetoWoodcuttingScript extends Script {
                 teleportItemId = 59409;
             }
         } else {
-            Microbot.log("Prep State: Rolled Woodcutting Guild (25%)");
+            Microbot.log("Prep State: Selecting Woodcutting Guild (25% or quest fallback)");
             for (int i = 1; i <= 6; i++) {
                 String name = "Skills necklace(" + i + ")";
                 if (Rs2Bank.hasItem(name) || Rs2Inventory.hasItem(name)) {
@@ -805,15 +816,6 @@ public class NetoWoodcuttingScript extends Script {
             Rs2Walker.walkTo(targetPoint);
             sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(targetPoint) <= 4, 60000);
         } else {
-            if (teleportItemName != null && Rs2Inventory.hasItem(teleportItemName)) {
-                Microbot.log("Prep State: Teleporting to Woodcutting Guild...");
-                if (Rs2Inventory.interact(teleportItemName, "rub")) {
-                    if (Rs2Dialogue.sleepUntilSelectAnOption()) {
-                        Rs2Dialogue.clickOption("Woodcutting Guild");
-                        sleepUntil(() -> !Rs2Player.isAnimating() && Rs2Player.getWorldLocation().distanceTo(new WorldPoint(1662, 3505, 0)) < 20, 10000);
-                    }
-                }
-            }
             WorldPoint targetPoint = new WorldPoint(1588, 3483, 0);
             Microbot.log("Prep State: Walking to Woodcutting Guild destination...");
             Rs2Walker.walkTo(targetPoint);
