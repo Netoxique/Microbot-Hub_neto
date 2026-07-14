@@ -35,6 +35,10 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.*;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingTreeLocations;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 
 import javax.inject.Inject;
 import java.awt.event.KeyEvent;
@@ -88,6 +92,12 @@ public class NetoWoodcuttingScript extends Script {
         this.plugin = plugin;
     }
     @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
+    @Inject
     Rs2TileObjectCache rs2TileObjectCache;
 
     private void handleFiremaking(NetoWoodcuttingConfig config) {
@@ -126,6 +136,15 @@ public class NetoWoodcuttingScript extends Script {
         woodcuttingScriptState = WoodcuttingScriptState.PREP;
         activeTree = config.TREE();
         activeLocation = null;
+
+        breakManager.configure(config, "Neto Woodcutting");
+        worldHopManager.configure(config, "Neto Woodcutting");
+        runtimeDisable.configure(config, "Neto Woodcutting");
+
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (preFlightChecks(config)) return;
@@ -219,7 +238,11 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private boolean preFlightChecks(NetoWoodcuttingConfig config) {
-        if (!Microbot.isLoggedIn()) return true;
+        if (!Microbot.isLoggedIn()) {
+            if (runtimeDisable.updateRuntime(NetoWoodcuttingPlugin.class)) return true;
+            if (breakManager.updateBreakState()) return true;
+            return true;
+        }
         if (!super.run()) return true;
         if (Rs2Player.getRealSkillLevel(Skill.WOODCUTTING) <= 0) return true;
 
@@ -362,6 +385,11 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private boolean handleBanking(NetoWoodcuttingConfig config) {
+        if (!needsToBank(config)) {
+            Rs2Walker.walkTo(getReturnPoint(config));
+            return true;
+        }
+
         BankLocation nearestBank = Rs2Bank.getNearestBank();
         boolean isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
         if (!isBankOpen || !Rs2Bank.isOpen()) return false;
@@ -382,6 +410,10 @@ public class NetoWoodcuttingScript extends Script {
 
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
+
+        if (checkForBreakOrHop()) {
+            return false;
+        }
 
         Rs2Walker.walkTo(getReturnPoint(config));
         return true;
@@ -833,8 +865,45 @@ public class NetoWoodcuttingScript extends Script {
         Microbot.log("Prep State: Preparation complete! Next state: " + woodcuttingScriptState);
     }
 
+    private boolean needsToBank(NetoWoodcuttingConfig config) {
+        if (Rs2LogBasket.hasLogBasket() && currentLogBasketCount > 0) {
+            return true;
+        }
+        List<String> itemsToKeep = Arrays.stream(config.itemsToKeepBanking().split(","))
+                .map(String::trim)
+                .filter(x -> !x.isEmpty())
+                .collect(Collectors.toList());
+        if (!itemsToKeep.contains("log basket")) {
+            itemsToKeep.add("log basket");
+        }
+        return Rs2Inventory.items().anyMatch(item -> {
+            if (item == null || item.getName() == null) return false;
+            String name = item.getName().toLowerCase();
+            return itemsToKeep.stream().noneMatch(keep -> name.contains(keep.toLowerCase()));
+        });
+    }
+
+    private boolean checkForBreakOrHop() {
+        if (runtimeDisable.updateRuntime(NetoWoodcuttingPlugin.class)) {
+            return true;
+        }
+
+        if (breakManager.tryStartBreakAtSafePoint()) {
+            return true;
+        }
+
+        if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+            return true;
+        }
+
+        return false;
+    }
+
     @Override
     public void shutdown() {
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
         super.shutdown();
         currentLogBasketCount = -1;
         Rs2Fletching.stopFletchingWhileMoving();
