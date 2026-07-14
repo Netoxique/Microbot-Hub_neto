@@ -35,48 +35,102 @@ public final class NetoResupplyListParser {
                     errors.add("Invalid entry '" + entry + "' (item name is empty)");
                     continue;
                 }
-                final int quantity;
-                try {
-                    quantity = Integer.parseInt(quantityText);
-                } catch (NumberFormatException ex) {
-                    errors.add("Invalid quantity in '" + entry + "'");
-                    continue;
-                }
-                if (quantity <= 0) {
-                    errors.add("Quantity must be positive in '" + entry + "'");
-                    continue;
+                final int minQuantity;
+                final int maxQuantity;
+                final boolean minMax;
+
+                int dashIndex = quantityText.indexOf('-');
+                if (dashIndex == -1) {
+                    minMax = false;
+                    try {
+                        int qty = Integer.parseInt(quantityText);
+                        if (qty <= 0) {
+                            errors.add("Quantity must be positive in '" + entry + "'");
+                            continue;
+                        }
+                        minQuantity = qty;
+                        maxQuantity = qty;
+                    } catch (NumberFormatException ex) {
+                        errors.add("Invalid quantity in '" + entry + "'");
+                        continue;
+                    }
+                } else {
+                    minMax = true;
+                    String minStr = quantityText.substring(0, dashIndex).trim();
+                    String maxStr = quantityText.substring(dashIndex + 1).trim();
+                    try {
+                        int minVal = Integer.parseInt(minStr);
+                        int maxVal = Integer.parseInt(maxStr);
+                        if (minVal <= 0 || maxVal <= 0) {
+                            errors.add("Quantities must be positive in '" + entry + "'");
+                            continue;
+                        }
+                        if (minVal >= maxVal) {
+                            errors.add("Min quantity must be less than max quantity in '" + entry + "'");
+                            continue;
+                        }
+                        minQuantity = minVal;
+                        maxQuantity = maxVal;
+                    } catch (NumberFormatException ex) {
+                        errors.add("Invalid min-max quantity in '" + entry + "'");
+                        continue;
+                    }
                 }
 
                 String key = name.toLowerCase(Locale.ROOT);
                 RequestedItem existing = items.get(key);
                 if (existing == null) {
-                    items.put(key, new RequestedItem(name, quantity));
-                } else if (existing.quantity > Integer.MAX_VALUE - quantity) {
+                    items.put(key, new RequestedItem(name, minQuantity, maxQuantity, minMax));
+                } else if (existing.minQuantity > Integer.MAX_VALUE - minQuantity || existing.maxQuantity > Integer.MAX_VALUE - maxQuantity) {
                     errors.add("Combined quantity is too large for '" + name + "'");
                 } else {
-                    existing.quantity += quantity;
+                    existing.minQuantity += minQuantity;
+                    existing.maxQuantity += maxQuantity;
+                    if (minMax) {
+                        existing.minMax = true;
+                    }
                 }
             }
         }
         return new ParseResult(items, errors);
     }
 
+    public static int deficit(int minQuantity, int maxQuantity, boolean minMax, int owned) {
+        if (minMax) {
+            if (owned < minQuantity) {
+                return maxQuantity - Math.max(0, owned);
+            }
+            return 0;
+        } else {
+            if (owned < maxQuantity) {
+                return maxQuantity - Math.max(0, owned);
+            }
+            return 0;
+        }
+    }
+
     public static int deficit(int target, int owned) {
-        if (target <= owned) return 0;
-        return target - Math.max(0, owned);
+        return deficit(target, target, false, owned);
     }
 
     public static final class RequestedItem {
         private final String name;
-        private int quantity;
+        private int minQuantity;
+        private int maxQuantity;
+        private boolean minMax;
 
-        RequestedItem(String name, int quantity) {
+        RequestedItem(String name, int minQuantity, int maxQuantity, boolean minMax) {
             this.name = name;
-            this.quantity = quantity;
+            this.minQuantity = minQuantity;
+            this.maxQuantity = maxQuantity;
+            this.minMax = minMax;
         }
 
         public String getName() { return name; }
-        public int getQuantity() { return quantity; }
+        public int getQuantity() { return maxQuantity; }
+        public int getMinQuantity() { return minQuantity; }
+        public int getMaxQuantity() { return maxQuantity; }
+        public boolean isMinMax() { return minMax; }
     }
 
     public static final class ParseResult {

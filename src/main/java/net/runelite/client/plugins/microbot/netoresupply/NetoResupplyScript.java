@@ -110,7 +110,7 @@ public class NetoResupplyScript extends Script {
         NetoResupplyListParser.ParseResult parsed = NetoResupplyListParser.parse(enabledLists);
         problems.addAll(parsed.getErrors());
         for (NetoResupplyListParser.RequestedItem requested : parsed.getItems().values()) {
-            items.add(new ResupplyItem(requested.getName(), requested.getQuantity()));
+            items.add(new ResupplyItem(requested.getName(), requested.getMinQuantity(), requested.getMaxQuantity(), requested.isMinMax()));
         }
         for (String problem : problems) log.warn(problem);
     }
@@ -146,7 +146,8 @@ public class NetoResupplyScript extends Script {
             item.name = identity.name;
             item.itemId = identity.itemId;
             item.initialOwned = bankQuantities.getOrDefault(identity.name.toLowerCase(Locale.ROOT), 0);
-            item.remaining = NetoResupplyListParser.deficit(item.target, item.initialOwned);
+            item.initialDeficit = NetoResupplyListParser.deficit(item.minQuantity, item.maxQuantity, item.minMax, item.initialOwned);
+            item.remaining = item.initialDeficit;
             validItems.add(item);
         }
         items.clear();
@@ -416,7 +417,10 @@ public class NetoResupplyScript extends Script {
     }
 
     private int remainingFor(ResupplyItem item) {
-        return NetoResupplyListParser.deficit(item.target, safeAdd(item.initialOwned, item.acquired));
+        if (item.initialDeficit > 0) {
+            return Math.max(0, item.initialDeficit - item.acquired);
+        }
+        return 0;
     }
 
     private static boolean isTerminal(GrandExchangeOfferState state) {
@@ -435,7 +439,11 @@ public class NetoResupplyScript extends Script {
         Map<String, Integer> bankQuantities = readBankQuantities();
         for (ResupplyItem item : items) {
             item.finalOwned = bankQuantities.getOrDefault(item.name.toLowerCase(Locale.ROOT), 0);
-            item.remaining = NetoResupplyListParser.deficit(item.target, item.finalOwned);
+            if (item.initialDeficit > 0) {
+                item.remaining = Math.max(0, item.maxQuantity - item.finalOwned);
+            } else {
+                item.remaining = 0;
+            }
             if (item.remaining > 0 && item.unresolvedReason == null) {
                 item.unresolvedReason = "Bank is still short by " + item.remaining;
                 recordProblem(item.name + ": " + item.unresolvedReason);
@@ -502,20 +510,25 @@ public class NetoResupplyScript extends Script {
 
     private static final class ResupplyItem {
         private final String configuredName;
-        private final int target;
+        private final int minQuantity;
+        private final int maxQuantity;
+        private final boolean minMax;
         private String name;
         private int itemId;
         private int initialOwned;
+        private int initialDeficit;
         private int acquired;
         private int finalOwned;
         private int remaining;
         private int reposts;
         private String unresolvedReason;
 
-        private ResupplyItem(String configuredName, int target) {
+        private ResupplyItem(String configuredName, int minQuantity, int maxQuantity, boolean minMax) {
             this.configuredName = configuredName;
             this.name = configuredName;
-            this.target = target;
+            this.minQuantity = minQuantity;
+            this.maxQuantity = maxQuantity;
+            this.minMax = minMax;
         }
     }
 
