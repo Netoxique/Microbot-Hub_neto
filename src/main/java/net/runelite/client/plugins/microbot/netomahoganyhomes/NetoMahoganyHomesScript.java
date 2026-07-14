@@ -904,9 +904,22 @@ public class NetoMahoganyHomesScript extends Script {
         return home == Home.LARRY || home == Home.NORMAN || home == Home.TAU;
     }
 
+    private boolean useVarrockTeleportTablet() {
+        if (Rs2Inventory.interact("Varrock teleport", "Varrock")) {
+            return true;
+        }
+        return Rs2Inventory.interact("Varrock teleport", "Break");
+    }
+
     private boolean breakTeleportTablet(String tabletName, Home currentHome) {
         WorldPoint initialLocation = Rs2Player.getWorldLocation();
-        if (initialLocation == null || !Rs2Inventory.interact(tabletName, "Break")) {
+        boolean success;
+        if (tabletName.equalsIgnoreCase("Varrock teleport")) {
+            success = useVarrockTeleportTablet();
+        } else {
+            success = Rs2Inventory.interact(tabletName, "Break");
+        }
+        if (initialLocation == null || !success) {
             log("Failed to break %s tablet; retrying.", tabletName);
             return false;
         }
@@ -1149,7 +1162,7 @@ public class NetoMahoganyHomesScript extends Script {
             }
         } else {
             Microbot.status = "Lunar Switch: Teleporting to Varrock";
-            Rs2Inventory.interact("Varrock teleport", "Break");
+            useVarrockTeleportTablet();
         }
 
         sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(altarTile) > 50, 8000);
