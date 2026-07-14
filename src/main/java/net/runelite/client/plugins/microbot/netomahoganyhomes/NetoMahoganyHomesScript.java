@@ -19,8 +19,12 @@ import net.runelite.client.plugins.microbot.util.coords.Rs2WorldPoint;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.api.widgets.Widget;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
+import net.runelite.client.plugins.skillcalculator.skills.MagicAction;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
@@ -656,6 +660,33 @@ public class NetoMahoganyHomesScript extends Script {
                 return;
             }
             if(plugin.getConfig().useNpcContact()){
+                Rs2Tab.switchToMagicTab();
+                sleepUntil(() -> Rs2Tab.isCurrentTab(InterfaceTab.MAGIC), 2000);
+
+                int index = -1;
+                Widget npcContactWidget = Rs2Widget.getWidget(MagicAction.NPC_CONTACT.getWidgetId());
+                if (npcContactWidget != null) {
+                    String[] actions = npcContactWidget.getActions();
+                    if (actions != null) {
+                        for (int i = 0; i < actions.length; i++) {
+                            if (actions[i] != null && actions[i].toLowerCase().contains("last-tier contract")) {
+                                index = i;
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                if (index != -1) {
+                    String actionOption = npcContactWidget.getActions()[index];
+                    log("Casting NPC Contact with option: " + actionOption);
+                    if (Rs2Magic.cast(MagicAction.NPC_CONTACT, actionOption, index + 1)) {
+                        sleepUntil(() -> plugin.getCurrentHome() != null, 5000);
+                        return;
+                    }
+                }
+
+                log("Last-tier contract option not found or failed, falling back to default NPC Contact...");
                 if (Rs2Magic.npcContact("amy")) {
                     handleContractDialogue();
                 }
