@@ -1325,7 +1325,11 @@ public class NetoMahoganyHomesScript extends Script {
         }
 
         // Cape Slot: Graceful cape (always)
-        if (Rs2Bank.hasItem("Graceful cape") || Rs2Inventory.hasItem("Graceful cape")) {
+        if (Rs2Bank.hasItem("Agility cape(t)") || Rs2Inventory.hasItem("Agility cape(t)")) {
+            withdrawAndEquipItem("Agility cape(t)");
+        } else if (Rs2Bank.hasItem("Agility cape") || Rs2Inventory.hasItem("Agility cape")) {
+            withdrawAndEquipItem("Agility cape");
+        } else if (Rs2Bank.hasItem("Graceful cape") || Rs2Inventory.hasItem("Graceful cape")) {
             withdrawAndEquipItem("Graceful cape");
         }
 
