@@ -182,14 +182,14 @@ public interface NetoWoodcuttingConfig extends Config {
         return InteractOrder.STANDARD;
     }
     @ConfigItem(
-            keyName = "ItemsToBank",
-            name = "Additional items to bank",
-            description = "Extra items to bank (comma separated)",
+            keyName = "ItemsToKeepBanking",
+            name = "Items to keep when banking",
+            description = "Items to keep in inventory when banking (comma separated)",
             position = 5,
             section = inventorySection
     )
-    default String itemsToBank() {
-        return "logs,sturdy beehive parts,petal garland,golden pheasant egg,pheasant tail feathers,fox whistle,key,nest,fruit";
+    default String itemsToKeepBanking() {
+        return "axe,tinderbox,knife,bowstring";
     }
     @ConfigItem(
             keyName = "ItemsToKeep",

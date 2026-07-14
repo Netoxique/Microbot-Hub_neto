@@ -362,9 +362,14 @@ public class NetoWoodcuttingScript extends Script {
         Rs2LogBasket.emptyLogBasketAtBank();
         currentLogBasketCount = 0;
         // deposit items
-        List<String> itemNames = Arrays.stream(config.itemsToBank().split(",")).map(String::toLowerCase).collect(Collectors.toList());
-        itemNames.add(config.fletchingType().getContainsInventoryName().toLowerCase());
-        Rs2Bank.depositAll(i -> itemNames.stream().anyMatch(itemName -> i.getName().toLowerCase().contains(itemName)));
+        List<String> itemsToKeep = Arrays.stream(config.itemsToKeepBanking().split(","))
+                .map(String::trim)
+                .filter(x -> !x.isEmpty())
+                .collect(Collectors.toList());
+        if (!itemsToKeep.contains("log basket")) {
+            itemsToKeep.add("log basket");
+        }
+        Rs2Bank.depositAllExcept(false, itemsToKeep.toArray(new String[0]));
         Rs2Inventory.waitForInventoryChanges(1800);
 
         Rs2Bank.closeBank();
