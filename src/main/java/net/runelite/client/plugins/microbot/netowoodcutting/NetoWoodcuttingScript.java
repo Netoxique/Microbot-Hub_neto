@@ -386,7 +386,7 @@ public class NetoWoodcuttingScript extends Script {
 
     private boolean handleBanking(NetoWoodcuttingConfig config) {
         if (!needsToBank(config)) {
-            Rs2Walker.walkTo(getReturnPoint(config));
+            walkToLocation(getReturnPoint(config), 5);
             return true;
         }
 
@@ -415,7 +415,7 @@ public class NetoWoodcuttingScript extends Script {
             return false;
         }
 
-        Rs2Walker.walkTo(getReturnPoint(config));
+        walkToLocation(getReturnPoint(config), 5);
         return true;
     }
 
@@ -537,8 +537,32 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private void walkBack(NetoWoodcuttingConfig config) {
-        Rs2Walker.walkTo(new WorldPoint(getReturnPoint(config).getX() - Rs2Random.between(-1, 1), getReturnPoint(config).getY() - Rs2Random.between(-1, 1), getReturnPoint(config).getPlane()));
-        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(getReturnPoint(config)) <= 4);
+        walkToLocation(getReturnPoint(config), 5);
+    }
+
+    private void walkToLocation(WorldPoint dst, int distance) {
+        WorldPoint myLocation = Rs2Player.getWorldLocation();
+        if (myLocation == null) return;
+
+        if (myLocation.distanceTo(dst) <= distance) {
+            return;
+        }
+
+        try {
+            var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+
+            while (!future.isDone()) {
+                WorldPoint currentLocation = Rs2Player.getWorldLocation();
+                if (currentLocation != null && currentLocation.distanceTo(dst) <= distance) {
+                    Rs2Walker.setTarget(null);
+                    future.cancel(true);
+                    break;
+                }
+                sleep(100);
+            }
+        } catch (Exception e) {
+            log.error("Error walking to location", e);
+        }
     }
     
     /**
