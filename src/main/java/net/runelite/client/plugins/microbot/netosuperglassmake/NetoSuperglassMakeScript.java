@@ -196,7 +196,7 @@ public class NetoSuperglassMakeScript extends Script {
         castSuperglassMake();
         Rs2Bank.preHover();
 //        sleep(600 * 2, 600 * 4);
-        sleepGaussian(1500, 150);
+        sleepGaussian(1500, 22);
     }
 
     private void picking() {
@@ -441,7 +441,7 @@ public class NetoSuperglassMakeScript extends Script {
             java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
             while (!Rs2Bank.isOpen()) {
                 Microbot.getMouse().click(new Point(currentPos.x, currentPos.y), entry);
-                sleepGaussian(105, 22);
+                sleepGaussian(600, 22);
             }
             return Rs2Bank.isOpen();
         }
@@ -449,7 +449,7 @@ public class NetoSuperglassMakeScript extends Script {
             java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
             while (!Rs2Bank.isOpen()) {
                 Microbot.getMouse().click(new Point(currentPos.x, currentPos.y));
-                sleepGaussian(105, 22);
+                sleepGaussian(600, 22);
             }
             return Rs2Bank.isOpen();
         }
