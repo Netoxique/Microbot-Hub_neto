@@ -35,6 +35,7 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.*;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingTreeLocations;
+import net.runelite.api.widgets.Widget;
 import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
 import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
@@ -405,8 +406,19 @@ public class NetoWoodcuttingScript extends Script {
         if (!itemsToKeep.contains("log basket")) {
             itemsToKeep.add("log basket");
         }
+        if (!itemsToKeep.contains("forestry basket")) {
+            itemsToKeep.add("forestry basket");
+        }
         Rs2Bank.depositAllExcept(false, itemsToKeep.toArray(new String[0]));
         Rs2Inventory.waitForInventoryChanges(1800);
+
+        if (Rs2Equipment.isWearing("Forestry basket")) {
+            Widget emptyContainersWidget = Rs2Widget.findWidget("Empty containers");
+            if (emptyContainersWidget != null) {
+                Rs2Widget.clickWidget(emptyContainersWidget);
+                Rs2Inventory.waitForInventoryChanges(1800);
+            }
+        }
 
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
@@ -769,7 +781,44 @@ public class NetoWoodcuttingScript extends Script {
         withdrawAndEquipFirstAvailable(new int[]{28217, 6739, 28214, 1359}); // Dragon felling, Dragon, Rune felling, Rune axe
 
         Microbot.log("Prep State: Equipping back/cape slot item...");
-        if (Rs2Equipment.isWearing(28136) || Rs2Bank.hasItem(28136)) {
+        if (Rs2Equipment.isWearing("Forestry basket") || Rs2Bank.hasItem("Forestry basket")) {
+            if (!Rs2Equipment.isWearing("Forestry basket")) {
+                Microbot.log("Prep State: Withdrawing Forestry basket...");
+                Rs2Bank.withdrawItem("Forestry basket");
+                if (sleepUntil(() -> Rs2Inventory.hasItem("Forestry basket"), 3000)) {
+                    Microbot.log("Prep State: Closing bank to equip Forestry basket...");
+                    Rs2Bank.closeBank();
+                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+
+                    Rs2Inventory.wield("Forestry basket");
+                    sleepUntil(() -> Rs2Equipment.isWearing("Forestry basket"), 3000);
+                }
+            }
+            if (Rs2Equipment.isWearing("Forestry basket")) {
+                if (Rs2Bank.isOpen()) {
+                    Microbot.log("Prep State: Closing bank to configure Forestry basket...");
+                    Rs2Bank.closeBank();
+                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+                }
+                Rs2ItemModel basket = Rs2Equipment.get("Forestry basket");
+                if (basket != null) {
+                    boolean hasOpenAction = basket.getEquipmentActions().stream()
+                            .anyMatch(action -> action != null && action.equalsIgnoreCase("Open"));
+                    if (hasOpenAction) {
+                        Microbot.log("Prep State: Opening Forestry basket from equipment menu...");
+                        Rs2Equipment.interact("Forestry basket", "Open");
+                        sleep(600, 1200);
+                    } else {
+                        Microbot.log("Prep State: Forestry basket is already open.");
+                    }
+                }
+            }
+            Microbot.log("Prep State: Re-opening bank...");
+            isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
+            if (!isBankOpen || !Rs2Bank.isOpen()) {
+                return;
+            }
+        } else if (Rs2Equipment.isWearing(28136) || Rs2Bank.hasItem(28136)) {
             if (!Rs2Equipment.isWearing(28136)) {
                 Microbot.log("Prep State: Withdrawing Forestry kit...");
                 Rs2Bank.withdrawItem(28136);
@@ -899,6 +948,9 @@ public class NetoWoodcuttingScript extends Script {
                 .collect(Collectors.toList());
         if (!itemsToKeep.contains("log basket")) {
             itemsToKeep.add("log basket");
+        }
+        if (!itemsToKeep.contains("forestry basket")) {
+            itemsToKeep.add("forestry basket");
         }
         return Rs2Inventory.items().anyMatch(item -> {
             if (item == null || item.getName() == null) return false;
