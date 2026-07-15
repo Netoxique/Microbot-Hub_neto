@@ -29,6 +29,9 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.timetracking.Tab;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 
 import javax.inject.Inject;
 import java.util.*;
@@ -75,6 +78,8 @@ public class NetoHerbrunScript extends Script {
             if (!super.run()) return;
             if (!initialized) {
                 initialized = true;
+                Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+                Rs2AntibanSettings.dynamicIntensity = false;
                 NetoHerbrunPlugin.status = "Gearing up";
                 populatePatches();
 
@@ -116,6 +121,13 @@ public class NetoHerbrunScript extends Script {
 
             if (!currentPatch.isInRange(40)) {
                 NetoHerbrunPlugin.status = "Walking to " + currentPatch.getRegionName();
+                if (currentPatch.getRegionName().equals("Civitas illa Fortis")) {
+                    if (Rs2Inventory.hasItem("Perfected quetzal whistle(i)")) {
+                        Rs2Inventory.interact("Perfected quetzal whistle(i)", "Signal");
+                        sleepUntil(() -> Rs2Player.isAnimating(), 3000);
+                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                    }
+                }
                 walkTo(currentPatch.getLocation(), 7);
                 return;
             }
@@ -1257,10 +1269,14 @@ public class NetoHerbrunScript extends Script {
     }
 
     private String findQuetzalWhistle() {
+        if (Rs2Bank.hasItem("Perfected quetzal whistle(i)")) return "Perfected quetzal whistle(i)";
+        if (Rs2Bank.hasItem("Perfected quetzal whistle")) return "Perfected quetzal whistle";
         if (Rs2Bank.hasItem("Perfect quetzal whistle")) return "Perfect quetzal whistle";
         if (Rs2Bank.hasItem("Enhanced quetzal whistle")) return "Enhanced quetzal whistle";
         if (Rs2Bank.hasItem("Basic quetzal whistle")) return "Basic quetzal whistle";
         if (Rs2Bank.hasItem("Quetzal whistle")) return "Quetzal whistle";
+        if (Rs2Inventory.hasItem("Perfected quetzal whistle(i)")) return "Perfected quetzal whistle(i)";
+        if (Rs2Inventory.hasItem("Perfected quetzal whistle")) return "Perfected quetzal whistle";
         if (Rs2Inventory.hasItem("Perfect quetzal whistle")) return "Perfect quetzal whistle";
         if (Rs2Inventory.hasItem("Enhanced quetzal whistle")) return "Enhanced quetzal whistle";
         if (Rs2Inventory.hasItem("Basic quetzal whistle")) return "Basic quetzal whistle";
