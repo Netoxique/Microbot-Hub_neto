@@ -233,14 +233,6 @@ public class NetoSuperglassMakeScript extends Script {
             }
         }
 
-        Rs2Bank.depositAll();
-        sleepUntil(() -> Rs2Inventory.isEmpty(), 2000);
-
-        if (Rs2Bank.hasItem("Astral rune")) {
-            Rs2Bank.withdrawAll("Astral rune");
-            sleepUntil(() -> Rs2Inventory.contains("Astral rune"), 2000);
-        }
-
         boolean isWearingSmokeStaff = Rs2Equipment.isWearing(item -> {
             String name = item.getName().toLowerCase();
             return name.contains("smoke") && (name.contains("staff") || name.contains("battlestaff"));
@@ -261,6 +253,14 @@ public class NetoSuperglassMakeScript extends Script {
             } else {
                 Microbot.log("No Smoke staff found in bank!");
             }
+        }
+
+        Rs2Bank.depositAll();
+        sleepUntil(() -> Rs2Inventory.isEmpty(), 2000);
+
+        if (Rs2Bank.hasItem("Astral rune")) {
+            Rs2Bank.withdrawAll("Astral rune");
+            sleepUntil(() -> Rs2Inventory.contains("Astral rune"), 2000);
         }
     }
 
