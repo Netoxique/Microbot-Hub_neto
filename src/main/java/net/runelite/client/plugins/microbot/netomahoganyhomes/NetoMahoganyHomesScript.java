@@ -886,7 +886,7 @@ public class NetoMahoganyHomesScript extends Script {
     }
 
     private void fillPlankSack(int plankId) {
-        for (int attempt = 0; attempt < 2 && planksInPlankSack() < 28; attempt++) {
+        for (int attempt = 0; attempt < 2; attempt++) {
             if (!Rs2Bank.isOpen()) {
                 Rs2Bank.openBank();
                 if (!sleepUntil(Rs2Bank::isOpen, 3000)) {
@@ -894,12 +894,12 @@ public class NetoMahoganyHomesScript extends Script {
                 }
             }
             Rs2Bank.withdrawAll(plankId);
-            Rs2Inventory.waitForInventoryChanges(1000);
-            sleep(Rs2Random.randomGaussian(800, 200));
+            sleep(Rs2Random.randomGaussian(450, 75));
+            sleepUntil(() -> Rs2Inventory.contains(plankId));
             Rs2ItemModel plankSack = Rs2Inventory.get(ItemID.PLANK_SACK);
             if (plankSack != null) {
                 Rs2Inventory.interact(plankSack, "Fill");
-                Rs2Inventory.waitForInventoryChanges(3000);
+                Rs2Inventory.waitForInventoryChanges(1200);
             }
         }
     }
