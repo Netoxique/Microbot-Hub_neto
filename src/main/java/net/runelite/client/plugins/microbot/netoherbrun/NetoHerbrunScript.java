@@ -184,7 +184,7 @@ public class NetoHerbrunScript extends Script {
                         break;
                     case "Morytania":
                         if (Rs2Inventory.hasItem("Ectophial")) {
-                            teleportInteractionSucceeded = Rs2Inventory.interact("Ectophial", "Teleport");
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Ectophial", "Empty");
                         }
                         break;
                     case "Falador":
