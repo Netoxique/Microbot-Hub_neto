@@ -48,9 +48,6 @@ public class NetoRCOverlay extends OverlayPanel {
             panelComponent.getChildren().add(TitleComponent.builder()
                     .text("NetoRC " + NetoRCPlugin.getVersion()).color((Color.cyan)).build());
 
-            panelComponent.getChildren().add(LineComponent.builder().left("Xp gained:")
-                    .right(String.valueOf(plugin.getTotalXpGained())).build());
-
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("World Hop In:").right(worldHopManager.getWorldHopDisplay()).build());
 
