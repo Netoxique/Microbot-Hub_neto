@@ -1,9 +1,7 @@
 package net.runelite.client.plugins.microbot.xpautocanvas;
 
 import com.google.inject.Provides;
-import java.util.EnumMap;
 import java.util.EnumSet;
-import java.util.Map;
 import java.util.Set;
 import javax.inject.Inject;
 import net.runelite.api.Client;
@@ -12,28 +10,28 @@ import net.runelite.api.events.GameTick;
 import net.runelite.api.events.StatChanged;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.events.RuneScapeProfileChanged;
 import net.runelite.client.game.SkillIconManager;
 import net.runelite.client.plugins.Plugin;
 import net.runelite.client.plugins.PluginDescriptor;
 import net.runelite.client.plugins.PluginManager;
-import net.runelite.client.plugins.microbot.PluginConstants;
 import net.runelite.client.plugins.xptracker.XpTrackerPlugin;
 import net.runelite.client.plugins.xptracker.XpTrackerService;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 @PluginDescriptor(
-	name = PluginConstants.DEFAULT_PREFIX + "Automatic XP Canvas",
+	name = "Neto Auto XP Canvas",
 	description = "Automatically shows active skills on the XP tracker canvas",
 	tags = {"xp", "experience", "tracker", "canvas"},
 	authors = {"Netoxic"},
 	version = XpAutoCanvasPlugin.version,
 	minClientVersion = "2.0.61",
-	enabledByDefault = PluginConstants.DEFAULT_ENABLED,
-	isExternal = PluginConstants.IS_EXTERNAL
+	enabledByDefault = false,
+	isExternal = true
 )
 public class XpAutoCanvasPlugin extends Plugin
 {
-	static final String version = "1.0.1";
+	static final String version = "1.1.1";
 	private static final double GAME_TICK_SECONDS = 0.6;
 	private static final Set<Skill> COMBAT_SKILLS = EnumSet.of(
 		Skill.ATTACK, Skill.STRENGTH, Skill.DEFENCE, Skill.RANGED, Skill.MAGIC);
@@ -49,7 +47,6 @@ public class XpAutoCanvasPlugin extends Plugin
 
 	private final XpAutoCanvasController controller = new XpAutoCanvasController();
 	private final Set<Skill> tickGains = EnumSet.noneOf(Skill.class);
-	private final Map<Skill, Integer> lastExperience = new EnumMap<>(Skill.class);
 
 	@Provides
 	XpAutoCanvasConfig provideConfig(ConfigManager configManager)
@@ -68,7 +65,7 @@ public class XpAutoCanvasPlugin extends Plugin
 			.orElse(null);
 		for (Skill skill : Skill.values())
 		{
-			lastExperience.put(skill, client.getSkillExperience(skill));
+			controller.initializeExperience(skill, client.getSkillExperience(skill));
 		}
 	}
 
@@ -77,8 +74,8 @@ public class XpAutoCanvasPlugin extends Plugin
 	{
 		removeAllAutoOverlays();
 		controller.reset();
+		controller.resetExperience();
 		tickGains.clear();
-		lastExperience.clear();
 		xpTrackerService = null;
 	}
 
@@ -86,11 +83,20 @@ public class XpAutoCanvasPlugin extends Plugin
 	public void onStatChanged(StatChanged event)
 	{
 		Skill skill = event.getSkill();
-		Integer previousXp = lastExperience.put(skill, event.getXp());
-		if (config.enabled() && previousXp != null && event.getXp() > previousXp)
+		boolean gainedExperience = controller.onExperienceChanged(skill, event.getXp());
+		if (config.enabled() && gainedExperience)
 		{
 			tickGains.add(skill);
 		}
+	}
+
+	@Subscribe
+	public void onRuneScapeProfileChanged(RuneScapeProfileChanged event)
+	{
+		removeAllAutoOverlays();
+		controller.reset();
+		controller.resetExperience();
+		tickGains.clear();
 	}
 
 	@Subscribe
@@ -126,7 +132,16 @@ public class XpAutoCanvasPlugin extends Plugin
 			boolean isShown = hasAutoOverlay(skill);
 			if (shouldShow && !isShown)
 			{
-				overlayManager.add(new XpAutoCanvasOverlay(this, client, xpTrackerService, skill, skillIconManager.getSkillImage(skill)));
+				overlayManager.add(new XpAutoCanvasOverlay(
+					this,
+					client,
+					config,
+					controller,
+					xpTrackerService,
+					this::isXpTrackerActive,
+					skill,
+					skillIconManager.getSkillImage(skill),
+					skillIconManager.getSkillImage(skill, true)));
 			}
 			else if (!shouldShow && isShown)
 			{
@@ -137,12 +152,16 @@ public class XpAutoCanvasPlugin extends Plugin
 
 	private boolean hasCoreOverlay(Skill skill)
 	{
-		boolean trackerActive = pluginManager.getPlugins().stream()
-			.filter(XpTrackerPlugin.class::isInstance)
-			.anyMatch(pluginManager::isPluginActive);
-		return trackerActive && overlayManager.anyMatch(overlay ->
+		return isXpTrackerActive() && overlayManager.anyMatch(overlay ->
 			overlay.getClass().getName().equals("net.runelite.client.plugins.xptracker.XpInfoBoxOverlay")
 				&& overlay.getName().endsWith(skill.getName()));
+	}
+
+	private boolean isXpTrackerActive()
+	{
+		return pluginManager.getPlugins().stream()
+			.filter(XpTrackerPlugin.class::isInstance)
+			.anyMatch(pluginManager::isPluginActive);
 	}
 
 	private boolean hasAutoOverlay(Skill skill)

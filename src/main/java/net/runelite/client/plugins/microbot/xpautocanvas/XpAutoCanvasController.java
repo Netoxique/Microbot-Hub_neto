@@ -13,7 +13,38 @@ class XpAutoCanvasController
 {
 	private final Map<Skill, Queue<Integer>> recentDrops = new EnumMap<>(Skill.class);
 	private final Map<Skill, Integer> lastDropTicks = new EnumMap<>(Skill.class);
+	private final Map<Skill, Integer> lastExperience = new EnumMap<>(Skill.class);
+	private final Map<Skill, Integer> sessionXpGained = new EnumMap<>(Skill.class);
 	private final Set<Skill> activeOverlays = EnumSet.noneOf(Skill.class);
+
+	void initializeExperience(Skill skill, int experience)
+	{
+		lastExperience.put(skill, experience);
+		sessionXpGained.put(skill, 0);
+	}
+
+	boolean onExperienceChanged(Skill skill, int experience)
+	{
+		Integer previousExperience = lastExperience.put(skill, experience);
+		if (previousExperience == null || experience <= previousExperience)
+		{
+			return false;
+		}
+
+		sessionXpGained.merge(skill, experience - previousExperience, Integer::sum);
+		return true;
+	}
+
+	int getSessionXpGained(Skill skill)
+	{
+		return sessionXpGained.getOrDefault(skill, 0);
+	}
+
+	void resetExperience()
+	{
+		lastExperience.clear();
+		sessionXpGained.clear();
+	}
 
 	void onXpDrop(Skill skill, int currentTick, int requiredDrops, int activationWindowTicks)
 	{

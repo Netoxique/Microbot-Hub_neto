@@ -74,4 +74,30 @@ class XpAutoCanvasControllerTest
 			EnumSet.of(Skill.SLAYER, Skill.RANGED, Skill.HITPOINTS, Skill.PRAYER), true, true);
 		assertEquals(EnumSet.of(Skill.SLAYER, Skill.PRAYER), filtered);
 	}
+
+	@Test
+	void tracksPositiveSessionExperienceWithoutCountingDecreases()
+	{
+		XpAutoCanvasController controller = new XpAutoCanvasController();
+		controller.initializeExperience(Skill.WOODCUTTING, 1_000);
+
+		assertTrue(controller.onExperienceChanged(Skill.WOODCUTTING, 1_125));
+		assertEquals(125, controller.getSessionXpGained(Skill.WOODCUTTING));
+		assertFalse(controller.onExperienceChanged(Skill.WOODCUTTING, 1_100));
+		assertEquals(125, controller.getSessionXpGained(Skill.WOODCUTTING));
+		assertTrue(controller.onExperienceChanged(Skill.WOODCUTTING, 1_150));
+		assertEquals(175, controller.getSessionXpGained(Skill.WOODCUTTING));
+	}
+
+	@Test
+	void resetsSessionExperienceIndependentlyFromOverlayTracking()
+	{
+		XpAutoCanvasController controller = new XpAutoCanvasController();
+		controller.initializeExperience(Skill.MINING, 500);
+		controller.onExperienceChanged(Skill.MINING, 550);
+		controller.resetExperience();
+
+		assertEquals(0, controller.getSessionXpGained(Skill.MINING));
+		assertFalse(controller.onExperienceChanged(Skill.MINING, 600));
+	}
 }
