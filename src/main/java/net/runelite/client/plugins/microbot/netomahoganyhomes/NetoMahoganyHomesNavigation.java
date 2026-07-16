@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.netomahoganyhomes;
 
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 
 final class NetoMahoganyHomesNavigation {
     static final int NOELLA_FIRST_UP_STAIRS = 17026;
@@ -22,6 +23,10 @@ final class NetoMahoganyHomesNavigation {
     static boolean isRepairDestinationReached(int currentPlane, int targetPlane, int pathDistance,
                                                int reachedDistance) {
         return currentPlane == targetPlane && isReachablePath(pathDistance) && pathDistance <= reachedDistance;
+    }
+
+    static boolean shouldOpenBankDirectly(boolean usingDuelingRing, BankLocation bankLocation) {
+        return usingDuelingRing && bankLocation == BankLocation.CASTLE_WARS;
     }
 
     static int selectNoellaUpStairs(WorldPoint targetLocation, WorldPoint firstSectionReference,

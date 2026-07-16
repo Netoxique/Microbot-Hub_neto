@@ -1,6 +1,7 @@
 package net.runelite.client.plugins.microbot.netomahoganyhomes;
 
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -52,6 +53,14 @@ class NetoMahoganyHomesNavigationTest {
     void insideCheckOnlyUsesSelectedHomeArea() {
         assertTrue(Home.LARRY.isInside(new WorldPoint(3038, 3364, 0)));
         assertFalse(Home.LARRY.isInside(new WorldPoint(3038, 3344, 0)));
+    }
+
+    @Test
+    void duelingRingRouteOpensCastleWarsBankDirectly() {
+        assertTrue(NetoMahoganyHomesNavigation.shouldOpenBankDirectly(true, BankLocation.CASTLE_WARS));
+        assertFalse(NetoMahoganyHomesNavigation.shouldOpenBankDirectly(false, BankLocation.CASTLE_WARS));
+        assertFalse(NetoMahoganyHomesNavigation.shouldOpenBankDirectly(true, BankLocation.FALADOR_EAST));
+        assertFalse(NetoMahoganyHomesNavigation.shouldOpenBankDirectly(true, null));
     }
 
     @Test

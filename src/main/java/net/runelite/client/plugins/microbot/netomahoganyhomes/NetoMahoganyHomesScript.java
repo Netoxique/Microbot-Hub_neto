@@ -770,8 +770,14 @@ public class NetoMahoganyHomesScript extends Script {
         if (currentHome != null
                 && plugin.distanceBetween(currentHome.getArea(), Rs2Player.getWorldLocation()) > 0
                 && isMissingItems()) {
+            boolean usingDuelingRing = isWearingDuelingRing();
             BankLocation bankLocation = getResupplyBank(currentHome);
-            if (bankLocation != null && Rs2Bank.walkToBank(bankLocation)) {
+            boolean readyToOpenBank = NetoMahoganyHomesNavigation.shouldOpenBankDirectly(
+                    usingDuelingRing, bankLocation);
+            if (!readyToOpenBank && bankLocation != null) {
+                readyToOpenBank = Rs2Bank.walkToBank(bankLocation);
+            }
+            if (readyToOpenBank) {
                 if(Rs2Bank.openBank()) {
                     sleepUntil(Rs2Bank::isOpen);
                     withdrawSupplies();
@@ -779,7 +785,6 @@ public class NetoMahoganyHomesScript extends Script {
                         Rs2Bank.closeBank();
                     }
                 }
-
             }
         }
     }
