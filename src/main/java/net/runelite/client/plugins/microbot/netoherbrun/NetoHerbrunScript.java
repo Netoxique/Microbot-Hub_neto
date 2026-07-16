@@ -21,6 +21,8 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -121,13 +123,88 @@ public class NetoHerbrunScript extends Script {
 
             if (!currentPatch.isInRange(40)) {
                 NetoHerbrunPlugin.status = "Walking to " + currentPatch.getRegionName();
-                if (currentPatch.getRegionName().equals("Civitas illa Fortis")) {
-                    if (Rs2Inventory.hasItem("Perfected quetzal whistle(i)")) {
-                        Rs2Inventory.interact("Perfected quetzal whistle(i)", "Signal");
-                        sleepUntil(() -> Rs2Player.isAnimating(), 3000);
-                        sleepUntil(() -> !Rs2Player.isAnimating(), 5000);
+                String regionName = currentPatch.getRegionName();
+                WorldPoint locationBeforeTeleport = Rs2Player.getWorldLocation();
+                boolean teleportInteractionSucceeded = false;
+
+                switch (regionName) {
+                    case "Civitas illa Fortis":
+                        String whistle = findQuetzalWhistleInInventory();
+                        if (whistle != null) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact(whistle, "Signal");
+                        }
+                        break;
+                    case "Farming Guild":
+                        if (Rs2Inventory.hasItem("Farming cape") || Rs2Inventory.hasItem("Farming cape(t)") ||
+                            Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING) || Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING_TRIMMED)) {
+                            teleportInteractionSucceeded = interactTeleportItem(new String[]{"Farming cape", "Farming cape(t)"}, "Teleport");
+                        } else {
+                            String necklace = findSkillsNecklaceInInventory();
+                            if (necklace != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(necklace, "Farming Guild");
+                            }
+                        }
+                        break;
+                    case "Ardougne":
+                        if (Rs2Inventory.hasItem("Ardougne cloak 4") || Rs2Equipment.isWearing("Ardougne cloak 4")) {
+                            teleportInteractionSucceeded = interactTeleportItem("Ardougne cloak 4", "Ardougne Farm");
+                        } else {
+                            String necklace = findSkillsNecklaceInInventory();
+                            if (necklace != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(necklace, "Fishing Guild");
+                            }
+                        }
+                        break;
+                    case "Kourend":
+                        if (Rs2Inventory.hasItem("Xeric's talisman") || Rs2Equipment.isWearing("Xeric's talisman")) {
+                            teleportInteractionSucceeded = interactTeleportItem("Xeric's talisman", "Xeric's Glade");
+                        } else {
+                            String necklace = findSkillsNecklaceInInventory();
+                            if (necklace != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(necklace, "Woodcutting Guild");
+                            }
+                        }
+                        break;
+                    case "Troll Stronghold":
+                        if (Rs2Inventory.hasItem("Stony basalt")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Stony basalt", "Troll Stronghold");
+                        }
+                        break;
+                    case "Weiss":
+                        if (Rs2Inventory.hasItem("Icy basalt")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Icy basalt", "Weiss");
+                        }
+                        break;
+                    case "Catherby":
+                        if (Rs2Inventory.hasItem("Catherby teleport")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Catherby teleport", "Break");
+                        } else if (Rs2Magic.hasRequiredRunes(Rs2Spells.CAMELOT_TELEPORT)) {
+                            teleportInteractionSucceeded = Rs2Magic.cast(Rs2Spells.CAMELOT_TELEPORT);
+                        }
+                        break;
+                    case "Morytania":
+                        if (Rs2Inventory.hasItem("Ectophial")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Ectophial", "Teleport");
+                        }
+                        break;
+                    case "Falador":
+                        String glory = findAmuletOfGloryInInventory();
+                        if (glory != null) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact(glory, "Draynor Village");
+                        }
+                        break;
+                }
+
+                if (teleportInteractionSucceeded && locationBeforeTeleport != null) {
+                    boolean locationChanged = sleepUntil(() -> {
+                        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+                        return currentLocation != null && !currentLocation.equals(locationBeforeTeleport);
+                    }, 10000);
+                    if (!locationChanged) {
+                        log("Teleport interaction succeeded for " + regionName + " but the player location did not change.");
                     }
                 }
+
                 walkTo(currentPatch.getLocation(), 7);
                 return;
             }
@@ -182,7 +259,7 @@ public class NetoHerbrunScript extends Script {
             return;
         }
 
-        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination));
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination, distance));
         while (!future.isDone()) {
             playerLocation = Rs2Player.getWorldLocation();
             if (playerLocation != null && playerLocation.distanceTo(destination) <= distance) {
@@ -1284,6 +1361,53 @@ public class NetoHerbrunScript extends Script {
         return null;
     }
 
+    private String findQuetzalWhistleInInventory() {
+        String[] whistleNames = {
+                "Perfected quetzal whistle(i)",
+                "Perfected quetzal whistle",
+                "Perfect quetzal whistle",
+                "Enhanced quetzal whistle",
+                "Basic quetzal whistle",
+                "Quetzal whistle"
+        };
+        for (String whistleName : whistleNames) {
+            if (Rs2Inventory.hasItem(whistleName)) {
+                return whistleName;
+            }
+        }
+        return null;
+    }
+
+    private boolean interactTeleportItem(String itemName, String action) {
+        if (Rs2Inventory.hasItem(itemName)) {
+            return Rs2Inventory.interact(itemName, action);
+        } else if (Rs2Equipment.isWearing(itemName)) {
+            return Rs2Equipment.interact(itemName, action);
+        }
+        return false;
+    }
+
+    private boolean interactTeleportItem(String[] itemNames, String action) {
+        for (String name : itemNames) {
+            if (Rs2Inventory.hasItem(name)) {
+                return Rs2Inventory.interact(name, action);
+            } else if (Rs2Equipment.isWearing(name)) {
+                return Rs2Equipment.interact(name, action);
+            }
+        }
+        return false;
+    }
+
+    private String findSkillsNecklaceInInventory() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Skills necklace(" + i + ")";
+            if (Rs2Inventory.hasItem(name)) {
+                return name;
+            }
+        }
+        return null;
+    }
+
     private String findSkillsNecklaceWithLeastCharges() {
         for (int i = 1; i <= 6; i++) {
             String name = "Skills necklace(" + i + ")";
@@ -1302,6 +1426,19 @@ public class NetoHerbrunScript extends Script {
             }
         }
         if (Rs2Bank.hasItem("Amulet of eternal glory", true)) {
+            return "Amulet of eternal glory";
+        }
+        return null;
+    }
+
+    private String findAmuletOfGloryInInventory() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Amulet of glory(" + i + ")";
+            if (Rs2Inventory.hasItem(name)) {
+                return name;
+            }
+        }
+        if (Rs2Inventory.hasItem("Amulet of eternal glory")) {
             return "Amulet of eternal glory";
         }
         return null;
