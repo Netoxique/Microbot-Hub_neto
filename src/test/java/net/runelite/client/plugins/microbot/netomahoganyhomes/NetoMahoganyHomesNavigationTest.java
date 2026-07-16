@@ -64,6 +64,16 @@ class NetoMahoganyHomesNavigationTest {
     }
 
     @Test
+    void onlyRossUsesLegacyHomeWalking() {
+        assertFalse(NetoMahoganyHomesNavigation.shouldUseAreaArrival(Home.ROSS));
+        for (Home home : Home.values()) {
+            if (home != Home.ROSS) {
+                assertTrue(NetoMahoganyHomesNavigation.shouldUseAreaArrival(home));
+            }
+        }
+    }
+
+    @Test
     void selectsFirstNoellaStairsForFirstSectionTarget() {
         WorldPoint target = new WorldPoint(10, 10, 1);
         WorldPoint firstSectionStairs = new WorldPoint(11, 10, 1);

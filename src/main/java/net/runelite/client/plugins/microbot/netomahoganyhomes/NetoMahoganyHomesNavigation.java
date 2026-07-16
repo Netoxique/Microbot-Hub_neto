@@ -29,6 +29,10 @@ final class NetoMahoganyHomesNavigation {
         return usingDuelingRing && bankLocation == BankLocation.CASTLE_WARS;
     }
 
+    static boolean shouldUseAreaArrival(Home home) {
+        return home != Home.ROSS;
+    }
+
     static int selectNoellaUpStairs(WorldPoint targetLocation, WorldPoint firstSectionReference,
                                      WorldPoint secondSectionReference) {
         if (targetLocation == null) {

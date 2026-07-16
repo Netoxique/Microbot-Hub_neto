@@ -155,6 +155,11 @@ public class NetoMahoganyHomesScript extends Script {
         }
     }
 
+    private void sendRedChatMessage(String message) {
+        Microbot.getClientThread().invoke(() -> Microbot.getClient().addChatMessage(
+                ChatMessageType.GAMEMESSAGE, "", "<col=ff0000>" + message + "</col>", null));
+    }
+
     private void logInfo(String message) {
         if (plugin.getConfig().logMessages()) {
             log.info(message);
@@ -860,7 +865,7 @@ public class NetoMahoganyHomesScript extends Script {
         int planksToWithdraw = sackSpace + Rs2Inventory.emptySlotCount();
         if (Rs2Bank.count(plankId) < planksToWithdraw) {
             log("Not enough planks to fill the plank sack and inventory.");
-            Microbot.showMessage("Not enough selected planks in the bank. Stopping plugin.");
+            sendRedChatMessage("Not enough selected planks in the bank. Stopping plugin.");
             Microbot.stopPlugin(plugin);
             return false;
         }
@@ -1037,7 +1042,11 @@ public class NetoMahoganyHomesScript extends Script {
                 }
             }
 
-            walkToHomeArea(currentHome);
+            if (NetoMahoganyHomesNavigation.shouldUseAreaArrival(currentHome)) {
+                walkToHomeArea(currentHome);
+            } else {
+                Rs2Walker.walkWithState(currentHome.getLocation(), 3);
+            }
         }
     }
 
