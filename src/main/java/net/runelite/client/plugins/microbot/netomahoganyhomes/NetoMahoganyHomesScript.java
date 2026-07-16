@@ -39,6 +39,7 @@ import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 
 import java.util.*;
 import java.util.Arrays;
+import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
@@ -49,6 +50,7 @@ public class NetoMahoganyHomesScript extends Script {
     private static final int HOSIDIUS_UP_LADDER_ID = 11794;
     private static final int HOSIDIUS_DOWN_LADDER_ID = 11802;
     private static final int REPAIR_OBJECT_REACHED_DISTANCE = 3;
+    private static final int HOME_ARRIVAL_POLL_INTERVAL_MS = 50;
     private static final int[] DUELING_RING_IDS_LOWEST_CHARGE_FIRST = {
             ItemID.RING_OF_DUELING1,
             ItemID.RING_OF_DUELING2,
@@ -1030,7 +1032,45 @@ public class NetoMahoganyHomesScript extends Script {
                 }
             }
 
-            Rs2Walker.walkWithState(plugin.getCurrentHome().getLocation(), 3);
+            walkToHomeArea(currentHome);
+        }
+    }
+
+    private WalkerState walkToHomeArea(Home home) {
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkWithState(home.getLocation(), 3));
+
+        try {
+            while (!future.isDone()) {
+                if (Thread.currentThread().isInterrupted()) {
+                    Rs2Walker.clearWalkingRoute("netomahoganyhomes:home-walk-interrupted");
+                    future.cancel(true);
+                    return WalkerState.EXIT;
+                }
+
+                if (home.hasArrived(Rs2Player.getWorldLocation())) {
+                    Rs2Walker.clearWalkingRoute("netomahoganyhomes:entered-" + home.name().toLowerCase(Locale.ROOT));
+                    future.cancel(true);
+                    return WalkerState.ARRIVED;
+                }
+                sleep(HOME_ARRIVAL_POLL_INTERVAL_MS);
+            }
+
+            return future.get();
+        } catch (InterruptedException e) {
+            Rs2Walker.clearWalkingRoute("netomahoganyhomes:home-walk-interrupted");
+            future.cancel(true);
+            Thread.currentThread().interrupt();
+            return WalkerState.EXIT;
+        } catch (CancellationException e) {
+            return home.hasArrived(Rs2Player.getWorldLocation()) ? WalkerState.ARRIVED : WalkerState.EXIT;
+        } catch (ExecutionException e) {
+            log("Home walking failed: %s", e.getCause() != null ? e.getCause().getMessage() : e.getMessage());
+            return WalkerState.UNREACHABLE;
+        } finally {
+            if (!future.isDone()) {
+                Rs2Walker.clearWalkingRoute("netomahoganyhomes:home-walk-aborted");
+                future.cancel(true);
+            }
         }
     }
 
