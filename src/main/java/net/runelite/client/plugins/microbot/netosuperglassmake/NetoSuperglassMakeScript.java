@@ -163,6 +163,11 @@ public class NetoSuperglassMakeScript extends Script {
 
         sleepUntil(() -> !Rs2Inventory.contains("Molten Glass"), 3000); // Wait for inventory to empty
 
+        if (Rs2Inventory.contains("Bucket of sand")) {
+            Rs2Bank.depositAll("Bucket of sand");
+            sleepUntil(() -> !Rs2Inventory.contains("Bucket of sand"), 3000);
+        }
+
         if (currentItem == NetoSuperglassMakeInfo.items.GiantSeaweed) {
             if (Rs2Bank.count("Giant seaweed") < 3 || Rs2Bank.count("Bucket of sand") < 18) {
                 notifier.notify("Out of materials");
