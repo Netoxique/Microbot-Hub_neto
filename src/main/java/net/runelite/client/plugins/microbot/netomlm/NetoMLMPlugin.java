@@ -29,7 +29,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class NetoMLMPlugin extends Plugin {
 
-	static final String version = "1.0.0";
+	static final String version = "1.0.1";
 
     @Inject
     private NetoMLMConfig config;

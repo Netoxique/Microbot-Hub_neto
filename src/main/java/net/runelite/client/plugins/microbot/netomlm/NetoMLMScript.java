@@ -4,17 +4,12 @@ import java.awt.Rectangle;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
-import java.util.HashSet;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
-import java.util.Set;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.TimeUnit;
 import javax.inject.Inject;
 import lombok.extern.slf4j.Slf4j;
-import net.runelite.api.EquipmentInventorySlot;
 import net.runelite.api.GameObject;
 import net.runelite.api.Perspective;
 import net.runelite.api.Skill;
@@ -33,8 +28,6 @@ import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.netomlm.enums.MLMMiningSpot;
 import net.runelite.client.plugins.microbot.netomlm.enums.MLMStatus;
-import net.runelite.client.plugins.microbot.netomlm.enums.Pickaxe;
-import net.runelite.client.plugins.microbot.util.Rs2InventorySetup;
 import net.runelite.client.plugins.microbot.util.antiban.AntibanPlugin;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
@@ -56,6 +49,28 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 @Slf4j
 public class NetoMLMScript extends Script
 {
+	private enum PrepStep
+	{
+		OPEN_BANK,
+		DEPOSIT_INVENTORY,
+		VALIDATE_REQUIRED_ITEMS,
+		EQUIP_PROSPECTOR,
+		EQUIP_PICKAXE,
+		EQUIP_RING,
+		EQUIP_NECKLACE,
+		DEPOSIT_LEFTOVERS,
+		WITHDRAW_HAMMER,
+		CLOSE_BANK
+	}
+
+	private enum WalkingStep
+	{
+		REACH_MINING_GUILD,
+		ENTER_MOTHERLODE,
+		FIRST_ROCKFALL,
+		SECOND_ROCKFALL,
+		REACH_MLM_BANK
+	}
 
     private static final WorldArea WEST_UPPER_AREA = new WorldArea(3748, 5676, 7, 9, 0);
     private static final WorldArea EAST_UPPER_AREA = new WorldArea(3756, 5667, 8, 8, 0);
@@ -65,6 +80,45 @@ public class NetoMLMScript extends Script
 
 	private static final WorldPoint HOPPER_DEPOSIT_DOWN = new WorldPoint(3748, 5672, 0);
 	private static final WorldPoint HOPPER_DEPOSIT_UP = new WorldPoint(3755, 5677, 0);
+	private static final WorldPoint MINING_GUILD_DESTINATION = new WorldPoint(3053, 9768, 0);
+	private static final WorldPoint FIRST_ROCKFALL_LOCATION = new WorldPoint(3731, 5683, 0);
+	private static final WorldPoint FIRST_ROCKFALL_FALLBACK = new WorldPoint(3733, 5681, 0);
+	private static final WorldPoint SECOND_ROCKFALL_LOCATION = new WorldPoint(3733, 5680, 0);
+	private static final WorldPoint SECOND_ROCKFALL_FALLBACK = new WorldPoint(3736, 5678, 0);
+	private static final WorldPoint MLM_BANK_LOCATION = new WorldPoint(3758, 5666, 0);
+
+	private static final int[] DRAGON_PICKAXE_IDS =
+	{
+		ItemID.DRAGON_PICKAXE,
+		ItemID.DRAGON_PICKAXE_PRETTY,
+		ItemID.ZALCANO_PICKAXE,
+		ItemID.TRAILBLAZER_PICKAXE_NO_INFERNAL,
+		ItemID.TRAILBLAZER_RELOADED_PICKAXE_NO_INFERNAL
+	};
+	private static final int[] PROSPECTOR_HEAD_IDS =
+	{
+		ItemID.MOTHERLODE_REWARD_HAT_GOLD,
+		ItemID.MOTHERLODE_REWARD_HAT,
+		ItemID.FOSSIL_MOTHERLODE_REWARD_HAT
+	};
+	private static final int[] PROSPECTOR_BODY_IDS =
+	{
+		ItemID.MOTHERLODE_REWARD_TOP_GOLD,
+		ItemID.MOTHERLODE_REWARD_TOP,
+		ItemID.FOSSIL_MOTHERLODE_REWARD_TOP
+	};
+	private static final int[] PROSPECTOR_LEGS_IDS =
+	{
+		ItemID.MOTHERLODE_REWARD_LEGS_GOLD,
+		ItemID.MOTHERLODE_REWARD_LEGS,
+		ItemID.FOSSIL_MOTHERLODE_REWARD_LEGS
+	};
+	private static final int[] PROSPECTOR_BOOTS_IDS =
+	{
+		ItemID.MOTHERLODE_REWARD_BOOTS_GOLD,
+		ItemID.MOTHERLODE_REWARD_BOOTS,
+		ItemID.FOSSIL_MOTHERLODE_REWARD_BOOTS
+	};
 
 	private static final WorldArea CRATE_AREA = new WorldArea(new WorldPoint(3750, 5659, 0), 10, 16);
 
@@ -95,8 +149,11 @@ public class NetoMLMScript extends Script
 	private boolean emptySackWorkflowActive = false;
 	private long idleSince = 0;
 	private int idleThreshold = 0;
-	private boolean pickedUpHammer = false;
+    private boolean pickedUpHammer = false;
     private MLMStatus lastLoggedStatus = null;
+	private PrepStep prepStep = PrepStep.OPEN_BANK;
+	private WalkingStep walkingStep = WalkingStep.REACH_MINING_GUILD;
+	private Integer selectedPickaxeId = null;
 
 	@Inject
 	public NetoMLMScript(NetoMLMPlugin plugin, NetoMLMConfig config, Rs2TileObjectCache rs2TileObjectCache, Rs2PlayerCache rs2PlayerCache)
@@ -120,8 +177,11 @@ public class NetoMLMScript extends Script
         log.debug("Initializing MLM runtime state");
         Rs2Antiban.antibanSetupTemplates.applyMiningSetup();
         miningSpot = MLMMiningSpot.IDLE;
-        status = MLMStatus.IDLE;
+        status = MLMStatus.PREP;
         lastLoggedStatus = null;
+		prepStep = PrepStep.OPEN_BANK;
+		walkingStep = WalkingStep.REACH_MINING_GUILD;
+		selectedPickaxeId = null;
         shouldEmptySack = false;
 		shouldRepairWaterwheel = false;
 		emptySackWorkflowActive = false;
@@ -148,11 +208,30 @@ public class NetoMLMScript extends Script
             return;
         }
 
-        determineStatusFromInventory();
         logStatusTransitionIfChanged();
+		if (status == MLMStatus.PREP)
+		{
+			handlePrep();
+			return;
+		}
+		if (status == MLMStatus.WALKING)
+		{
+			handleWalking();
+			return;
+		}
+		if (status == MLMStatus.IDLE)
+		{
+			determineStatusFromInventory();
+			return;
+		}
+
+		determineStatusFromInventory();
+		logStatusTransitionIfChanged();
 
         switch (status)
         {
+			case PREP:
+			case WALKING:
             case IDLE:
                 break;
             case MINING:
@@ -186,13 +265,355 @@ public class NetoMLMScript extends Script
         }
     }
 
+	private void handlePrep()
+	{
+		if (prepStep != PrepStep.OPEN_BANK && prepStep != PrepStep.CLOSE_BANK && !Rs2Bank.isOpen())
+		{
+			log.warn("Bank closed during PREP step {}, restarting bank preparation", prepStep);
+			prepStep = PrepStep.OPEN_BANK;
+			return;
+		}
+
+		switch (prepStep)
+		{
+			case OPEN_BANK:
+				if (Rs2Bank.walkToBankAndUseBank() && Rs2Bank.isOpen())
+				{
+					prepStep = PrepStep.DEPOSIT_INVENTORY;
+				}
+				break;
+			case DEPOSIT_INVENTORY:
+				if (Rs2Inventory.isEmpty() || Rs2Bank.depositAll())
+				{
+					prepStep = PrepStep.VALIDATE_REQUIRED_ITEMS;
+				}
+				break;
+			case VALIDATE_REQUIRED_ITEMS:
+				selectedPickaxeId = selectPrepPickaxe();
+				boolean hasPickaxe = selectedPickaxeId != null;
+				boolean hasHammer = hasPrepHammerAvailable();
+				if (!hasPickaxe || !hasHammer)
+				{
+					String missing = !hasPickaxe && !hasHammer ? "a Dragon/Rune pickaxe and a hammer"
+						: !hasPickaxe ? "a usable Dragon/Rune pickaxe" : "an Imcando hammer or regular hammer";
+					Microbot.showMessage("Neto MLM requires " + missing + ". Stopping plugin.");
+					log.warn("PREP failed: missing {}", missing);
+					Microbot.stopPlugin(plugin);
+					return;
+				}
+				prepStep = PrepStep.EQUIP_PROSPECTOR;
+				break;
+			case EQUIP_PROSPECTOR:
+				if (equipProspectorSet())
+				{
+					prepStep = PrepStep.EQUIP_PICKAXE;
+				}
+				break;
+			case EQUIP_PICKAXE:
+				if (equipSelectedPickaxe())
+				{
+					prepStep = PrepStep.EQUIP_RING;
+				}
+				break;
+			case EQUIP_RING:
+				if (equipCelestialRing())
+				{
+					prepStep = PrepStep.EQUIP_NECKLACE;
+				}
+				break;
+			case EQUIP_NECKLACE:
+				if (equipLowestChargeSkillsNecklace())
+				{
+					prepStep = PrepStep.DEPOSIT_LEFTOVERS;
+				}
+				break;
+			case DEPOSIT_LEFTOVERS:
+				if (depositPrepLeftovers())
+				{
+					prepStep = PrepStep.WITHDRAW_HAMMER;
+				}
+				break;
+			case WITHDRAW_HAMMER:
+				if (prepareHammer())
+				{
+					prepStep = PrepStep.CLOSE_BANK;
+				}
+				break;
+			case CLOSE_BANK:
+				if (!Rs2Bank.isOpen() || (Rs2Bank.closeBank() && sleepUntil(() -> !Rs2Bank.isOpen(), 3_000)))
+				{
+					walkingStep = WalkingStep.REACH_MINING_GUILD;
+					status = MLMStatus.WALKING;
+					log.info("PREP complete");
+				}
+				break;
+		}
+	}
+
+	private Integer selectPrepPickaxe()
+	{
+		if (Rs2Player.getSkillRequirement(Skill.MINING, 61))
+		{
+			for (int id : DRAGON_PICKAXE_IDS)
+			{
+				if (Rs2Equipment.isWearing(id)) return id;
+			}
+			for (int id : DRAGON_PICKAXE_IDS)
+			{
+				if (Rs2Bank.hasItem(id)) return id;
+			}
+		}
+		if (Rs2Player.getSkillRequirement(Skill.MINING, 41))
+		{
+			if (Rs2Equipment.isWearing(ItemID.RUNE_PICKAXE)) return ItemID.RUNE_PICKAXE;
+			if (Rs2Bank.hasItem(ItemID.RUNE_PICKAXE)) return ItemID.RUNE_PICKAXE;
+		}
+		return null;
+	}
+
+	private Integer findAvailableAllowedPickaxe()
+	{
+		if (Rs2Player.getSkillRequirement(Skill.MINING, 61))
+		{
+			for (int id : DRAGON_PICKAXE_IDS)
+			{
+				if (Rs2Equipment.isWearing(id) || Rs2Inventory.hasItem(id)) return id;
+			}
+		}
+		if (Rs2Player.getSkillRequirement(Skill.MINING, 41)
+			&& (Rs2Equipment.isWearing(ItemID.RUNE_PICKAXE) || Rs2Inventory.hasItem(ItemID.RUNE_PICKAXE)))
+		{
+			return ItemID.RUNE_PICKAXE;
+		}
+		return null;
+	}
+
+	private boolean hasPrepHammerAvailable()
+	{
+		return isImcandoHammerEquipped()
+			|| Rs2Inventory.hasItem(ItemID.IMCANDO_HAMMER)
+			|| Rs2Bank.hasItem(ItemID.IMCANDO_HAMMER)
+			|| Rs2Inventory.hasItem(ItemID.HAMMER)
+			|| Rs2Bank.hasItem(ItemID.HAMMER);
+	}
+
+	private boolean equipProspectorSet()
+	{
+		return equipBestAvailableItem(PROSPECTOR_HEAD_IDS)
+			&& equipBestAvailableItem(PROSPECTOR_BODY_IDS)
+			&& equipBestAvailableItem(PROSPECTOR_LEGS_IDS)
+			&& equipBestAvailableItem(PROSPECTOR_BOOTS_IDS);
+	}
+
+	private boolean equipBestAvailableItem(int[] priorityIds)
+	{
+		for (int id : priorityIds)
+		{
+			if (Rs2Equipment.isWearing(id)) return true;
+			if (Rs2Bank.hasItem(id)) return Rs2Bank.withdrawAndEquip(id);
+		}
+		return true;
+	}
+
+	private boolean equipSelectedPickaxe()
+	{
+		if (selectedPickaxeId == null) return false;
+		if (Rs2Equipment.isWearing(selectedPickaxeId)) return true;
+
+		boolean isDragonPickaxe = Arrays.stream(DRAGON_PICKAXE_IDS).anyMatch(id -> id == selectedPickaxeId);
+		int attackRequirement = isDragonPickaxe ? 60 : 40;
+		// Only equip if it has attack requirements, otherwise keep in inventory
+		if (Rs2Player.getSkillRequirement(Skill.ATTACK, attackRequirement))
+		{
+			if (Rs2Inventory.hasItem(selectedPickaxeId))
+			{
+				Rs2Inventory.wield(selectedPickaxeId);
+				return sleepUntil(() -> Rs2Equipment.isWearing(selectedPickaxeId), 2_000);
+			}
+			return Rs2Bank.withdrawAndEquip(selectedPickaxeId);
+		}
+
+		return Rs2Inventory.hasItem(selectedPickaxeId) || Rs2Bank.withdrawOne(selectedPickaxeId);
+	}
+
+	private boolean equipCelestialRing()
+	{
+		if (Rs2Equipment.isWearing(ItemID.CELESTIAL_SIGNET_CHARGED)) return true;
+		if (Rs2Bank.hasItem(ItemID.CELESTIAL_SIGNET_CHARGED))
+		{
+			return Rs2Bank.withdrawAndEquip(ItemID.CELESTIAL_SIGNET_CHARGED);
+		}
+		if (Rs2Equipment.isWearing(ItemID.CELESTIAL_RING_CHARGED)) return true;
+		if (Rs2Bank.hasItem(ItemID.CELESTIAL_RING_CHARGED))
+		{
+			return Rs2Bank.withdrawAndEquip(ItemID.CELESTIAL_RING_CHARGED);
+		}
+		return true;
+	}
+
+	private boolean equipLowestChargeSkillsNecklace()
+	{
+		for (int charges = 1; charges <= 6; charges++)
+		{
+			String itemName = "Skills necklace(" + charges + ")";
+			if (Rs2Equipment.isWearing(itemName, true)) return true;
+			if (Rs2Bank.hasItem(itemName, true)) return Rs2Bank.withdrawAndEquip(itemName);
+		}
+		return true;
+	}
+
+	private boolean depositPrepLeftovers()
+	{
+		if (selectedPickaxeId != null && Rs2Inventory.hasItem(selectedPickaxeId))
+		{
+			Rs2Bank.depositAllExcept(selectedPickaxeId);
+			return Rs2Inventory.items().allMatch(item -> item.getId() == selectedPickaxeId);
+		}
+		return Rs2Inventory.isEmpty() || (Rs2Bank.depositAll() && Rs2Inventory.isEmpty());
+	}
+
+	private boolean prepareHammer()
+	{
+		// Get the required hammer; gem bags are no longer part of automatic PREP
+		if (isImcandoHammerEquipped()) return true;
+		if (Rs2Inventory.hasItem(ItemID.IMCANDO_HAMMER))
+		{
+			Rs2Inventory.wield(ItemID.IMCANDO_HAMMER);
+			return sleepUntil(this::isImcandoHammerEquipped, 2_000);
+		}
+		if (Rs2Bank.hasItem(ItemID.IMCANDO_HAMMER))
+		{
+			return Rs2Bank.withdrawAndEquip(ItemID.IMCANDO_HAMMER);
+		}
+		if (Rs2Inventory.hasItem(ItemID.HAMMER)) return true;
+		return Rs2Bank.withdrawOne(ItemID.HAMMER);
+	}
+
+	private boolean isImcandoHammerEquipped()
+	{
+		return Rs2Equipment.isWearing(ItemID.IMCANDO_HAMMER, ItemID.IMCANDO_HAMMER_OFFHAND)
+			|| Rs2Equipment.isWearing("Imcando hammer");
+	}
+
+	private void handleWalking()
+	{
+		switch (walkingStep)
+		{
+			case REACH_MINING_GUILD:
+				if (isNear(MINING_GUILD_DESTINATION, 8))
+				{
+					walkingStep = WalkingStep.ENTER_MOTHERLODE;
+					return;
+				}
+				String necklace = findEquippedSkillsNecklace();
+				if (necklace != null)
+				{
+					if (Rs2Equipment.interact(necklace, "Mining Guild", true))
+					{
+						sleepUntil(() -> isNear(MINING_GUILD_DESTINATION, 8), 8_000);
+					}
+				}
+				else
+				{
+					Rs2Walker.walkTo(MINING_GUILD_DESTINATION, 3);
+				}
+				break;
+			case ENTER_MOTHERLODE:
+				if (isNear(FIRST_ROCKFALL_LOCATION, 15))
+				{
+					walkingStep = WalkingStep.FIRST_ROCKFALL;
+					return;
+				}
+				Rs2TileObjectModel entrance = rs2TileObjectCache.query()
+					.withId(ObjectID.MOTHERLODE_ENTRANCE)
+					.nearestReachable();
+				if (entrance == null)
+				{
+					Rs2Walker.walkTo(MINING_GUILD_DESTINATION, 3);
+					return;
+				}
+				if (entrance.click("Enter"))
+				{
+					sleepUntil(() -> isNear(FIRST_ROCKFALL_LOCATION, 15), 8_000);
+				}
+				break;
+			case FIRST_ROCKFALL:
+				handleRockfall(ObjectID.MOTHERLODE_ROCKFALL_2, FIRST_ROCKFALL_LOCATION,
+					FIRST_ROCKFALL_FALLBACK, WalkingStep.SECOND_ROCKFALL);
+				break;
+			case SECOND_ROCKFALL:
+				handleRockfall(ObjectID.MOTHERLODE_ROCKFALL_1, SECOND_ROCKFALL_LOCATION,
+					SECOND_ROCKFALL_FALLBACK, WalkingStep.REACH_MLM_BANK);
+				break;
+			case REACH_MLM_BANK:
+				if (isNear(MLM_BANK_LOCATION, 3))
+				{
+					status = MLMStatus.IDLE;
+					log.info("WALKING complete, entering IDLE");
+					return;
+				}
+				Rs2Walker.walkTo(MLM_BANK_LOCATION, 3);
+				break;
+		}
+	}
+
+	private void handleRockfall(int objectId, WorldPoint objectLocation, WorldPoint fallback,
+		WalkingStep nextStep)
+	{
+		Rs2TileObjectModel rockfall = rs2TileObjectCache.query()
+			.withId(objectId)
+			.where(object -> objectLocation.equals(object.getWorldLocation()))
+			.first();
+		if (rockfall != null)
+		{
+			if (rockfall.click("Mine"))
+			{
+				sleepUntil(() -> findObjectAt(objectId, objectLocation) == null, 8_000);
+			}
+			return;
+		}
+
+		if (isNear(fallback, 2))
+		{
+			walkingStep = nextStep;
+			return;
+		}
+
+		Rs2Walker.walkTo(fallback, 2);
+	}
+
+	private Rs2TileObjectModel findObjectAt(int objectId, WorldPoint location)
+	{
+		return rs2TileObjectCache.query()
+			.withId(objectId)
+			.where(object -> location.equals(object.getWorldLocation()))
+			.first();
+	}
+
+	private String findEquippedSkillsNecklace()
+	{
+		for (int charges = 1; charges <= 6; charges++)
+		{
+			String itemName = "Skills necklace(" + charges + ")";
+			if (Rs2Equipment.isWearing(itemName, true)) return itemName;
+		}
+		return null;
+	}
+
+	private boolean isNear(WorldPoint target, int distance)
+	{
+		WorldPoint playerLocation = Rs2Player.getWorldLocation();
+		return playerLocation != null && playerLocation.distanceTo(target) <= distance;
+	}
+
     private void determineStatusFromInventory()
     {
         updateSackSize();
         if (!hasRequiredTools())
         {
-            log.info("Missing required tools, running inventory setup");
-            setupInventory();
+			Microbot.showMessage("Required Dragon/Rune pickaxe is no longer available. Stopping Neto MLM.");
+			log.warn("Required Dragon/Rune pickaxe is no longer available, stopping plugin");
+			Microbot.stopPlugin(plugin);
             return;
         }
 
@@ -223,7 +644,7 @@ public class NetoMLMScript extends Script
 
     private boolean hasRequiredTools()
     {
-		return Pickaxe.hasItem();
+		return findAvailableAllowedPickaxe() != null;
     }
 
     private void updateSackSize()
@@ -352,7 +773,10 @@ public class NetoMLMScript extends Script
 	private void abortCurrentWorkflow()
 	{
 		resetMiningState(true);
-		status = MLMStatus.IDLE;
+		if (status != MLMStatus.PREP && status != MLMStatus.WALKING)
+		{
+			status = MLMStatus.IDLE;
+		}
 		idleSince = 0;
 		shouldEmptySack = false;
 		shouldRepairWaterwheel = false;
@@ -468,7 +892,11 @@ public class NetoMLMScript extends Script
 				sleep(100, 300);
             }
 
-			if (config.useDepositAll()) {
+			boolean hasRequiredToolInInventory = Arrays.stream(DRAGON_PICKAXE_IDS).anyMatch(Rs2Inventory::hasItem)
+				|| Rs2Inventory.hasItem(ItemID.RUNE_PICKAXE)
+				|| Rs2Inventory.hasItem(ItemID.HAMMER)
+				|| Rs2Inventory.hasItem(ItemID.IMCANDO_HAMMER);
+			if (config.useDepositAll() && !hasRequiredToolInInventory) {
 				Rs2DepositBox.depositAll();
 			} else {
 				Rs2DepositBox.depositAllExcept(getItemsToKeep(), false);
@@ -482,90 +910,6 @@ public class NetoMLMScript extends Script
 			}
         }
     }
-
-	private void setupInventory() {
-        log.info("Running MLM inventory setup (useInventorySetup={})", config.useInventorySetup());
-		if (!config.useInventorySetup()) {
-			Rs2ItemModel pickaxe = Pickaxe.getBestPickaxe();
-
-			if (pickaxe == null) {
-				Rs2Bank.openBank();
-				sleepUntil(Rs2Bank::isOpen);
-
-				pickaxe = Pickaxe.getBestPickaxeFromBank();
-				if (pickaxe == null) {
-					Microbot.showMessage("No pickaxe found in bank or inventory. Please bank a pickaxe.");
-                    log.warn("No pickaxe found in bank or inventory, stopping plugin");
-					Microbot.stopPlugin(plugin);
-					return;
-				}
-
-				if (Rs2Inventory.isFull()) {
-					Rs2Bank.depositAll();
-				}
-
-				// Only equip if it has attack requirements, otherwise keep in inventory
-				if (Pickaxe.hasAttackLevelRequirement(pickaxe.getId())) {
-					final Rs2ItemModel currentWeapon = Rs2Equipment.get(EquipmentInventorySlot.WEAPON);
-					final Rs2ItemModel _pickaxe = pickaxe;
-					Rs2Bank.withdrawAndEquip(_pickaxe.getId());
-					sleepUntil(() -> Rs2Equipment.isWearing(_pickaxe.getId()));
-					if (currentWeapon != null) {
-						Rs2Bank.depositOne(currentWeapon.getId());
-						Rs2Inventory.waitForInventoryChanges(5000);
-					}
-				} else {
-					Rs2Bank.withdrawOne(pickaxe.getId());
-					Rs2Inventory.waitForInventoryChanges(5000);
-				}
-
-				// Get gem bag and hammer
-				final int[] gemBagIDs = {ItemID.GEM_BAG, ItemID.GEM_BAG_OPEN};
-				for (int gemBagID : gemBagIDs) {
-					if (!isRunning()) break;
-					if (Rs2Bank.withdrawOne(gemBagID)) {
-						Rs2Inventory.waitForInventoryChanges(5000);
-						break;
-					}
-				}
-
-				if (Rs2Random.dicePercentage(10) && !hasHammer()) {
-					if (Rs2Bank.withdrawOne("hammer")) {
-						Rs2Inventory.waitForInventoryChanges(5000);
-					}
-				}
-
-				Rs2Bank.toggleItemLock("pickaxe", false);
-				Rs2Bank.toggleItemLock("hammer", false);
-				Rs2Bank.toggleItemLock("gem bag", false);
-			}
-
-		} else {
-			Rs2InventorySetup mlmInventorySetup = new Rs2InventorySetup(config.getInventorySetup(), mainScheduledFuture);
-			boolean doesEquipmentMatch = true;
-			boolean doesInventoryMatch = true;
-
-			if (!mlmInventorySetup.doesEquipmentMatch()) {
-				doesEquipmentMatch = mlmInventorySetup.loadEquipment();
-			}
-
-			if (!mlmInventorySetup.doesInventoryMatch()) {
-				doesInventoryMatch = mlmInventorySetup.loadInventory();
-			}
-
-			if (!doesEquipmentMatch || !doesInventoryMatch) {
-				Microbot.showMessage("Failed to load inventory setup. Please check your settings.");
-                log.warn("Inventory setup failed (equipmentMatch={}, inventoryMatch={}), stopping plugin",
-                        doesEquipmentMatch, doesInventoryMatch);
-				Microbot.stopPlugin(plugin);
-				return;
-			}
-		}
-
-		Rs2Bank.closeBank();
-		sleepUntil(() -> !Rs2Bank.isOpen());
-        log.info("Inventory setup complete");
-	}
 
     private void selectMiningSpotFromConfig() {
         MLMMiningSpot selected = MLMMiningSpot.valueOf(config.miningArea().name());
@@ -812,7 +1156,7 @@ public class NetoMLMScript extends Script
 	}
 
 	private void dropHammerIfNeeded() {
-		if (pickedUpHammer || (!Rs2Equipment.isWearing("hammer") && Rs2Inventory.hasItem("hammer"))) {
+		if (pickedUpHammer && Rs2Inventory.hasItem("hammer")) {
 			Rs2Inventory.drop("hammer");
 			sleepUntil(() -> !Rs2Inventory.hasItem("hammer"));
 			pickedUpHammer = false;
@@ -864,6 +1208,9 @@ public class NetoMLMScript extends Script
         Rs2Antiban.resetAntibanSettings();
         Rs2Walker.setTarget(null);
 		itemsToKeep = null;
+		prepStep = PrepStep.OPEN_BANK;
+		walkingStep = WalkingStep.REACH_MINING_GUILD;
+		selectedPickaxeId = null;
         super.shutdown();
         log.info("Neto MLM script shutdown complete");
     }
