@@ -1,6 +1,9 @@
 package net.runelite.client.plugins.microbot.netoherbrun;
 
 import lombok.Getter;
+import net.runelite.api.Quest;
+import net.runelite.api.QuestState;
+import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.CropState;
 import net.runelite.client.plugins.microbot.questhelper.helpers.mischelpers.farmruns.FarmingHandler;
@@ -20,7 +23,7 @@ public class HerbPatch {
     private boolean enabled;
     private final HashMap<String, Integer> items = new HashMap<>();
 
-    public HerbPatch(FarmingPatch patch, NetoHerbrunConfig config, FarmingHandler farmingHandler) {
+    public HerbPatch(FarmingPatch patch, FarmingHandler farmingHandler) {
         this.patch = patch;
         this.regionName = patch.getRegion().getName();
         this.prediction = farmingHandler.predictPatch(patch);
@@ -30,39 +33,39 @@ public class HerbPatch {
 //                if (Rs2Bank.hasItem("Ardougne cloak")) {
 //                    this.items.put("Ardougne cloak", 1);
 //                }
-                this.enabled = config.enableArdougne();
+                this.enabled = true;
                 break;
             case "Catherby":
                 this.items.put("Camelot teleport", 1);
-                this.enabled = config.enableCatherby();
+                this.enabled = true;
                 break;
             case "Civitas illa Fortis":
                 this.items.put("Civitas illa fortis teleport", 1);
-                this.enabled = config.enableVarlamore();
+                this.enabled = Rs2Player.getQuestState(Quest.CHILDREN_OF_THE_SUN) == QuestState.FINISHED;
                 break;
             case "Falador":
                 this.items.put("Explorer's ring", 1);
-                this.enabled = config.enableFalador();
+                this.enabled = true;
                 break;
             case "Farming Guild":
                 this.items.put("Skills necklace(", 1);
-                this.enabled = config.enableGuild();
+                this.enabled = Rs2Player.getRealSkillLevel(Skill.FARMING) >= 65;
                 break;
             case "Kourend":
                 this.items.put("Xeric's talisman", 1);
-                this.enabled = config.enableHosidius();
+                this.enabled = true;
                 break;
             case "Morytania":
                 this.items.put("Ectophial", 1);
-                this.enabled = config.enableMorytania();
+                this.enabled = Rs2Player.getQuestState(Quest.PRIEST_IN_PERIL) == QuestState.FINISHED;
                 break;
             case "Troll Stronghold":
                 this.items.put("Stony basalt", 1);
-                this.enabled = config.enableTrollheim();
+                this.enabled = Rs2Player.getQuestState(Quest.MY_ARMS_BIG_ADVENTURE) == QuestState.FINISHED;
                 break;
             case "Weiss":
                 this.items.put("Icy basalt", 1);
-                this.enabled = config.enableWeiss();
+                this.enabled = Rs2Player.getQuestState(Quest.MAKING_FRIENDS_WITH_MY_ARM) == QuestState.FINISHED;
                 break;
             case "Harmony":
                 this.enabled = false;

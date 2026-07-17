@@ -26,7 +26,7 @@ public interface NetoHerbrunConfig extends Config {
                 "• Teleportation runes (law, air, earth, fire, water)\n" +
                 "• Your selected herb seeds\n" +
                 "• Your selected compost type\n" +
-                "• Ectophial (if Morytania is enabled)\n\n" +
+                "• Ectophial\n\n" +
                 "Credits to liftedmango and See1Duck";
     }
 
@@ -98,112 +98,6 @@ public interface NetoHerbrunConfig extends Config {
     default boolean goToBank() {
         return true;
     }
-
-    @ConfigItem(
-            keyName = "enableTrollheim",
-            name = "Enable Trollheim Patch",
-            description = "Enable Trollheim patch in herb run",
-            position = 1,
-            section = locationSection
-    )
-    default boolean enableTrollheim() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableCatherby",
-            name = "Enable Catherby Patch",
-            description = "Enable Catherby patch in herb run",
-            position = 2,
-            section = locationSection
-    )
-    default boolean enableCatherby() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableMorytania",
-            name = "Enable Morytania Patch",
-            description = "Enable Morytania patch in herb run",
-            position = 3,
-            section = locationSection
-    )
-    default boolean enableMorytania() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableVarlamore",
-            name = "Enable Varlamore Patch",
-            description = "Enable Varlamore patch in herb run",
-            position = 4,
-            section = locationSection
-    )
-    default boolean enableVarlamore() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableHosidius",
-            name = "Enable Hosidius Patch",
-            description = "Enable Hosidius patch in herb run",
-            position = 5,
-            section = locationSection
-    )
-    default boolean enableHosidius() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableArdougne",
-            name = "Enable Ardougne Patch",
-            description = "Enable Ardougne patch in herb run",
-            position = 6,
-            section = locationSection
-    )
-    default boolean enableArdougne() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableFalador",
-            name = "Enable Falador Patch",
-            description = "Enable Falador patch in herb run",
-            position = 7,
-            section = locationSection
-    )
-    default boolean enableFalador() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableWeiss",
-            name = "Enable Weiss Patch",
-            description = "Enable Weiss patch in herb run",
-            position = 8,
-            section = locationSection
-    )
-    default boolean enableWeiss() {
-        return true;
-    }
-
-    @ConfigItem(
-            keyName = "enableGuild",
-            name = "Enable Farming Guild Patch",
-            description = "Enable Farming Guild patch in herb run",
-            position = 9,
-            section = locationSection
-    )
-    default boolean enableGuild() {
-        return true;
-    }
-
-    @ConfigSection(
-            name = "Location toggles",
-            description = "Location toggles",
-            position = 4
-    )
-    String locationSection = "Location";
 
     @ConfigSection(
             name = "Allotments",

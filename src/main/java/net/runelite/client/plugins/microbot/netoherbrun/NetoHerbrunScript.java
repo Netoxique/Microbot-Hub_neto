@@ -22,6 +22,7 @@ import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel;
@@ -132,6 +133,10 @@ public class NetoHerbrunScript extends Script {
                         String whistle = findQuetzalWhistleInInventory();
                         if (whistle != null) {
                             teleportInteractionSucceeded = Rs2Inventory.interact(whistle, "Signal");
+                        } else if (Rs2Inventory.hasItem("Civitas illa fortis teleport")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Civitas illa fortis teleport", "Break");
+                        } else if (Rs2Inventory.hasItem("Varrock teleport")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Varrock teleport", "Break");
                         }
                         break;
                     case "Farming Guild":
@@ -281,7 +286,7 @@ public class NetoHerbrunScript extends Script {
             Map<String, HerbPatch> allHerbsByRegion = new HashMap<>();
 
             for (FarmingPatch patch : farmingWorld.getTabs().get(Tab.HERB)) {
-                HerbPatch _patch = new HerbPatch(patch, config, farmingHandler);
+                HerbPatch _patch = new HerbPatch(patch, farmingHandler);
                 if (!_patch.isEnabled()) continue;
                 allHerbsByRegion.put(_patch.getRegionName(), _patch);
                 if (_patch.getPrediction() != CropState.GROWING) {
@@ -994,11 +999,25 @@ public class NetoHerbrunScript extends Script {
                         if (!Rs2Inventory.hasItem(whistle)) {
                             Rs2Bank.withdrawOne(whistle);
                         }
-                    } else if (Rs2Bank.count(ItemID.LAWRUNE) >= 2 && Rs2Bank.count(ItemID.EARTHRUNE) >= 1 && Rs2Bank.count(ItemID.FIRERUNE) >= 1) {
+                    } else if (Rs2Magic.isSpellbook(Rs2Spellbook.MODERN)
+                            && Rs2Bank.count(ItemID.LAWRUNE) + Rs2Inventory.count(ItemID.LAWRUNE) >= 2
+                            && Rs2Bank.count(ItemID.EARTHRUNE) + Rs2Inventory.count(ItemID.EARTHRUNE) >= 1
+                            && Rs2Bank.count(ItemID.FIRERUNE) + Rs2Inventory.count(ItemID.FIRERUNE) >= 1) {
                         hasTeleport = true;
-                        Rs2Bank.withdrawX(ItemID.LAWRUNE, 2);
-                        Rs2Bank.withdrawOne(ItemID.EARTHRUNE);
-                        Rs2Bank.withdrawOne(ItemID.FIRERUNE);
+                        int lawRunesNeeded = Math.max(0, 2 - Rs2Inventory.count(ItemID.LAWRUNE));
+                        if (lawRunesNeeded > 0) Rs2Bank.withdrawX(ItemID.LAWRUNE, lawRunesNeeded);
+                        if (!Rs2Inventory.hasItem(ItemID.EARTHRUNE)) Rs2Bank.withdrawOne(ItemID.EARTHRUNE);
+                        if (!Rs2Inventory.hasItem(ItemID.FIRERUNE)) Rs2Bank.withdrawOne(ItemID.FIRERUNE);
+                    } else if (Rs2Bank.hasItem("Civitas illa fortis teleport") || Rs2Inventory.hasItem("Civitas illa fortis teleport")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Civitas illa fortis teleport")) {
+                            Rs2Bank.withdrawOne("Civitas illa fortis teleport");
+                        }
+                    } else if (Rs2Bank.hasItem("Varrock teleport") || Rs2Inventory.hasItem("Varrock teleport")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Varrock teleport")) {
+                            Rs2Bank.withdrawOne("Varrock teleport");
+                        }
                     }
                     break;
                 case "Ardougne":
@@ -1316,17 +1335,6 @@ public class NetoHerbrunScript extends Script {
         if (!Rs2Bank.openBank() || !sleepUntil(Rs2Bank::isOpen, 10000)) {
             log("Failed to reopen the bank after equipping Farmer's outfit");
         }
-    }
-
-    private int countEnabledAllotmentFlowerLocations() {
-        int count = 0;
-        if (config.enableArdougne()) count++;
-        if (config.enableCatherby()) count++;
-        if (config.enableVarlamore()) count++;
-        if (config.enableFalador()) count++;
-        if (config.enableHosidius()) count++;
-        if (config.enableMorytania()) count++;
-        return count;
     }
 
     @Override
