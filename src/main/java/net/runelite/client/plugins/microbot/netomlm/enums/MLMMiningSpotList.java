@@ -8,8 +8,6 @@ public enum MLMMiningSpotList {
     ANY,
     WEST_LOWER,
     WEST_MID,
-    WEST_UPPER,
     SOUTH_EAST,
-    SOUTH_WEST,
-    EAST_UPPER;
+    SOUTH_WEST;
 }
