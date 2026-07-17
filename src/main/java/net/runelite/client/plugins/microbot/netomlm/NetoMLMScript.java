@@ -69,7 +69,10 @@ public class NetoMLMScript extends Script
 		ENTER_MOTHERLODE,
 		FIRST_ROCKFALL,
 		SECOND_ROCKFALL,
-		REACH_MLM_BANK
+		WALK_TO_ROCKSLIDE,
+		WALK_TO_CRATE,
+		OPEN_MLM_BANK,
+		CLOSE_MLM_BANK
 	}
 
     private static final WorldArea WEST_UPPER_AREA = new WorldArea(3748, 5676, 7, 9, 0);
@@ -82,10 +85,10 @@ public class NetoMLMScript extends Script
 	private static final WorldPoint HOPPER_DEPOSIT_UP = new WorldPoint(3755, 5677, 0);
 	private static final WorldPoint MINING_GUILD_DESTINATION = new WorldPoint(3053, 9768, 0);
 	private static final WorldPoint FIRST_ROCKFALL_LOCATION = new WorldPoint(3731, 5683, 0);
-	private static final WorldPoint FIRST_ROCKFALL_FALLBACK = new WorldPoint(3733, 5681, 0);
 	private static final WorldPoint SECOND_ROCKFALL_LOCATION = new WorldPoint(3733, 5680, 0);
-	private static final WorldPoint SECOND_ROCKFALL_FALLBACK = new WorldPoint(3736, 5678, 0);
-	private static final WorldPoint MLM_BANK_LOCATION = new WorldPoint(3758, 5666, 0);
+	private static final WorldPoint ROCKSLIDE_LOCATION = new WorldPoint(3741, 5676, 0);
+	private static final WorldPoint MLM_CRATE_LOCATION = new WorldPoint(3756, 5668, 0);
+	private static final String IMCANDO_HAMMER_OFFHAND_NAME = "Imcando hammer (off-hand)";
 
 	private static final int[] DRAGON_PICKAXE_IDS =
 	{
@@ -132,6 +135,7 @@ public class NetoMLMScript extends Script
     private static final int UPPER_FLOOR_HEIGHT = -490;
     private static final int SACK_LARGE_SIZE = 189;
     private static final int SACK_SIZE = 108;
+	private static final int SECOND_ROCKFALL_MAX_ATTEMPTS = 2;
     public static MLMStatus status = MLMStatus.IDLE;
     public static Rs2TileObjectModel oreVein;
     public static MLMMiningSpot miningSpot = MLMMiningSpot.IDLE;
@@ -153,6 +157,7 @@ public class NetoMLMScript extends Script
     private MLMStatus lastLoggedStatus = null;
 	private PrepStep prepStep = PrepStep.OPEN_BANK;
 	private WalkingStep walkingStep = WalkingStep.REACH_MINING_GUILD;
+	private int secondRockfallAttempts = 0;
 	private Integer selectedPickaxeId = null;
 
 	@Inject
@@ -181,6 +186,7 @@ public class NetoMLMScript extends Script
         lastLoggedStatus = null;
 		prepStep = PrepStep.OPEN_BANK;
 		walkingStep = WalkingStep.REACH_MINING_GUILD;
+		secondRockfallAttempts = 0;
 		selectedPickaxeId = null;
         shouldEmptySack = false;
 		shouldRepairWaterwheel = false;
@@ -235,7 +241,10 @@ public class NetoMLMScript extends Script
             case IDLE:
                 break;
             case MINING:
-                Rs2Antiban.setActivityIntensity(Rs2Antiban.getActivity().getActivityIntensity());
+				if (Rs2Antiban.getActivity() != null)
+				{
+					Rs2Antiban.setActivityIntensity(Rs2Antiban.getActivity().getActivityIntensity());
+				}
                 handleMining();
                 break;
             case EMPTY_SACK:
@@ -295,7 +304,7 @@ public class NetoMLMScript extends Script
 				if (!hasPickaxe || !hasHammer)
 				{
 					String missing = !hasPickaxe && !hasHammer ? "a Dragon/Rune pickaxe and a hammer"
-						: !hasPickaxe ? "a usable Dragon/Rune pickaxe" : "an Imcando hammer or regular hammer";
+						: !hasPickaxe ? "a usable Dragon/Rune pickaxe" : "an Imcando hammer (off-hand) or regular hammer";
 					Microbot.showMessage("Neto MLM requires " + missing + ". Stopping plugin.");
 					log.warn("PREP failed: missing {}", missing);
 					Microbot.stopPlugin(plugin);
@@ -388,11 +397,17 @@ public class NetoMLMScript extends Script
 		return null;
 	}
 
+	private boolean isAllowedPickaxeId(int itemId)
+	{
+		return itemId == ItemID.RUNE_PICKAXE
+			|| Arrays.stream(DRAGON_PICKAXE_IDS).anyMatch(id -> id == itemId);
+	}
+
 	private boolean hasPrepHammerAvailable()
 	{
 		return isImcandoHammerEquipped()
-			|| Rs2Inventory.hasItem(ItemID.IMCANDO_HAMMER)
-			|| Rs2Bank.hasItem(ItemID.IMCANDO_HAMMER)
+			|| Rs2Inventory.hasItem(IMCANDO_HAMMER_OFFHAND_NAME, true)
+			|| Rs2Bank.hasItem(IMCANDO_HAMMER_OFFHAND_NAME, true)
 			|| Rs2Inventory.hasItem(ItemID.HAMMER)
 			|| Rs2Bank.hasItem(ItemID.HAMMER);
 	}
@@ -476,14 +491,14 @@ public class NetoMLMScript extends Script
 	{
 		// Get the required hammer; gem bags are no longer part of automatic PREP
 		if (isImcandoHammerEquipped()) return true;
-		if (Rs2Inventory.hasItem(ItemID.IMCANDO_HAMMER))
+		if (Rs2Inventory.hasItem(IMCANDO_HAMMER_OFFHAND_NAME, true))
 		{
-			Rs2Inventory.wield(ItemID.IMCANDO_HAMMER);
+			Rs2Inventory.wield(IMCANDO_HAMMER_OFFHAND_NAME);
 			return sleepUntil(this::isImcandoHammerEquipped, 2_000);
 		}
-		if (Rs2Bank.hasItem(ItemID.IMCANDO_HAMMER))
+		if (Rs2Bank.hasItem(IMCANDO_HAMMER_OFFHAND_NAME, true))
 		{
-			return Rs2Bank.withdrawAndEquip(ItemID.IMCANDO_HAMMER);
+			return Rs2Bank.withdrawAndEquip(IMCANDO_HAMMER_OFFHAND_NAME);
 		}
 		if (Rs2Inventory.hasItem(ItemID.HAMMER)) return true;
 		return Rs2Bank.withdrawOne(ItemID.HAMMER);
@@ -491,8 +506,7 @@ public class NetoMLMScript extends Script
 
 	private boolean isImcandoHammerEquipped()
 	{
-		return Rs2Equipment.isWearing(ItemID.IMCANDO_HAMMER, ItemID.IMCANDO_HAMMER_OFFHAND)
-			|| Rs2Equipment.isWearing("Imcando hammer");
+		return Rs2Equipment.isWearing(IMCANDO_HAMMER_OFFHAND_NAME, true);
 	}
 
 	private void handleWalking()
@@ -539,26 +553,52 @@ public class NetoMLMScript extends Script
 				break;
 			case FIRST_ROCKFALL:
 				handleRockfall(ObjectID.MOTHERLODE_ROCKFALL_2, FIRST_ROCKFALL_LOCATION,
-					FIRST_ROCKFALL_FALLBACK, WalkingStep.SECOND_ROCKFALL);
+					WalkingStep.SECOND_ROCKFALL);
+				if (walkingStep == WalkingStep.SECOND_ROCKFALL)
+				{
+					secondRockfallAttempts = 0;
+				}
 				break;
 			case SECOND_ROCKFALL:
-				handleRockfall(ObjectID.MOTHERLODE_ROCKFALL_1, SECOND_ROCKFALL_LOCATION,
-					SECOND_ROCKFALL_FALLBACK, WalkingStep.REACH_MLM_BANK);
+				handleSecondRockfall();
 				break;
-			case REACH_MLM_BANK:
-				if (isNear(MLM_BANK_LOCATION, 3))
+			case WALK_TO_ROCKSLIDE:
+				if (walkToObject(11932, ROCKSLIDE_LOCATION))
+				{
+					sleep(4_000);
+					walkingStep = WalkingStep.WALK_TO_CRATE;
+				}
+				break;
+			case WALK_TO_CRATE:
+				if (walkToObject(357, MLM_CRATE_LOCATION))
+				{
+					sleep(4_000);
+					walkingStep = WalkingStep.OPEN_MLM_BANK;
+				}
+				break;
+			case OPEN_MLM_BANK:
+				Rs2Bank.openBank();
+				if (sleepUntil(Rs2Bank::isOpen, 8_000))
+				{
+					walkingStep = WalkingStep.CLOSE_MLM_BANK;
+				}
+				else
+				{
+					log.warn("Unable to open the MLM bank, retrying cave entry from the first rockfall");
+					walkingStep = WalkingStep.FIRST_ROCKFALL;
+				}
+				break;
+			case CLOSE_MLM_BANK:
+				if (!Rs2Bank.isOpen() || (Rs2Bank.closeBank() && sleepUntil(() -> !Rs2Bank.isOpen(), 3_000)))
 				{
 					status = MLMStatus.IDLE;
-					log.info("WALKING complete, entering IDLE");
-					return;
+					log.info("WALKING complete, MLM bank access confirmed");
 				}
-				Rs2Walker.walkTo(MLM_BANK_LOCATION, 3);
 				break;
 		}
 	}
 
-	private void handleRockfall(int objectId, WorldPoint objectLocation, WorldPoint fallback,
-		WalkingStep nextStep)
+	private void handleRockfall(int objectId, WorldPoint objectLocation, WalkingStep nextStep)
 	{
 		Rs2TileObjectModel rockfall = rs2TileObjectCache.query()
 			.withId(objectId)
@@ -568,18 +608,52 @@ public class NetoMLMScript extends Script
 		{
 			if (rockfall.click("Mine"))
 			{
-				sleepUntil(() -> findObjectAt(objectId, objectLocation) == null, 8_000);
+				boolean cleared = sleepUntil(() -> findObjectAt(objectId, objectLocation) == null, 8_000);
+				if (cleared)
+				{
+					walkingStep = nextStep;
+				}
 			}
 			return;
 		}
 
-		if (isNear(fallback, 2))
+		walkingStep = nextStep;
+	}
+
+	private void handleSecondRockfall()
+	{
+		Rs2TileObjectModel rockfall = findObjectAt(ObjectID.MOTHERLODE_ROCKFALL_1, SECOND_ROCKFALL_LOCATION);
+		if (rockfall == null)
 		{
-			walkingStep = nextStep;
+			secondRockfallAttempts = 0;
+			walkingStep = WalkingStep.WALK_TO_ROCKSLIDE;
 			return;
 		}
 
-		Rs2Walker.walkTo(fallback, 2);
+		secondRockfallAttempts++;
+		boolean cleared = rockfall.click("Mine")
+			&& sleepUntil(() -> findObjectAt(ObjectID.MOTHERLODE_ROCKFALL_1, SECOND_ROCKFALL_LOCATION) == null, 8_000);
+		if (cleared)
+		{
+			secondRockfallAttempts = 0;
+			walkingStep = WalkingStep.WALK_TO_ROCKSLIDE;
+			return;
+		}
+
+		log.warn("Second rockfall clearance attempt {} of {} was not confirmed",
+			secondRockfallAttempts, SECOND_ROCKFALL_MAX_ATTEMPTS);
+		if (secondRockfallAttempts >= SECOND_ROCKFALL_MAX_ATTEMPTS)
+		{
+			secondRockfallAttempts = 0;
+			walkingStep = WalkingStep.FIRST_ROCKFALL;
+			log.warn("Second rockfall remained blocked after two attempts; retrying the first rockfall");
+		}
+	}
+
+	private boolean walkToObject(int objectId, WorldPoint objectLocation)
+	{
+		Rs2TileObjectModel target = findObjectAt(objectId, objectLocation);
+		return target != null && Rs2Walker.walkFastCanvas(target.getWorldLocation());
 	}
 
 	private Rs2TileObjectModel findObjectAt(int objectId, WorldPoint location)
@@ -744,6 +818,10 @@ public class NetoMLMScript extends Script
 		shouldEmptySack = false;
 		shouldRepairWaterwheel = false;
 		emptySackWorkflowActive = false;
+		if (config.mineUpstairs())
+		{
+			selectRandomUpperMiningSpot();
+		}
 		Rs2Antiban.takeMicroBreakByChance();
 		status = MLMStatus.IDLE;
         log.info("Emptying sack workflow complete");
@@ -892,14 +970,12 @@ public class NetoMLMScript extends Script
 				sleep(100, 300);
             }
 
-			boolean hasRequiredToolInInventory = Arrays.stream(DRAGON_PICKAXE_IDS).anyMatch(Rs2Inventory::hasItem)
-				|| Rs2Inventory.hasItem(ItemID.RUNE_PICKAXE)
-				|| Rs2Inventory.hasItem(ItemID.HAMMER)
-				|| Rs2Inventory.hasItem(ItemID.IMCANDO_HAMMER);
-			if (config.useDepositAll() && !hasRequiredToolInInventory) {
+			boolean hasHammerInInventory = Rs2Inventory.hasItem(ItemID.HAMMER)
+				|| Rs2Inventory.hasItem(IMCANDO_HAMMER_OFFHAND_NAME, true);
+			if (isImcandoHammerEquipped() && !hasHammerInInventory) {
 				Rs2DepositBox.depositAll();
 			} else {
-				Rs2DepositBox.depositAllExcept(getItemsToKeep(), false);
+				Rs2DepositBox.depositAllExcept(getItemsToKeep(), true);
 				Rs2Inventory.waitForInventoryChanges(5000);
 			}
 
@@ -912,29 +988,27 @@ public class NetoMLMScript extends Script
     }
 
     private void selectMiningSpotFromConfig() {
+        if (config.mineUpstairs()) {
+            selectRandomUpperMiningSpot();
+            return;
+        }
+
         MLMMiningSpot selected = MLMMiningSpot.valueOf(config.miningArea().name());
 
         if (selected == MLMMiningSpot.ANY) {
-            if (config.mineUpstairs()) {
-                miningSpot = Rs2Random.between(0, 1) == 0 ? MLMMiningSpot.WEST_UPPER : MLMMiningSpot.EAST_UPPER;
-            }
-            else {
-				MLMMiningSpot[] filteredSpots = Arrays.stream(MLMMiningSpot.values())
-					.filter(s -> s.getWorldPoint() != null && s.isDownstairs())
-					.toArray(MLMMiningSpot[]::new);
+			MLMMiningSpot[] filteredSpots = Arrays.stream(MLMMiningSpot.values())
+				.filter(s -> s.getWorldPoint() != null && s.isDownstairs())
+				.toArray(MLMMiningSpot[]::new);
 
-				int size = filteredSpots.length;
-				if (size == 0) return;
+			int size = filteredSpots.length;
+			if (size == 0) return;
 
-				int randomIndex = Rs2Random.randomGaussian(size / 2.0, size / 6.0);
-				randomIndex = Math.max(0, Math.min(size - 1, randomIndex));
+			int randomIndex = Rs2Random.randomGaussian(size / 2.0, size / 6.0);
+			randomIndex = Math.max(0, Math.min(size - 1, randomIndex));
 
-				miningSpot = filteredSpots[randomIndex];
-            }
+			miningSpot = filteredSpots[randomIndex];
         } else {
             switch (selected) {
-                case EAST_UPPER:
-                case WEST_UPPER:
                 case WEST_LOWER:
                 case WEST_MID:
                 case SOUTH_WEST:
@@ -955,6 +1029,15 @@ public class NetoMLMScript extends Script
         }
         log.info("Selected mining spot: {}", miningSpot);
     }
+
+	private void selectRandomUpperMiningSpot()
+	{
+		miningSpot = ThreadLocalRandom.current().nextBoolean()
+			? MLMMiningSpot.WEST_UPPER
+			: MLMMiningSpot.EAST_UPPER;
+		Collections.shuffle(miningSpot.getWorldPoint());
+		log.info("Selected random upstairs mining spot: {}", miningSpot);
+	}
 
     private boolean walkToMiningSpot()
     {
@@ -1115,7 +1198,9 @@ public class NetoMLMScript extends Script
 	}
 
 	private boolean hasHammer() {
-		return Rs2Equipment.isWearing("hammer") || Rs2Inventory.hasItem("hammer");
+		return isImcandoHammerEquipped()
+			|| Rs2Inventory.hasItem(IMCANDO_HAMMER_OFFHAND_NAME, true)
+			|| Rs2Inventory.hasItem(ItemID.HAMMER);
 	}
 
 	private boolean obtainHammer() {
@@ -1138,12 +1223,12 @@ public class NetoMLMScript extends Script
             }
         }
 
-        while (!Rs2Inventory.hasItem("hammer") && isRunning()) {
+        while (!Rs2Inventory.hasItem(ItemID.HAMMER) && isRunning()) {
             //The crate at this point ALWAYS gives the player a hammer
             rs2TileObjectCache.query().where(obj -> obj.getWorldLocation().equals(new WorldPoint(3752, 5674, 0))).interact("Search");
             Rs2Inventory.waitForInventoryChanges(5_000);
 
-            if (Rs2Inventory.hasItem("hammer")) {
+            if (Rs2Inventory.hasItem(ItemID.HAMMER)) {
                 pickedUpHammer = true;
                 log.info("Hammer obtained from crate");
                 break;
@@ -1156,9 +1241,9 @@ public class NetoMLMScript extends Script
 	}
 
 	private void dropHammerIfNeeded() {
-		if (pickedUpHammer && Rs2Inventory.hasItem("hammer")) {
-			Rs2Inventory.drop("hammer");
-			sleepUntil(() -> !Rs2Inventory.hasItem("hammer"));
+		if (pickedUpHammer && Rs2Inventory.hasItem(ItemID.HAMMER)) {
+			Rs2Inventory.drop(ItemID.HAMMER);
+			sleepUntil(() -> !Rs2Inventory.hasItem(ItemID.HAMMER));
 			pickedUpHammer = false;
 		}
 	}
@@ -1187,15 +1272,14 @@ public class NetoMLMScript extends Script
 	private List<String> getItemsToKeep() {
 		if (itemsToKeep == null) {
 			List<String> _itemsToKeep = new ArrayList<>();
-			if (Rs2Inventory.hasItem("hammer")) {
-				_itemsToKeep.add("hammer");
-			}
-			if (Rs2Inventory.hasItem("pickaxe")) {
-				_itemsToKeep.add("pickaxe");
-			}
-			if (Rs2Gembag.hasGemBag()) {
-				_itemsToKeep.add("gem bag");
-			}
+			Rs2Inventory.items()
+				.filter(item -> item.getId() == ItemID.HAMMER
+					|| IMCANDO_HAMMER_OFFHAND_NAME.equalsIgnoreCase(item.getName())
+					|| isAllowedPickaxeId(item.getId())
+					|| item.getId() == ItemID.GEM_BAG
+					|| item.getId() == ItemID.GEM_BAG_OPEN)
+				.map(Rs2ItemModel::getName)
+				.forEach(_itemsToKeep::add);
 			itemsToKeep = _itemsToKeep;
 		}
 		return itemsToKeep;
@@ -1210,6 +1294,7 @@ public class NetoMLMScript extends Script
 		itemsToKeep = null;
 		prepStep = PrepStep.OPEN_BANK;
 		walkingStep = WalkingStep.REACH_MINING_GUILD;
+		secondRockfallAttempts = 0;
 		selectedPickaxeId = null;
         super.shutdown();
         log.info("Neto MLM script shutdown complete");

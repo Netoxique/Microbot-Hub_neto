@@ -10,14 +10,12 @@ import net.runelite.client.plugins.microbot.netomlm.enums.MLMMiningSpotList;
 @ConfigGroup(NetoMLMConfig.configGroup)
 @ConfigInformation(
 	"• This plugin will automate mining in motherload mine <br />" +
-	"• If using deposit all feature, <b>ensure you lock the slots you wish to keep in inventory</b> <br />" +
 	"• The plugin prepares at the nearest bank and walks to Motherlode Mine <br />"
 )
 public interface NetoMLMConfig extends Config
 {
 	String configGroup = "neto-mlm";
 
-	String useDepositAll = "useDepositAll";
 	String antiCrash = "antiCrash";
 	String dropGems = "dropGems";
 	String useUpstairsMine = "useUpstairsMine";
@@ -39,23 +37,10 @@ public interface NetoMLMConfig extends Config
 	String featureSection = "features";
 
 	@ConfigItem(
-		keyName = useDepositAll,
-		name = "Use Deposit All",
-		description = "Uses deposit all button in the deposit box<br>" +
-			"Note: ensure you enable locked slots enabled for the items you want to keep in your inventory",
-		position = 0,
-		section = generalSection
-	)
-	default boolean useDepositAll()
-	{
-		return false;
-	}
-
-	@ConfigItem(
 		keyName = antiCrash,
 		name = "Anti Crash",
 		description = "Avoids other players when mining in the lower level",
-		position = 1,
+		position = 0,
 		section = generalSection
 	)
 	default boolean useAntiCrash()
@@ -67,25 +52,25 @@ public interface NetoMLMConfig extends Config
 		keyName = dropGems,
 		name = "Drop Gems",
 		description = "Automatically drop gems while mining",
-		position = 2,
+		position = 1,
 		section = generalSection
 	)
 	default boolean dropGems()
 	{
-		return false;
+		return true;
 	}
 
 	// Mine upstairs
 	@ConfigItem(
 		keyName = useUpstairsMine,
-		name = "Use Mine Upstairs",
+		name = "Mine Upstairs",
 		description = "Should the plugin use the upstairs mining area",
 		position = 0,
 		section = featureSection
 	)
 	default boolean mineUpstairs()
 	{
-		return false;
+		return true;
 	}
 
 	// Upstairs hopper unlocked
@@ -98,7 +83,7 @@ public interface NetoMLMConfig extends Config
 	)
 	default boolean upstairsHopperUnlocked()
 	{
-		return false;
+		return true;
 	}
 
 	// Mining Area Selection
