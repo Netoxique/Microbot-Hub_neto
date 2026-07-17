@@ -248,7 +248,7 @@ public class NetoHerbrunScript extends Script {
                     break;
             }
 
-        }, 0, 1000, TimeUnit.MILLISECONDS);
+        }, 0, 100, TimeUnit.MILLISECONDS);
 
         return true;
     }
@@ -424,8 +424,11 @@ public class NetoHerbrunScript extends Script {
             if (!applyCompost(obj)) return false;
             Rs2Inventory.use(seedInInventory.getItemId());
             obj.click("Plant");
-            Rs2Player.waitForWalking();
-            sleepUntil(() -> getHerbPatchState(obj).equals("Growing"), 10000);
+            if (sleepUntil(() -> getHerbPatchState(obj).equals("Growing"), 10000)) {
+                log("[Herb] Planted at " + obj.getWorldLocation());
+                return true;
+            }
+            log("[Herb] Plant not confirmed (state=" + getHerbPatchState(obj) + "), retrying");
             return false;
         }
 
@@ -545,7 +548,6 @@ public class NetoHerbrunScript extends Script {
                 if (!applyCompost(obj)) return false;
                 Rs2Inventory.use(flowerSeed.getItemId());
                 obj.click("Plant");
-                Rs2Player.waitForWalking();
                 // Only advance once Growing is confirmed; otherwise retry next tick (weeds may have
                 // regrown between clearing and planting, or the click missed).
                 if (sleepUntil(() -> getPatchState(obj).equals("Growing"), 10000)) {
@@ -657,7 +659,6 @@ public class NetoHerbrunScript extends Script {
                 if (!applyCompost(obj)) return false;
                 Rs2Inventory.use(allotmentSeed.getItemId());
                 obj.click("Plant");
-                Rs2Player.waitForWalking();
                 // Only mark done once the patch is confirmed Growing. If the plant didn't take
                 // (e.g. weeds regrew between clearing and planting, or the click missed), leave the
                 // patch pinned so the next tick re-rakes/re-plants instead of silently giving up.
@@ -842,16 +843,6 @@ public class NetoHerbrunScript extends Script {
             return false;
         }
 
-        if (Rs2Equipment.isWearing()) {
-            if (!Rs2Bank.depositEquipment()) {
-                log("Failed to deposit worn equipment");
-                return false;
-            }
-            if (!sleepUntil(() -> !Rs2Equipment.isWearing(), 5000)) {
-                log("Timeout waiting for worn equipment to be deposited");
-                return false;
-            }
-        }
         Rs2Bank.depositAll();
         Rs2Inventory.waitForInventoryChanges(5000);
 
@@ -867,6 +858,14 @@ public class NetoHerbrunScript extends Script {
             // Equip Farmer's outfit if available
             equipFarmersOutfit();
         }
+
+        if (Rs2Bank.hasItem(ItemID.FAIRY_ENCHANTED_SECATEURS)) {
+            Rs2Bank.withdrawAndEquip(ItemID.FAIRY_ENCHANTED_SECATEURS);
+        }
+
+        // Store any equipment displaced while equipping the farming gear.
+        Rs2Bank.depositAll();
+        Rs2Inventory.waitForInventoryChanges(5000);
 
         boolean toolsOk = true;
         toolsOk &= Rs2Bank.withdrawOne(ItemID.RAKE);
@@ -887,10 +886,6 @@ public class NetoHerbrunScript extends Script {
         if (!toolsOk) {
             log("Missing farming tools in bank (rake/spade)");
             return false;
-        }
-
-        if (Rs2Bank.hasItem(ItemID.FAIRY_ENCHANTED_SECATEURS)) {
-            Rs2Bank.withdrawAndEquip(ItemID.FAIRY_ENCHANTED_SECATEURS);
         }
 
         // Determine all active regions for this run

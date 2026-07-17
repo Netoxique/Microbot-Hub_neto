@@ -23,7 +23,7 @@ import java.awt.*;
 )
 @Slf4j
 public class NetoHerbrunPlugin extends Plugin {
-    public static final String version = "1.0.5";
+    public static final String version = "1.0.7";
     @Inject
     private NetoHerbrunConfig config;
 
