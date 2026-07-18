@@ -845,18 +845,37 @@ public class NetoMahoganyHomesScript extends Script {
     }
 
     private boolean handleLastTierContractDialogue() {
-        if (!sleepUntil(Rs2Dialogue::hasContinue, 7000)) {
+        if (plugin.getCurrentHome() != null) {
+            log("Contract confirmed before NPC Contact dialogue handling; continuing immediately.");
+            return true;
+        }
+
+        if (!sleepUntil(() -> plugin.getCurrentHome() != null || Rs2Dialogue.hasContinue(), 7000)) {
             log("NPC Contact did not produce a continue dialogue.");
             return false;
         }
 
+        if (plugin.getCurrentHome() != null) {
+            log("Contract confirmed on the first NPC Contact response; continuing immediately.");
+            return true;
+        }
+
         if (!hasContractAssignmentDialogue()) {
+            if (plugin.getCurrentHome() != null) {
+                log("Contract confirmed while inspecting the first NPC Contact response; continuing immediately.");
+                return true;
+            }
             log("First NPC Contact response did not contain a contract; continuing to the assignment reminder...");
             Rs2Dialogue.clickContinue();
-            if (!sleepUntil(this::hasContractAssignmentDialogue, 7000)) {
+            if (!sleepUntil(() -> plugin.getCurrentHome() != null || hasContractAssignmentDialogue(), 7000)) {
                 log("The second NPC Contact response did not contain a contract assignment.");
                 return false;
             }
+        }
+
+        if (plugin.getCurrentHome() != null) {
+            log("Contract confirmed after advancing NPC Contact dialogue; continuing immediately.");
+            return true;
         }
 
         if (!sleepUntil(() -> plugin.getCurrentHome() != null, 3000)) {
