@@ -28,7 +28,7 @@ public interface NetoGeSellerConfig extends Config {
     @ConfigItem(
             keyName = "itemsToSell",
             name = "Items to Sell",
-            description = "Comma separated list of items to sell. Format: ItemName:KeepAmount (e.g. Magic log:100, Coal:500, Rune bar, Teak logs:>200)",
+            description = "Comma separated list of items to sell. Prefix an item with + to use the high-value price. Format: [+]ItemName:KeepAmount (e.g. +Magic log:100, Coal:500, Rune bar, Teak logs:>200)",
             position = 2,
             section = generalSettings
     )
@@ -45,5 +45,16 @@ public interface NetoGeSellerConfig extends Config {
     )
     default String hotkey() {
         return "n";
+    }
+
+    @ConfigItem(
+            keyName = "highValueHotkey",
+            name = "High-Value Hotkey",
+            description = "The hotkey configured in Flipping Utilities for setting price to high/insta-buy (usually 'j')",
+            position = 4,
+            section = generalSettings
+    )
+    default String highValueHotkey() {
+        return "j";
     }
 }
