@@ -13,6 +13,7 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
 import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
@@ -30,6 +31,7 @@ import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.skills.fletching.Rs2Fletching;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
@@ -321,12 +323,12 @@ public class NetoWoodcuttingScript extends Script {
             case DROP:
                 var itemNames = Arrays.stream(config.itemsToKeep().split(",")).map(String::trim).toArray(String[]::new);
                 Rs2Inventory.dropAllExcept(false, config.interactOrder(), itemNames);
-                woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                enterWoodcuttingPhase();
                 break;
             case BANK:
                 if (!handleBanking(config))
                     return;
-                woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                enterWoodcuttingPhase();
                 break;
             case BURN_CAMPFIRE:
             case BURN:
@@ -340,15 +342,20 @@ public class NetoWoodcuttingScript extends Script {
                 if (config.firemakeOnly()){
                     woodcuttingScriptState = WoodcuttingScriptState.FIREMAKING;
                 } else {
-                    woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                    enterWoodcuttingPhase();
                 }
                 break;
             case FLETCH:
                 if (handleFletchingWorkflow(config)) {
-                    woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                    enterWoodcuttingPhase();
                 }
                 break;
         }
+    }
+
+    private void enterWoodcuttingPhase() {
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
+        woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
     }
 
     private boolean ensureProgressiveLocation(NetoWoodcuttingConfig config) {
@@ -744,18 +751,39 @@ public class NetoWoodcuttingScript extends Script {
         }
     }
 
-    private void withdrawAndEquipFirstAvailable(int[] ids) {
+    private int findFirstAvailableEquipment(int[] ids) {
         for (int id : ids) {
             if (Rs2Equipment.isWearing(id)) {
-                return;
+                return id;
             }
         }
         for (int id : ids) {
             if (Rs2Bank.hasItem(id)) {
-                Rs2Bank.withdrawAndEquip(id);
-                sleep(600, 1200);
-                return;
+                return id;
             }
+        }
+        return -1;
+    }
+
+    private void withdrawEquipmentIfNeeded(int id, List<Integer> equipmentToWear) {
+        if (id == -1 || Rs2Equipment.isWearing(id)) {
+            return;
+        }
+        if (Rs2Bank.withdrawItem(id) && sleepUntil(() -> Rs2Inventory.hasItem(id), 3000)) {
+            equipmentToWear.add(id);
+        } else {
+            Microbot.log("Prep State: Failed to withdraw equipment item " + id + ".");
+        }
+    }
+
+    private void withdrawEquipmentIfNeeded(String name, List<String> equipmentToWear) {
+        if (name == null || Rs2Equipment.isWearing(name)) {
+            return;
+        }
+        if (Rs2Bank.withdrawItem(name) && sleepUntil(() -> Rs2Inventory.hasItem(name), 3000)) {
+            equipmentToWear.add(name);
+        } else {
+            Microbot.log("Prep State: Failed to withdraw " + name + ".");
         }
     }
 
@@ -771,83 +799,76 @@ public class NetoWoodcuttingScript extends Script {
         Rs2Bank.depositAll();
         sleepUntil(Rs2Inventory::isEmpty, 5000);
 
-        Microbot.log("Prep State: Equipping Lumberjack outfit...");
-        withdrawAndEquipFirstAvailable(new int[]{10941, 28173, 28174}); // Hats
-        withdrawAndEquipFirstAvailable(new int[]{10939, 28169, 28170}); // Tops
-        withdrawAndEquipFirstAvailable(new int[]{10940, 28171, 28172}); // Legs
-        withdrawAndEquipFirstAvailable(new int[]{10933, 28175, 28176}); // Boots
+        List<Integer> equipmentIdsToWear = new ArrayList<>();
+        List<String> equipmentNamesToWear = new ArrayList<>();
 
-        Microbot.log("Prep State: Equipping best axe...");
-        withdrawAndEquipFirstAvailable(new int[]{28217, 6739, 28214, 1359}); // Dragon felling, Dragon, Rune felling, Rune axe
+        Microbot.log("Prep State: Withdrawing Lumberjack outfit...");
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10941, 28173, 28174}), equipmentIdsToWear); // Hats
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10939, 28169, 28170}), equipmentIdsToWear); // Tops
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10940, 28171, 28172}), equipmentIdsToWear); // Legs
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10933, 28175, 28176}), equipmentIdsToWear); // Boots
 
-        Microbot.log("Prep State: Equipping back/cape slot item...");
+        if (Rs2Bank.hasItem("Twitcher's gloves") || Rs2Equipment.isWearing("Twitcher's gloves")) {
+            withdrawEquipmentIfNeeded("Twitcher's gloves", equipmentNamesToWear);
+        }
+
+        Microbot.log("Prep State: Withdrawing best axe...");
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{28217, 6739, 28214, 1359}), equipmentIdsToWear); // Dragon felling, Dragon, Rune felling, Rune axe
+
+        Microbot.log("Prep State: Withdrawing back/cape slot item...");
+        boolean useForestryBasket = false;
         if (Rs2Equipment.isWearing("Forestry basket") || Rs2Bank.hasItem("Forestry basket")) {
-            if (!Rs2Equipment.isWearing("Forestry basket")) {
-                Microbot.log("Prep State: Withdrawing Forestry basket...");
-                Rs2Bank.withdrawItem("Forestry basket");
-                if (sleepUntil(() -> Rs2Inventory.hasItem("Forestry basket"), 3000)) {
-                    Microbot.log("Prep State: Closing bank to equip Forestry basket...");
-                    Rs2Bank.closeBank();
-                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
-
-                    Rs2Inventory.wield("Forestry basket");
-                    sleepUntil(() -> Rs2Equipment.isWearing("Forestry basket"), 3000);
-                }
-            }
-            if (Rs2Equipment.isWearing("Forestry basket")) {
-                if (Rs2Bank.isOpen()) {
-                    Microbot.log("Prep State: Closing bank to configure Forestry basket...");
-                    Rs2Bank.closeBank();
-                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
-                }
-                Rs2ItemModel basket = Rs2Equipment.get("Forestry basket");
-                if (basket != null) {
-                    boolean hasOpenAction = basket.getEquipmentActions().stream()
-                            .anyMatch(action -> action != null && action.equalsIgnoreCase("Open"));
-                    if (hasOpenAction) {
-                        Microbot.log("Prep State: Opening Forestry basket from equipment menu...");
-                        Rs2Equipment.interact("Forestry basket", "Open");
-                        sleep(600, 1200);
-                    } else {
-                        Microbot.log("Prep State: Forestry basket is already open.");
-                    }
-                }
-            }
-            Microbot.log("Prep State: Re-opening bank...");
-            isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
-            if (!isBankOpen || !Rs2Bank.isOpen()) {
-                return;
-            }
+            useForestryBasket = true;
+            withdrawEquipmentIfNeeded("Forestry basket", equipmentNamesToWear);
         } else if (Rs2Equipment.isWearing(28136) || Rs2Bank.hasItem(28136)) {
-            if (!Rs2Equipment.isWearing(28136)) {
-                Microbot.log("Prep State: Withdrawing Forestry kit...");
-                Rs2Bank.withdrawItem(28136);
-                if (sleepUntil(() -> Rs2Inventory.hasItem(28136), 3000)) {
-                    Microbot.log("Prep State: Closing bank to equip Forestry kit...");
-                    Rs2Bank.closeBank();
-                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
-
-                    Rs2Inventory.wield(28136);
-                    sleepUntil(() -> Rs2Equipment.isWearing(28136), 3000);
-
-                    Microbot.log("Prep State: Re-opening bank...");
-                    isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
-                    if (!isBankOpen || !Rs2Bank.isOpen()) {
-                        return;
-                    }
-                }
-            }
+            withdrawEquipmentIfNeeded(28136, equipmentIdsToWear);
         } else if (Rs2Equipment.isWearing("Agility cape") || Rs2Bank.hasItem("Agility cape")) {
-            if (!Rs2Equipment.isWearing("Agility cape")) {
-                Rs2Bank.withdrawAndEquip("Agility cape");
-                sleep(600, 1200);
-            }
+            withdrawEquipmentIfNeeded("Agility cape", equipmentNamesToWear);
         } else if (Rs2Equipment.isWearing("Graceful cape") || Rs2Bank.hasItem("Graceful cape")) {
-            if (!Rs2Equipment.isWearing("Graceful cape")) {
-                Rs2Bank.withdrawAndEquip("Graceful cape");
-                sleep(600, 1200);
+            withdrawEquipmentIfNeeded("Graceful cape", equipmentNamesToWear);
+        }
+
+        Microbot.log("Prep State: Closing bank to equip all items...");
+        Rs2Bank.closeBank();
+        if (!sleepUntil(() -> !Rs2Bank.isOpen(), 3000)) {
+            return;
+        }
+
+        for (int id : equipmentIdsToWear) {
+            if (Rs2Inventory.hasItem(id)) {
+                Rs2Inventory.wield(id);
+                sleepUntil(() -> Rs2Equipment.isWearing(id), 3000);
             }
         }
+        for (String name : equipmentNamesToWear) {
+            if (Rs2Inventory.hasItem(name)) {
+                Rs2Inventory.wield(name);
+                sleepUntil(() -> Rs2Equipment.isWearing(name), 3000);
+            }
+        }
+
+        if (useForestryBasket && Rs2Equipment.isWearing("Forestry basket")) {
+            Rs2ItemModel basket = Rs2Equipment.get("Forestry basket");
+            if (basket != null) {
+                boolean hasOpenAction = basket.getEquipmentActions().stream()
+                        .anyMatch(action -> action != null && action.equalsIgnoreCase("Open"));
+                if (hasOpenAction) {
+                    Microbot.log("Prep State: Opening Forestry basket from equipment menu...");
+                    Rs2Equipment.interact("Forestry basket", "Open");
+                    sleep(600, 1200);
+                } else {
+                    Microbot.log("Prep State: Forestry basket is already open.");
+                }
+            }
+        }
+
+        Microbot.log("Prep State: Re-opening bank to deposit unnecessary items...");
+        isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
+        if (!isBankOpen || !Rs2Bank.isOpen()) {
+            return;
+        }
+        Rs2Bank.depositAll();
+        sleepUntil(Rs2Inventory::isEmpty, 5000);
 
         Microbot.log("Prep State: Preparing travel teleport item...");
         boolean isPrifddinas = Rs2Random.between(1, 100) <= 75;
@@ -933,7 +954,7 @@ public class NetoWoodcuttingScript extends Script {
         if (config.firemakeOnly()) {
             woodcuttingScriptState = WoodcuttingScriptState.FIREMAKING;
         } else {
-            woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+            enterWoodcuttingPhase();
         }
         Microbot.log("Prep State: Preparation complete! Next state: " + woodcuttingScriptState);
     }
@@ -991,4 +1012,3 @@ public class NetoWoodcuttingScript extends Script {
         activeLocation = null;
     }
 }
-
