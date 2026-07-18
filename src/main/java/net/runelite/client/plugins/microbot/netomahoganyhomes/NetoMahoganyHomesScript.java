@@ -80,12 +80,20 @@ public class NetoMahoganyHomesScript extends Script {
     }
 
     private PrepState prepState = PrepState.NOT_STARTED;
+    private boolean equipmentDepositRequested = false;
+    private boolean npcContactContractVerified = false;
+    private boolean cachedContractClearedForVerification = false;
+    private long nextNpcContactAttemptAt = 0;
     private int activeNoellaDownStairsId = -1;
     private Home lastHome = null;
     private Home teleportCompletedForHome = null;
 
     public boolean run(NetoMahoganyHomesConfig config) {
         prepState = PrepState.NOT_STARTED;
+        equipmentDepositRequested = false;
+        npcContactContractVerified = false;
+        cachedContractClearedForVerification = false;
+        nextNpcContactAttemptAt = 0;
         activeNoellaDownStairsId = -1;
         lastHome = null;
         teleportCompletedForHome = null;
@@ -114,6 +122,9 @@ public class NetoMahoganyHomesScript extends Script {
                 fix();
                 finish();
                 getNewContract();
+                if (climbDownNormanLadderIfNextContractIsFalador()) {
+                    return;
+                }
                 bank();
                 walkToHome();
 
@@ -656,6 +667,23 @@ public class NetoMahoganyHomesScript extends Script {
 
     // Get new contract
     private void getNewContract() {
+        if (plugin.getConfig().useNpcContact()
+                && cachedContractClearedForVerification
+                && plugin.getCurrentHome() != null) {
+            npcContactContractVerified = true;
+        }
+
+        if (plugin.getConfig().useNpcContact() && !npcContactContractVerified) {
+            if (!cachedContractClearedForVerification) {
+                log("Clearing cached contract so NPC Contact can verify the live assignment...");
+                plugin.clearContractForVerification();
+                if (!sleepUntil(() -> plugin.getCurrentHome() == null, 3000)) {
+                    return;
+                }
+                cachedContractClearedForVerification = true;
+            }
+        }
+
         if (plugin.getCurrentHome() == null) {
             if (Rs2Player.getWorldLocation().getPlane() == 1 && Home.JESS.getArea().contains2D(Rs2Player.getWorldLocation())) {
                 log("Climbing down stairs at Jess's home...");
@@ -667,6 +695,19 @@ public class NetoMahoganyHomesScript extends Script {
                 return;
             }
             if(plugin.getConfig().useNpcContact()){
+                if (System.currentTimeMillis() < nextNpcContactAttemptAt) {
+                    return;
+                }
+
+                if (Rs2Dialogue.isInDialogue()) {
+                    if (handleLastTierContractDialogue()) {
+                        npcContactContractVerified = true;
+                    } else {
+                        nextNpcContactAttemptAt = System.currentTimeMillis() + 5000;
+                    }
+                    return;
+                }
+
                 Rs2Tab.switchToMagicTab();
                 sleepUntil(() -> Rs2Tab.isCurrentTab(InterfaceTab.MAGIC), 2000);
 
@@ -688,7 +729,11 @@ public class NetoMahoganyHomesScript extends Script {
                     String actionOption = npcContactWidget.getActions()[index];
                     log("Casting NPC Contact with option: " + actionOption);
                     if (Rs2Magic.cast(MagicAction.NPC_CONTACT, actionOption, index + 1)) {
-                        sleepUntil(() -> plugin.getCurrentHome() != null, 5000);
+                        if (handleLastTierContractDialogue()) {
+                            npcContactContractVerified = true;
+                        } else {
+                            nextNpcContactAttemptAt = System.currentTimeMillis() + 5000;
+                        }
                         return;
                     }
                 }
@@ -696,6 +741,11 @@ public class NetoMahoganyHomesScript extends Script {
                 log("Last-tier contract option not found or failed, falling back to default NPC Contact...");
                 if (Rs2Magic.npcContact("amy")) {
                     handleContractDialogue();
+                    if (plugin.getCurrentHome() != null) {
+                        npcContactContractVerified = true;
+                    } else {
+                        nextNpcContactAttemptAt = System.currentTimeMillis() + 5000;
+                    }
                 }
                 return;
             }
@@ -794,6 +844,35 @@ public class NetoMahoganyHomesScript extends Script {
         }
     }
 
+    private boolean handleLastTierContractDialogue() {
+        if (!sleepUntil(Rs2Dialogue::hasContinue, 7000)) {
+            log("NPC Contact did not produce a continue dialogue.");
+            return false;
+        }
+
+        if (!hasContractAssignmentDialogue()) {
+            log("First NPC Contact response did not contain a contract; continuing to the assignment reminder...");
+            Rs2Dialogue.clickContinue();
+            if (!sleepUntil(this::hasContractAssignmentDialogue, 7000)) {
+                log("The second NPC Contact response did not contain a contract assignment.");
+                return false;
+            }
+        }
+
+        if (!sleepUntil(() -> plugin.getCurrentHome() != null, 3000)) {
+            log("Contract dialogue was found, but the assignment was not recorded.");
+            return false;
+        }
+        log("Contract confirmed; continuing without closing the NPC Contact dialogue.");
+        return true;
+    }
+
+    private boolean hasContractAssignmentDialogue() {
+        final boolean[] hasAssignment = {false};
+        Microbot.getClientThread().invoke(() -> hasAssignment[0] = plugin.hasContractAssignmentDialogue());
+        return hasAssignment[0];
+    }
+
     private BankLocation getResupplyBank(Home currentHome) {
         if (isWearingDuelingRing()) {
             WorldPoint castleWars = BankLocation.CASTLE_WARS.getWorldPoint();
@@ -845,7 +924,7 @@ public class NetoMahoganyHomesScript extends Script {
         int availableSteelBars = Rs2Bank.count(ItemID.STEEL_BAR) + steelBarsInInventory();
         if (availableSteelBars < STEEL_BAR_WITHDRAWAL_AMOUNT) {
             log("Out of steel bars.");
-            Microbot.showMessage("Not enough steel bars in the bank. Stopping plugin.");
+            sendRedChatMessage("Not enough steel bars in the bank. Stopping plugin.");
             Microbot.stopPlugin(plugin);
             return false;
         }
@@ -914,6 +993,41 @@ public class NetoMahoganyHomesScript extends Script {
 
     private boolean isFaladorHome(Home home) {
         return home == Home.LARRY || home == Home.NORMAN || home == Home.TAU;
+    }
+
+    private boolean climbDownNormanLadderIfNextContractIsFalador() {
+        Home currentHome = plugin.getCurrentHome();
+        WorldPoint playerLocation = Rs2Player.getWorldLocation();
+        if ((currentHome != Home.LARRY && currentHome != Home.TAU)
+                || playerLocation == null
+                || playerLocation.getPlane() != 1
+                || !Home.NORMAN.isInside(playerLocation)) {
+            return false;
+        }
+
+        var ladder = Microbot.getRs2TileObjectCache().query()
+                .withIds(Arrays.stream(Home.NORMAN.getLadders()).mapToInt(Integer::intValue).toArray())
+                .where(obj -> obj.getWorldLocation().getPlane() == 1)
+                .nearest();
+        if (ladder == null) {
+            log("Norman's upstairs ladder was not found; waiting before banking or walking.");
+            return true;
+        }
+
+        log("Climbing down Norman's ladder before continuing to %s.", currentHome.getName());
+        if (!ladder.click()) {
+            log("Failed to interact with Norman's upstairs ladder; retrying.");
+            return true;
+        }
+
+        if (!sleepUntil(() -> {
+            WorldPoint location = Rs2Player.getWorldLocation();
+            return location != null && location.getPlane() == 0;
+        }, 5000)) {
+            log("Norman's ladder did not reach plane 0; retrying.");
+        }
+        sleep(Rs2Random.randomGaussian(300, 50));
+        return true;
     }
 
     private boolean useVarrockTeleportTablet() {
@@ -1141,7 +1255,7 @@ public class NetoMahoganyHomesScript extends Script {
         }
 
         if (!Rs2Bank.hasItem("Moonclan teleport")) {
-            Microbot.showMessage("Missing Moonclan teleport in bank.");
+            sendRedChatMessage("Missing Moonclan teleport in bank.");
             shutdown();
             return false;
         }
@@ -1152,7 +1266,7 @@ public class NetoMahoganyHomesScript extends Script {
                 .orElse(null);
 
         if (skillsNecklace == null && !Rs2Bank.hasItem("Varrock teleport")) {
-            Microbot.showMessage("Missing Skills necklace or Varrock teleport in bank.");
+            sendRedChatMessage("Missing Skills necklace or Varrock teleport in bank.");
             shutdown();
             return false;
         }
@@ -1277,12 +1391,17 @@ public class NetoMahoganyHomesScript extends Script {
                 break;
 
             case DEPOSITING_EQUIPMENT:
-                if (Rs2Equipment.isWearing()) {
-                    log("Depositing equipped items...");
-                    Rs2Bank.depositEquipment();
-                } else {
+                if (!Rs2Equipment.isWearing()) {
                     log("Equipment is empty.");
+                    equipmentDepositRequested = false;
                     prepState = PrepState.DEPOSITING_INVENTORY;
+                } else if (!equipmentDepositRequested) {
+                    log("Depositing equipped items...");
+                    equipmentDepositRequested = true;
+                    if (!Rs2Bank.depositEquipment()) {
+                        sendRedChatMessage("Failed to deposit worn equipment. Stopping plugin.");
+                        Microbot.stopPlugin(plugin);
+                    }
                 }
                 break;
 
@@ -1313,8 +1432,9 @@ public class NetoMahoganyHomesScript extends Script {
 
             case WITHDRAWING_TOOLS:
                 log("Withdrawing saw and hammer...");
-                withdrawToolsPrep();
-                prepState = PrepState.WITHDRAWING_SUPPLIES;
+                if (withdrawToolsPrep()) {
+                    prepState = PrepState.WITHDRAWING_SUPPLIES;
+                }
                 break;
 
             case WITHDRAWING_SUPPLIES:
@@ -1352,9 +1472,9 @@ public class NetoMahoganyHomesScript extends Script {
             withdrawAndEquipItem("Graceful hood");
         }
 
-        // Torso Slot: Carpenter's jacket OR Graceful top
-        if (Rs2Bank.hasItem("Carpenter's jacket") || Rs2Inventory.hasItem("Carpenter's jacket")) {
-            withdrawAndEquipItem("Carpenter's jacket");
+        // Torso Slot: Carpenter's shirt OR Graceful top
+        if (Rs2Bank.hasItem("Carpenter's shirt") || Rs2Inventory.hasItem("Carpenter's shirt")) {
+            withdrawAndEquipItem("Carpenter's shirt");
         } else if (Rs2Bank.hasItem("Graceful top") || Rs2Inventory.hasItem("Graceful top")) {
             withdrawAndEquipItem("Graceful top");
         }
@@ -1391,7 +1511,7 @@ public class NetoMahoganyHomesScript extends Script {
         ensureDuelingRingEquipped();
     }
 
-    private void withdrawToolsPrep() {
+    private boolean withdrawToolsPrep() {
         // Amy's saw OR Saw
         if (Rs2Equipment.isWearing("Amy's saw")) {
             // Already wearing it
@@ -1437,20 +1557,9 @@ public class NetoMahoganyHomesScript extends Script {
         if (plugin.getConfig().useNpcContact()) {
             if (!hasRunePouch) {
                 log("Rune pouch is required when NPC Contact is enabled!");
-                Microbot.showMessage("Rune pouch is required when NPC Contact is enabled! Stopping plugin.");
+                sendRedChatMessage("Rune pouch is required when NPC Contact is enabled! Stopping plugin.");
                 Microbot.stopPlugin(plugin);
-                return;
-            }
-
-            int currentAir = Rs2Inventory.count(ItemID.AIR_RUNE) + Rs2Bank.count(ItemID.AIR_RUNE) + Rs2RunePouch.getQuantity(Runes.AIR);
-            int currentAstral = Rs2Inventory.count(ItemID.ASTRAL_RUNE) + Rs2Bank.count(ItemID.ASTRAL_RUNE) + Rs2RunePouch.getQuantity(Runes.ASTRAL);
-            int currentCosmic = Rs2Inventory.count(ItemID.COSMIC_RUNE) + Rs2Bank.count(ItemID.COSMIC_RUNE) + Rs2RunePouch.getQuantity(Runes.COSMIC);
-
-            if (currentAir < 100 || currentAstral < 100 || currentCosmic < 100) {
-                log("Missing required NPC contact runes! Air: %d, Astral: %d, Cosmic: %d", currentAir, currentAstral, currentCosmic);
-                Microbot.showMessage("Not enough NPC contact runes! Stopping plugin.");
-                Microbot.stopPlugin(plugin);
-                return;
+                return false;
             }
 
             boolean hasVarrockTab = Rs2Inventory.hasItem("Varrock teleport") || Rs2Bank.hasItem("Varrock teleport");
@@ -1459,17 +1568,17 @@ public class NetoMahoganyHomesScript extends Script {
 
             if (!hasVarrockTab || !hasArdougneTab || !hasFaladorTab) {
                 log("Missing required teleport tablets! Varrock: %b, Ardougne: %b, Falador: %b", hasVarrockTab, hasArdougneTab, hasFaladorTab);
-                Microbot.showMessage("Missing required teleport tablets! Stopping plugin.");
+                sendRedChatMessage("Missing required teleport tablets! Stopping plugin.");
                 Microbot.stopPlugin(plugin);
-                return;
+                return false;
             }
 
             boolean hasXeric = Rs2Equipment.isWearing("Xeric's talisman") || Rs2Inventory.hasItem("Xeric's talisman") || Rs2Bank.hasItem("Xeric's talisman");
             if (!hasXeric) {
                 log("Xeric's talisman is required when NPC Contact is enabled!");
-                Microbot.showMessage("Xeric's talisman is required when NPC Contact is enabled! Stopping plugin.");
+                sendRedChatMessage("Xeric's talisman is required when NPC Contact is enabled! Stopping plugin.");
                 Microbot.stopPlugin(plugin);
-                return;
+                return false;
             }
 
             // Withdraw Rune pouch
@@ -1479,28 +1588,8 @@ public class NetoMahoganyHomesScript extends Script {
                 sleepUntil(Rs2Inventory::hasRunePouch, 1800);
             }
 
-            if (Rs2Inventory.hasRunePouch()) {
-                Rs2RunePouch.fullUpdate();
-                Map<Runes, Integer> requiredRunes = new HashMap<>();
-
-                int airNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.AIR));
-                int astralNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.ASTRAL));
-                int cosmicNeeded = Math.max(0, 1000 - Rs2RunePouch.getQuantity(Runes.COSMIC));
-
-                if (airNeeded > 0 || astralNeeded > 0 || cosmicNeeded > 0) {
-                    int airToLoad = Rs2RunePouch.getQuantity(Runes.AIR) + Math.min(airNeeded, Rs2Bank.count(ItemID.AIR_RUNE));
-                    int astralToLoad = Rs2RunePouch.getQuantity(Runes.ASTRAL) + Math.min(astralNeeded, Rs2Bank.count(ItemID.ASTRAL_RUNE));
-                    int cosmicToLoad = Rs2RunePouch.getQuantity(Runes.COSMIC) + Math.min(cosmicNeeded, Rs2Bank.count(ItemID.COSMIC_RUNE));
-
-                    if (airToLoad > 0) requiredRunes.put(Runes.AIR, airToLoad);
-                    if (astralToLoad > 0) requiredRunes.put(Runes.ASTRAL, astralToLoad);
-                    if (cosmicToLoad > 0) requiredRunes.put(Runes.COSMIC, cosmicToLoad);
-
-                    if (!requiredRunes.isEmpty()) {
-                        log("Loading Air, Astral, and Cosmic runes into Rune Pouch...");
-                        Rs2RunePouch.load(requiredRunes);
-                    }
-                }
+            if (!prepareNpcContactRunePouch()) {
+                return false;
             }
 
             // Withdraw-all each tablet if they are not in inventory
@@ -1529,9 +1618,9 @@ public class NetoMahoganyHomesScript extends Script {
 
             if (currentLaw < 100 || currentSteam < 100 || currentDust < 100) {
                 log("Missing required teleport runes! Law: %d, Steam: %d, Dust: %d", currentLaw, currentSteam, currentDust);
-                Microbot.showMessage("Not enough teleport runes! Stopping plugin.");
+                sendRedChatMessage("Not enough teleport runes! Stopping plugin.");
                 Microbot.stopPlugin(plugin);
-                return;
+                return false;
             }
 
             if (hasRunePouch) {
@@ -1599,5 +1688,58 @@ public class NetoMahoganyHomesScript extends Script {
                 withdrawAndEquipItem("Xeric's talisman");
             }
         }
+        return true;
+    }
+
+    private boolean prepareNpcContactRunePouch() {
+        final int airRefillThreshold = 1000;
+        final int astralRefillThreshold = 500;
+        final int cosmicRefillThreshold = 500;
+        final int airTarget = 2000;
+        final int astralTarget = 1000;
+        final int cosmicTarget = 1000;
+
+        Rs2RunePouch.fullUpdate();
+        int airInPouch = Rs2RunePouch.getQuantity(Runes.AIR);
+        int astralInPouch = Rs2RunePouch.getQuantity(Runes.ASTRAL);
+        int cosmicInPouch = Rs2RunePouch.getQuantity(Runes.COSMIC);
+
+        if (airInPouch >= airRefillThreshold
+                && astralInPouch >= astralRefillThreshold
+                && cosmicInPouch >= cosmicRefillThreshold) {
+            log("NPC Contact rune pouch already has sufficient runes.");
+            return true;
+        }
+
+        int availableAir = airInPouch + Rs2Bank.count(ItemID.AIR_RUNE);
+        int availableAstral = astralInPouch + Rs2Bank.count(ItemID.ASTRAL_RUNE);
+        int availableCosmic = cosmicInPouch + Rs2Bank.count(ItemID.COSMIC_RUNE);
+        if (availableAir < airTarget || availableAstral < astralTarget || availableCosmic < cosmicTarget) {
+            log("Not enough runes to refill NPC Contact pouch. Air: %d, Astral: %d, Cosmic: %d",
+                    availableAir, availableAstral, availableCosmic);
+            sendRedChatMessage("Not enough runes to refill the NPC Contact rune pouch. Stopping plugin.");
+            Microbot.stopPlugin(plugin);
+            return false;
+        }
+
+        Map<Runes, Integer> requiredRunes = new HashMap<>();
+        requiredRunes.put(Runes.AIR, airTarget);
+        requiredRunes.put(Runes.ASTRAL, astralTarget);
+        requiredRunes.put(Runes.COSMIC, cosmicTarget);
+        log("Refilling NPC Contact rune pouch to 2,000 Air, 1,000 Astral, and 1,000 Cosmic runes...");
+        Rs2RunePouch.load(requiredRunes);
+
+        boolean refillVerified = sleepUntil(() -> {
+            Rs2RunePouch.fullUpdate();
+            return Rs2RunePouch.getQuantity(Runes.AIR) >= airTarget
+                    && Rs2RunePouch.getQuantity(Runes.ASTRAL) >= astralTarget
+                    && Rs2RunePouch.getQuantity(Runes.COSMIC) >= cosmicTarget;
+        }, 5000);
+        if (!refillVerified) {
+            sendRedChatMessage("Unable to verify the NPC Contact rune pouch refill. Stopping plugin.");
+            Microbot.stopPlugin(plugin);
+            return false;
+        }
+        return true;
     }
 }
