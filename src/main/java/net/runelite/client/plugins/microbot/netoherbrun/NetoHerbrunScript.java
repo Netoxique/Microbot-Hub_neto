@@ -3,8 +3,10 @@ package net.runelite.client.plugins.microbot.netoherbrun;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
 import net.runelite.api.TileObject;
+import net.runelite.api.Varbits;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.ObjectID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -44,6 +46,15 @@ import static net.runelite.client.plugins.microbot.Microbot.log;
 
 @Slf4j
 public class NetoHerbrunScript extends Script {
+    private static final String BIRDHOUSE_RUNNER_CLASS_NAME =
+            "net.runelite.client.plugins.microbot.netobirdhouseruns.NetoBirdhouseRunsPlugin";
+    private static final int[] BIRDHOUSE_VARPS = {
+            VarPlayerID.BIRDHOUSE_TRANSMIT_A,
+            VarPlayerID.BIRDHOUSE_TRANSMIT_B,
+            VarPlayerID.BIRDHOUSE_TRANSMIT_C,
+            VarPlayerID.BIRDHOUSE_TRANSMIT_D
+    };
+
     @Inject
     private ConfigManager configManager;
     @Inject
@@ -107,13 +118,29 @@ public class NetoHerbrunScript extends Script {
             }
             if (currentPatch == null) {
                 NetoHerbrunPlugin.status = "Finishing up";
+                boolean startBirdhouseRunner = false;
                 if (config.goToBank()) {
                     Rs2Walker.walkTo(Rs2Bank.getNearestBank().getWorldPoint());
                     if (!Rs2Bank.isOpen()) Rs2Bank.openBank();
                     Rs2Bank.depositAll();
+                    startBirdhouseRunner = areAllBirdhousesReady();
                 }
                 NetoHerbrunPlugin.status = "Finished";
+
+                var birdhouseRunner = startBirdhouseRunner
+                        ? Microbot.getPlugin(BIRDHOUSE_RUNNER_CLASS_NAME)
+                        : null;
+                if (startBirdhouseRunner && birdhouseRunner == null) {
+                    log.warn("All birdhouses are ready, but Neto Birdhouse Runner is not installed");
+                }
+
                 Microbot.stopPlugin(plugin);
+                if (birdhouseRunner != null) {
+                    log("All birdhouses are ready; starting Neto Birdhouse Runner");
+                    Microbot.startPlugin(birdhouseRunner);
+                } else if (!startBirdhouseRunner && config.goToBank()) {
+                    log("Not all birdhouses are ready; Neto Birdhouse Runner will not be started");
+                }
                 return;
             }
 
@@ -193,9 +220,14 @@ public class NetoHerbrunScript extends Script {
                         }
                         break;
                     case "Falador":
-                        String glory = findAmuletOfGloryInInventory();
-                        if (glory != null) {
-                            teleportInteractionSucceeded = Rs2Inventory.interact(glory, "Draynor Village");
+                        String explorersRing = findExplorersRingInInventoryOrEquipment();
+                        if (explorersRing != null) {
+                            teleportInteractionSucceeded = interactTeleportItem(explorersRing, "Teleport");
+                        } else {
+                            String glory = findAmuletOfGloryInInventory();
+                            if (glory != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(glory, "Draynor Village");
+                            }
                         }
                         break;
                 }
@@ -256,6 +288,20 @@ public class NetoHerbrunScript extends Script {
         }, 0, 100, TimeUnit.MILLISECONDS);
 
         return true;
+    }
+
+    private boolean areAllBirdhousesReady() {
+        int[] values = Arrays.stream(BIRDHOUSE_VARPS)
+                .map(Microbot::getVarbitPlayerValue)
+                .toArray();
+        boolean ready = allBirdhousesReady(values);
+        log("Birdhouse readiness varps=" + Arrays.toString(values) + ", allReady=" + ready);
+        return ready;
+    }
+
+    static boolean allBirdhousesReady(int... varpValues) {
+        return varpValues.length == BIRDHOUSE_VARPS.length
+                && Arrays.stream(varpValues).allMatch(value -> value > 0 && value % 3 == 0);
     }
 
     private void walkTo(WorldPoint destination, int distance) {
@@ -873,7 +919,12 @@ public class NetoHerbrunScript extends Script {
         Rs2Inventory.waitForInventoryChanges(5000);
 
         boolean toolsOk = true;
-        toolsOk &= Rs2Bank.withdrawOne(ItemID.RAKE);
+        boolean autoWeedUnlocked = isAutoWeedUnlocked();
+        if (autoWeedUnlocked) {
+            log("Auto-weed is unlocked; skipping rake withdrawal");
+        } else {
+            toolsOk &= Rs2Bank.withdrawOne(ItemID.RAKE);
+        }
         toolsOk &= Rs2Bank.withdrawOne(ItemID.SPADE);
 
         boolean hasBarehandedSeedPlanting = new RuneliteRequirement(
@@ -889,7 +940,9 @@ public class NetoHerbrunScript extends Script {
         }
 
         if (!toolsOk) {
-            log("Missing farming tools in bank (rake/spade)");
+            log(autoWeedUnlocked
+                    ? "Missing farming tools in bank (spade)"
+                    : "Missing farming tools in bank (rake/spade)");
             return false;
         }
 
@@ -1058,11 +1111,19 @@ public class NetoHerbrunScript extends Script {
                     }
                     break;
                 case "Falador":
-                    String glory = findAmuletOfGloryWithLeastCharges();
-                    if (glory != null) {
+                    String explorersRing = findExplorersRing();
+                    if (explorersRing != null) {
                         hasTeleport = true;
-                        if (!Rs2Inventory.hasItem(glory, true)) {
-                            Rs2Bank.withdrawOne(glory, true);
+                        if (!Rs2Inventory.hasItem(explorersRing) && !Rs2Equipment.isWearing(explorersRing)) {
+                            Rs2Bank.withdrawOne(explorersRing);
+                        }
+                    } else {
+                        String glory = findAmuletOfGloryWithLeastCharges();
+                        if (glory != null) {
+                            hasTeleport = true;
+                            if (!Rs2Inventory.hasItem(glory, true)) {
+                                Rs2Bank.withdrawOne(glory, true);
+                            }
                         }
                     }
                     break;
@@ -1194,6 +1255,13 @@ public class NetoHerbrunScript extends Script {
 
         log("Inventory setup complete - starting farm run");
         return true;
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean isAutoWeedUnlocked() {
+        return Microbot.getClientThread().invoke(
+                () -> Microbot.getClient().getVarbitValue(Varbits.AUTOWEED)
+        ) == 1;
     }
 
     private boolean withdrawSpecificSeeds(int itemId, String seedName, int count, int levelRequired, boolean allowPartial) {
@@ -1430,6 +1498,26 @@ public class NetoHerbrunScript extends Script {
         }
         if (Rs2Bank.hasItem("Amulet of eternal glory", true)) {
             return "Amulet of eternal glory";
+        }
+        return null;
+    }
+
+    private String findExplorersRing() {
+        String[] ringNames = {"Explorer's ring 4", "Explorer's ring 3"};
+        for (String ringName : ringNames) {
+            if (Rs2Inventory.hasItem(ringName) || Rs2Equipment.isWearing(ringName) || Rs2Bank.hasItem(ringName)) {
+                return ringName;
+            }
+        }
+        return null;
+    }
+
+    private String findExplorersRingInInventoryOrEquipment() {
+        String[] ringNames = {"Explorer's ring 4", "Explorer's ring 3"};
+        for (String ringName : ringNames) {
+            if (Rs2Inventory.hasItem(ringName) || Rs2Equipment.isWearing(ringName)) {
+                return ringName;
+            }
         }
         return null;
     }
