@@ -6,10 +6,6 @@ This file provides guidance to the AI agent when working with code in this repos
 
 Microbot Hub is a community plugin repository for the Microbot RuneLite client. It maintains a separation between core client functionality and community-contributed plugins, allowing rapid plugin development without affecting client stability. Each plugin is independently built, versioned, and packaged for GitHub Releases.
 
-## Code editing
-
-Do **NOT** delete comments `//` inside the code.
-
 ## Build System Architecture
 
 The build system uses **Gradle with custom plugin discovery and packaging**:
