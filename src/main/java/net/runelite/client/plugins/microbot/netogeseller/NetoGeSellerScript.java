@@ -69,16 +69,19 @@ public class NetoGeSellerScript extends Script {
         private final String name;
         private final int threshold;
         private final SellMode mode;
+        private final boolean sellHighest;
 
-        public SellItemConfig(String name, int threshold, SellMode mode) {
+        public SellItemConfig(String name, int threshold, SellMode mode, boolean sellHighest) {
             this.name = name;
             this.threshold = threshold;
             this.mode = mode;
+            this.sellHighest = sellHighest;
         }
 
         public String getName() { return name; }
         public int getThreshold() { return threshold; }
         public SellMode getMode() { return mode; }
+        public boolean isSellHighest() { return sellHighest; }
     }
 
     private Map<String, SellItemConfig> itemsToSellMap = new HashMap<>();
@@ -190,6 +193,13 @@ public class NetoGeSellerScript extends Script {
             String name = item;
             int threshold = 0;
             SellMode mode = SellMode.SELL_ALL;
+            boolean sellHighest = false;
+
+            if (item.startsWith("+")) {
+                sellHighest = true;
+                item = item.substring(1).trim();
+                name = item;
+            }
 
             String delimiter = null;
             if (item.contains(":")) {
@@ -218,7 +228,7 @@ public class NetoGeSellerScript extends Script {
             }
 
             if (!name.isEmpty()) {
-                map.put(name.toLowerCase(), new SellItemConfig(name, threshold, mode));
+                map.put(name.toLowerCase(), new SellItemConfig(name, threshold, mode, sellHighest));
             }
         }
         return map;
@@ -336,7 +346,8 @@ public class NetoGeSellerScript extends Script {
         for (Rs2ItemModel item : Rs2Inventory.all(Rs2ItemModel::isTradeable)) {
             String nameLower = item.getName().toLowerCase();
             log.info("Considering tradeable inventory item '{}', quantity={}, configuredForSale={}", item.getName(), item.getQuantity(), itemsToSellMap.containsKey(nameLower));
-            if (itemsToSellMap.containsKey(nameLower)) {
+            SellItemConfig itemConfig = itemsToSellMap.get(nameLower);
+            if (itemConfig != null) {
                 int quantityToSell = item.getQuantity();
                 if (quantityToSell <= 0) {
                     log.warn("Skipping configured item '{}' because quantity is {}.", item.getName(), quantityToSell);
@@ -349,8 +360,9 @@ public class NetoGeSellerScript extends Script {
 
                 if (availableSlots > 0) {
                     Microbot.status = "Selling " + quantityToSell + " " + item.getName();
-                    log.info("Attempting to sell '{}' with hotkey '{}'.", item.getName(), config.hotkey());
-                    boolean sold = sellItemWithHotkey(item.getName(), quantityToSell, config.hotkey());
+                    String sellHotkey = itemConfig.isSellHighest() ? config.highValueHotkey() : config.hotkey();
+                    log.info("Attempting to sell '{}' with hotkey '{}'.", item.getName(), sellHotkey);
+                    boolean sold = sellItemWithHotkey(item.getName(), quantityToSell, sellHotkey);
                     log.info("sellItemWithHotkey result for '{}': {}", item.getName(), sold);
 //                    if (sold) {
 //                        sleep(1000, 1500);

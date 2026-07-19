@@ -28,7 +28,7 @@ import java.time.Instant;
 )
 @Slf4j
 public class NetoSuperglassMakePlugin extends Plugin {
-    public static final String version = "1.0.3";
+    public static final String version = "1.0.4";
     @Getter
     private Instant startTime;
 

@@ -89,7 +89,7 @@ public class NetoResupplyScript extends Script {
                 recordProblem(message);
                 moveTo(State.VERIFYING);
             }
-        }, 0, 600, TimeUnit.MILLISECONDS);
+        }, 0, 100, TimeUnit.MILLISECONDS);
         return true;
     }
 

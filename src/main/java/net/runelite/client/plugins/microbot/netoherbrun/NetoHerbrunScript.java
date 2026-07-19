@@ -3,8 +3,10 @@ package net.runelite.client.plugins.microbot.netoherbrun;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.Skill;
 import net.runelite.api.TileObject;
+import net.runelite.api.Varbits;
 import net.runelite.api.gameval.ItemID;
 import net.runelite.api.gameval.ObjectID;
+import net.runelite.api.gameval.VarPlayerID;
 import net.runelite.client.callback.ClientThread;
 import net.runelite.client.config.ConfigManager;
 import net.runelite.client.plugins.microbot.Microbot;
@@ -21,6 +23,9 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileitem.models.Rs2TileItemModel;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
@@ -29,6 +34,9 @@ import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.timetracking.Tab;
 import net.runelite.api.coords.WorldPoint;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 
 import javax.inject.Inject;
 import java.util.*;
@@ -38,6 +46,15 @@ import static net.runelite.client.plugins.microbot.Microbot.log;
 
 @Slf4j
 public class NetoHerbrunScript extends Script {
+    private static final String BIRDHOUSE_RUNNER_CLASS_NAME =
+            "net.runelite.client.plugins.microbot.netobirdhouseruns.NetoBirdhouseRunsPlugin";
+    private static final int[] BIRDHOUSE_VARPS = {
+            VarPlayerID.BIRDHOUSE_TRANSMIT_A,
+            VarPlayerID.BIRDHOUSE_TRANSMIT_B,
+            VarPlayerID.BIRDHOUSE_TRANSMIT_C,
+            VarPlayerID.BIRDHOUSE_TRANSMIT_D
+    };
+
     @Inject
     private ConfigManager configManager;
     @Inject
@@ -75,6 +92,8 @@ public class NetoHerbrunScript extends Script {
             if (!super.run()) return;
             if (!initialized) {
                 initialized = true;
+                Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+                Rs2AntibanSettings.dynamicIntensity = false;
                 NetoHerbrunPlugin.status = "Gearing up";
                 populatePatches();
 
@@ -99,13 +118,29 @@ public class NetoHerbrunScript extends Script {
             }
             if (currentPatch == null) {
                 NetoHerbrunPlugin.status = "Finishing up";
+                boolean startBirdhouseRunner = false;
                 if (config.goToBank()) {
                     Rs2Walker.walkTo(Rs2Bank.getNearestBank().getWorldPoint());
                     if (!Rs2Bank.isOpen()) Rs2Bank.openBank();
                     Rs2Bank.depositAll();
+                    startBirdhouseRunner = areAllBirdhousesReady();
                 }
                 NetoHerbrunPlugin.status = "Finished";
+
+                var birdhouseRunner = startBirdhouseRunner
+                        ? Microbot.getPlugin(BIRDHOUSE_RUNNER_CLASS_NAME)
+                        : null;
+                if (startBirdhouseRunner && birdhouseRunner == null) {
+                    log.warn("All birdhouses are ready, but Neto Birdhouse Runner is not installed");
+                }
+
                 Microbot.stopPlugin(plugin);
+                if (birdhouseRunner != null) {
+                    log("All birdhouses are ready; starting Neto Birdhouse Runner");
+                    Microbot.startPlugin(birdhouseRunner);
+                } else if (!startBirdhouseRunner && config.goToBank()) {
+                    log("Not all birdhouses are ready; Neto Birdhouse Runner will not be started");
+                }
                 return;
             }
 
@@ -116,6 +151,97 @@ public class NetoHerbrunScript extends Script {
 
             if (!currentPatch.isInRange(40)) {
                 NetoHerbrunPlugin.status = "Walking to " + currentPatch.getRegionName();
+                String regionName = currentPatch.getRegionName();
+                WorldPoint locationBeforeTeleport = Rs2Player.getWorldLocation();
+                boolean teleportInteractionSucceeded = false;
+
+                switch (regionName) {
+                    case "Civitas illa Fortis":
+                        String whistle = findQuetzalWhistleInInventory();
+                        if (whistle != null) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact(whistle, "Signal");
+                        } else if (Rs2Inventory.hasItem("Civitas illa fortis teleport")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Civitas illa fortis teleport", "Break");
+                        } else if (Rs2Inventory.hasItem("Varrock teleport")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Varrock teleport", "Break");
+                        }
+                        break;
+                    case "Farming Guild":
+                        if (Rs2Inventory.hasItem("Farming cape") || Rs2Inventory.hasItem("Farming cape(t)") ||
+                            Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING) || Rs2Equipment.isWearing(ItemID.SKILLCAPE_FARMING_TRIMMED)) {
+                            teleportInteractionSucceeded = interactTeleportItem(new String[]{"Farming cape", "Farming cape(t)"}, "Teleport");
+                        } else {
+                            String necklace = findSkillsNecklaceInInventory();
+                            if (necklace != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(necklace, "Farming Guild");
+                            }
+                        }
+                        break;
+                    case "Ardougne":
+                        if (Rs2Inventory.hasItem("Ardougne cloak 4") || Rs2Equipment.isWearing("Ardougne cloak 4")) {
+                            teleportInteractionSucceeded = interactTeleportItem("Ardougne cloak 4", "Ardougne Farm");
+                        } else {
+                            String necklace = findSkillsNecklaceInInventory();
+                            if (necklace != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(necklace, "Fishing Guild");
+                            }
+                        }
+                        break;
+                    case "Kourend":
+                        if (Rs2Inventory.hasItem("Xeric's talisman") || Rs2Equipment.isWearing("Xeric's talisman")) {
+                            teleportInteractionSucceeded = interactTeleportItem("Xeric's talisman", "Xeric's Glade");
+                        } else {
+                            String necklace = findSkillsNecklaceInInventory();
+                            if (necklace != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(necklace, "Woodcutting Guild");
+                            }
+                        }
+                        break;
+                    case "Troll Stronghold":
+                        if (Rs2Inventory.hasItem("Stony basalt")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Stony basalt", "Troll Stronghold");
+                        }
+                        break;
+                    case "Weiss":
+                        if (Rs2Inventory.hasItem("Icy basalt")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Icy basalt", "Weiss");
+                        }
+                        break;
+                    case "Catherby":
+                        if (Rs2Inventory.hasItem("Catherby teleport")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Catherby teleport", "Break");
+                        } else if (Rs2Magic.hasRequiredRunes(Rs2Spells.CAMELOT_TELEPORT)) {
+                            teleportInteractionSucceeded = Rs2Magic.cast(Rs2Spells.CAMELOT_TELEPORT);
+                        }
+                        break;
+                    case "Morytania":
+                        if (Rs2Inventory.hasItem("Ectophial")) {
+                            teleportInteractionSucceeded = Rs2Inventory.interact("Ectophial", "Empty");
+                        }
+                        break;
+                    case "Falador":
+                        String explorersRing = findExplorersRingInInventoryOrEquipment();
+                        if (explorersRing != null) {
+                            teleportInteractionSucceeded = interactTeleportItem(explorersRing, "Teleport");
+                        } else {
+                            String glory = findAmuletOfGloryInInventory();
+                            if (glory != null) {
+                                teleportInteractionSucceeded = Rs2Inventory.interact(glory, "Draynor Village");
+                            }
+                        }
+                        break;
+                }
+
+                if (teleportInteractionSucceeded && locationBeforeTeleport != null) {
+                    boolean locationChanged = sleepUntil(() -> {
+                        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+                        return currentLocation != null && !currentLocation.equals(locationBeforeTeleport);
+                    }, 10000);
+                    if (!locationChanged) {
+                        log("Teleport interaction succeeded for " + regionName + " but the player location did not change.");
+                    }
+                }
+
                 walkTo(currentPatch.getLocation(), 7);
                 return;
             }
@@ -159,9 +285,23 @@ public class NetoHerbrunScript extends Script {
                     break;
             }
 
-        }, 0, 1000, TimeUnit.MILLISECONDS);
+        }, 0, 100, TimeUnit.MILLISECONDS);
 
         return true;
+    }
+
+    private boolean areAllBirdhousesReady() {
+        int[] values = Arrays.stream(BIRDHOUSE_VARPS)
+                .map(Microbot::getVarbitPlayerValue)
+                .toArray();
+        boolean ready = allBirdhousesReady(values);
+        log("Birdhouse readiness varps=" + Arrays.toString(values) + ", allReady=" + ready);
+        return ready;
+    }
+
+    static boolean allBirdhousesReady(int... varpValues) {
+        return varpValues.length == BIRDHOUSE_VARPS.length
+                && Arrays.stream(varpValues).allMatch(value -> value > 0 && value % 3 == 0);
     }
 
     private void walkTo(WorldPoint destination, int distance) {
@@ -170,7 +310,7 @@ public class NetoHerbrunScript extends Script {
             return;
         }
 
-        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination));
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination, distance));
         while (!future.isDone()) {
             playerLocation = Rs2Player.getWorldLocation();
             if (playerLocation != null && playerLocation.distanceTo(destination) <= distance) {
@@ -192,7 +332,7 @@ public class NetoHerbrunScript extends Script {
             Map<String, HerbPatch> allHerbsByRegion = new HashMap<>();
 
             for (FarmingPatch patch : farmingWorld.getTabs().get(Tab.HERB)) {
-                HerbPatch _patch = new HerbPatch(patch, config, farmingHandler);
+                HerbPatch _patch = new HerbPatch(patch, farmingHandler);
                 if (!_patch.isEnabled()) continue;
                 allHerbsByRegion.put(_patch.getRegionName(), _patch);
                 if (_patch.getPrediction() != CropState.GROWING) {
@@ -335,8 +475,11 @@ public class NetoHerbrunScript extends Script {
             if (!applyCompost(obj)) return false;
             Rs2Inventory.use(seedInInventory.getItemId());
             obj.click("Plant");
-            Rs2Player.waitForWalking();
-            sleepUntil(() -> getHerbPatchState(obj).equals("Growing"), 10000);
+            if (sleepUntil(() -> getHerbPatchState(obj).equals("Growing"), 10000)) {
+                log("[Herb] Planted at " + obj.getWorldLocation());
+                return true;
+            }
+            log("[Herb] Plant not confirmed (state=" + getHerbPatchState(obj) + "), retrying");
             return false;
         }
 
@@ -456,7 +599,6 @@ public class NetoHerbrunScript extends Script {
                 if (!applyCompost(obj)) return false;
                 Rs2Inventory.use(flowerSeed.getItemId());
                 obj.click("Plant");
-                Rs2Player.waitForWalking();
                 // Only advance once Growing is confirmed; otherwise retry next tick (weeds may have
                 // regrown between clearing and planting, or the click missed).
                 if (sleepUntil(() -> getPatchState(obj).equals("Growing"), 10000)) {
@@ -568,7 +710,6 @@ public class NetoHerbrunScript extends Script {
                 if (!applyCompost(obj)) return false;
                 Rs2Inventory.use(allotmentSeed.getItemId());
                 obj.click("Plant");
-                Rs2Player.waitForWalking();
                 // Only mark done once the patch is confirmed Growing. If the plant didn't take
                 // (e.g. weeds regrew between clearing and planting, or the click missed), leave the
                 // patch pinned so the next tick re-rakes/re-plants instead of silently giving up.
@@ -753,16 +894,6 @@ public class NetoHerbrunScript extends Script {
             return false;
         }
 
-        if (Rs2Equipment.isWearing()) {
-            if (!Rs2Bank.depositEquipment()) {
-                log("Failed to deposit worn equipment");
-                return false;
-            }
-            if (!sleepUntil(() -> !Rs2Equipment.isWearing(), 5000)) {
-                log("Timeout waiting for worn equipment to be deposited");
-                return false;
-            }
-        }
         Rs2Bank.depositAll();
         Rs2Inventory.waitForInventoryChanges(5000);
 
@@ -779,8 +910,21 @@ public class NetoHerbrunScript extends Script {
             equipFarmersOutfit();
         }
 
+        if (Rs2Bank.hasItem(ItemID.FAIRY_ENCHANTED_SECATEURS)) {
+            Rs2Bank.withdrawAndEquip(ItemID.FAIRY_ENCHANTED_SECATEURS);
+        }
+
+        // Store any equipment displaced while equipping the farming gear.
+        Rs2Bank.depositAll();
+        Rs2Inventory.waitForInventoryChanges(5000);
+
         boolean toolsOk = true;
-        toolsOk &= Rs2Bank.withdrawOne(ItemID.RAKE);
+        boolean autoWeedUnlocked = isAutoWeedUnlocked();
+        if (autoWeedUnlocked) {
+            log("Auto-weed is unlocked; skipping rake withdrawal");
+        } else {
+            toolsOk &= Rs2Bank.withdrawOne(ItemID.RAKE);
+        }
         toolsOk &= Rs2Bank.withdrawOne(ItemID.SPADE);
 
         boolean hasBarehandedSeedPlanting = new RuneliteRequirement(
@@ -796,12 +940,10 @@ public class NetoHerbrunScript extends Script {
         }
 
         if (!toolsOk) {
-            log("Missing farming tools in bank (rake/spade)");
+            log(autoWeedUnlocked
+                    ? "Missing farming tools in bank (spade)"
+                    : "Missing farming tools in bank (rake/spade)");
             return false;
-        }
-
-        if (Rs2Bank.hasItem(ItemID.FAIRY_ENCHANTED_SECATEURS)) {
-            Rs2Bank.withdrawAndEquip(ItemID.FAIRY_ENCHANTED_SECATEURS);
         }
 
         // Determine all active regions for this run
@@ -910,11 +1052,25 @@ public class NetoHerbrunScript extends Script {
                         if (!Rs2Inventory.hasItem(whistle)) {
                             Rs2Bank.withdrawOne(whistle);
                         }
-                    } else if (Rs2Bank.count(ItemID.LAWRUNE) >= 2 && Rs2Bank.count(ItemID.EARTHRUNE) >= 1 && Rs2Bank.count(ItemID.FIRERUNE) >= 1) {
+                    } else if (Rs2Magic.isSpellbook(Rs2Spellbook.MODERN)
+                            && Rs2Bank.count(ItemID.LAWRUNE) + Rs2Inventory.count(ItemID.LAWRUNE) >= 2
+                            && Rs2Bank.count(ItemID.EARTHRUNE) + Rs2Inventory.count(ItemID.EARTHRUNE) >= 1
+                            && Rs2Bank.count(ItemID.FIRERUNE) + Rs2Inventory.count(ItemID.FIRERUNE) >= 1) {
                         hasTeleport = true;
-                        Rs2Bank.withdrawX(ItemID.LAWRUNE, 2);
-                        Rs2Bank.withdrawOne(ItemID.EARTHRUNE);
-                        Rs2Bank.withdrawOne(ItemID.FIRERUNE);
+                        int lawRunesNeeded = Math.max(0, 2 - Rs2Inventory.count(ItemID.LAWRUNE));
+                        if (lawRunesNeeded > 0) Rs2Bank.withdrawX(ItemID.LAWRUNE, lawRunesNeeded);
+                        if (!Rs2Inventory.hasItem(ItemID.EARTHRUNE)) Rs2Bank.withdrawOne(ItemID.EARTHRUNE);
+                        if (!Rs2Inventory.hasItem(ItemID.FIRERUNE)) Rs2Bank.withdrawOne(ItemID.FIRERUNE);
+                    } else if (Rs2Bank.hasItem("Civitas illa fortis teleport") || Rs2Inventory.hasItem("Civitas illa fortis teleport")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Civitas illa fortis teleport")) {
+                            Rs2Bank.withdrawOne("Civitas illa fortis teleport");
+                        }
+                    } else if (Rs2Bank.hasItem("Varrock teleport") || Rs2Inventory.hasItem("Varrock teleport")) {
+                        hasTeleport = true;
+                        if (!Rs2Inventory.hasItem("Varrock teleport")) {
+                            Rs2Bank.withdrawOne("Varrock teleport");
+                        }
                     }
                     break;
                 case "Ardougne":
@@ -955,11 +1111,19 @@ public class NetoHerbrunScript extends Script {
                     }
                     break;
                 case "Falador":
-                    String glory = findAmuletOfGloryWithLeastCharges();
-                    if (glory != null) {
+                    String explorersRing = findExplorersRing();
+                    if (explorersRing != null) {
                         hasTeleport = true;
-                        if (!Rs2Inventory.hasItem(glory, true)) {
-                            Rs2Bank.withdrawOne(glory, true);
+                        if (!Rs2Inventory.hasItem(explorersRing) && !Rs2Equipment.isWearing(explorersRing)) {
+                            Rs2Bank.withdrawOne(explorersRing);
+                        }
+                    } else {
+                        String glory = findAmuletOfGloryWithLeastCharges();
+                        if (glory != null) {
+                            hasTeleport = true;
+                            if (!Rs2Inventory.hasItem(glory, true)) {
+                                Rs2Bank.withdrawOne(glory, true);
+                            }
                         }
                     }
                     break;
@@ -1091,6 +1255,13 @@ public class NetoHerbrunScript extends Script {
 
         log("Inventory setup complete - starting farm run");
         return true;
+    }
+
+    @SuppressWarnings("deprecation")
+    private boolean isAutoWeedUnlocked() {
+        return Microbot.getClientThread().invoke(
+                () -> Microbot.getClient().getVarbitValue(Varbits.AUTOWEED)
+        ) == 1;
     }
 
     private boolean withdrawSpecificSeeds(int itemId, String seedName, int count, int levelRequired, boolean allowPartial) {
@@ -1234,17 +1405,6 @@ public class NetoHerbrunScript extends Script {
         }
     }
 
-    private int countEnabledAllotmentFlowerLocations() {
-        int count = 0;
-        if (config.enableArdougne()) count++;
-        if (config.enableCatherby()) count++;
-        if (config.enableVarlamore()) count++;
-        if (config.enableFalador()) count++;
-        if (config.enableHosidius()) count++;
-        if (config.enableMorytania()) count++;
-        return count;
-    }
-
     @Override
     public void shutdown() {
         super.shutdown();
@@ -1257,14 +1417,65 @@ public class NetoHerbrunScript extends Script {
     }
 
     private String findQuetzalWhistle() {
+        if (Rs2Bank.hasItem("Perfected quetzal whistle(i)")) return "Perfected quetzal whistle(i)";
+        if (Rs2Bank.hasItem("Perfected quetzal whistle")) return "Perfected quetzal whistle";
         if (Rs2Bank.hasItem("Perfect quetzal whistle")) return "Perfect quetzal whistle";
         if (Rs2Bank.hasItem("Enhanced quetzal whistle")) return "Enhanced quetzal whistle";
         if (Rs2Bank.hasItem("Basic quetzal whistle")) return "Basic quetzal whistle";
         if (Rs2Bank.hasItem("Quetzal whistle")) return "Quetzal whistle";
+        if (Rs2Inventory.hasItem("Perfected quetzal whistle(i)")) return "Perfected quetzal whistle(i)";
+        if (Rs2Inventory.hasItem("Perfected quetzal whistle")) return "Perfected quetzal whistle";
         if (Rs2Inventory.hasItem("Perfect quetzal whistle")) return "Perfect quetzal whistle";
         if (Rs2Inventory.hasItem("Enhanced quetzal whistle")) return "Enhanced quetzal whistle";
         if (Rs2Inventory.hasItem("Basic quetzal whistle")) return "Basic quetzal whistle";
         if (Rs2Inventory.hasItem("Quetzal whistle")) return "Quetzal whistle";
+        return null;
+    }
+
+    private String findQuetzalWhistleInInventory() {
+        String[] whistleNames = {
+                "Perfected quetzal whistle(i)",
+                "Perfected quetzal whistle",
+                "Perfect quetzal whistle",
+                "Enhanced quetzal whistle",
+                "Basic quetzal whistle",
+                "Quetzal whistle"
+        };
+        for (String whistleName : whistleNames) {
+            if (Rs2Inventory.hasItem(whistleName)) {
+                return whistleName;
+            }
+        }
+        return null;
+    }
+
+    private boolean interactTeleportItem(String itemName, String action) {
+        if (Rs2Inventory.hasItem(itemName)) {
+            return Rs2Inventory.interact(itemName, action);
+        } else if (Rs2Equipment.isWearing(itemName)) {
+            return Rs2Equipment.interact(itemName, action);
+        }
+        return false;
+    }
+
+    private boolean interactTeleportItem(String[] itemNames, String action) {
+        for (String name : itemNames) {
+            if (Rs2Inventory.hasItem(name)) {
+                return Rs2Inventory.interact(name, action);
+            } else if (Rs2Equipment.isWearing(name)) {
+                return Rs2Equipment.interact(name, action);
+            }
+        }
+        return false;
+    }
+
+    private String findSkillsNecklaceInInventory() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Skills necklace(" + i + ")";
+            if (Rs2Inventory.hasItem(name)) {
+                return name;
+            }
+        }
         return null;
     }
 
@@ -1286,6 +1497,39 @@ public class NetoHerbrunScript extends Script {
             }
         }
         if (Rs2Bank.hasItem("Amulet of eternal glory", true)) {
+            return "Amulet of eternal glory";
+        }
+        return null;
+    }
+
+    private String findExplorersRing() {
+        String[] ringNames = {"Explorer's ring 4", "Explorer's ring 3"};
+        for (String ringName : ringNames) {
+            if (Rs2Inventory.hasItem(ringName) || Rs2Equipment.isWearing(ringName) || Rs2Bank.hasItem(ringName)) {
+                return ringName;
+            }
+        }
+        return null;
+    }
+
+    private String findExplorersRingInInventoryOrEquipment() {
+        String[] ringNames = {"Explorer's ring 4", "Explorer's ring 3"};
+        for (String ringName : ringNames) {
+            if (Rs2Inventory.hasItem(ringName) || Rs2Equipment.isWearing(ringName)) {
+                return ringName;
+            }
+        }
+        return null;
+    }
+
+    private String findAmuletOfGloryInInventory() {
+        for (int i = 1; i <= 6; i++) {
+            String name = "Amulet of glory(" + i + ")";
+            if (Rs2Inventory.hasItem(name)) {
+                return name;
+            }
+        }
+        if (Rs2Inventory.hasItem("Amulet of eternal glory")) {
             return "Amulet of eternal glory";
         }
         return null;

@@ -1617,6 +1617,11 @@ public class NetoRCScript extends Script {
                     forceDrinkAtFerox = true;
                     handleFeroxRunEnergy();
                 }
+                if (teleport == Teleports.CASTLE_WARS) {
+                    Microbot.log("Opening Castle Wars bank");
+                    Rs2Bank.openBank();
+                    sleepUntil(Rs2Bank::isOpen, 5000);
+                }
                 break;
             }
         }

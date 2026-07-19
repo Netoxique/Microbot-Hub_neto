@@ -3,6 +3,9 @@ package net.runelite.client.plugins.microbot.netowoodcutting;
 import lombok.extern.slf4j.Slf4j;
 import net.runelite.api.AnimationID;
 import net.runelite.api.GameObject;
+import net.runelite.api.ChatMessageType;
+import net.runelite.api.Quest;
+import net.runelite.api.QuestState;
 import net.runelite.api.Skill;
 import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.gameval.ItemID;
@@ -10,8 +13,10 @@ import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
+import net.runelite.client.plugins.microbot.globval.enums.InterfaceTab;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.antiban.enums.ActivityIntensity;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.bank.enums.BankLocation;
 import net.runelite.client.plugins.microbot.util.combat.Rs2Combat;
@@ -26,11 +31,17 @@ import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.skills.fletching.Rs2Fletching;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.tile.Rs2Tile;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.*;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingTreeLocations;
+import net.runelite.api.widgets.Widget;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
 
 import javax.inject.Inject;
 import java.awt.event.KeyEvent;
@@ -84,6 +95,12 @@ public class NetoWoodcuttingScript extends Script {
         this.plugin = plugin;
     }
     @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
+    @Inject
     Rs2TileObjectCache rs2TileObjectCache;
 
     private void handleFiremaking(NetoWoodcuttingConfig config) {
@@ -116,10 +133,21 @@ public class NetoWoodcuttingScript extends Script {
     public boolean run(NetoWoodcuttingConfig config) {
         Rs2Antiban.resetAntibanSettings();
         Rs2Antiban.antibanSetupTemplates.applyWoodcuttingSetup();
-        Rs2AntibanSettings.dynamicActivity = true;
-        Rs2AntibanSettings.dynamicIntensity = true;
+        Rs2AntibanSettings.dynamicActivity = false;
+        Rs2AntibanSettings.dynamicIntensity = false;
+        Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+        woodcuttingScriptState = WoodcuttingScriptState.PREP;
         activeTree = config.TREE();
         activeLocation = null;
+
+        breakManager.configure(config, "Neto Woodcutting");
+        worldHopManager.configure(config, "Neto Woodcutting");
+        runtimeDisable.configure(config, "Neto Woodcutting");
+
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
+
         mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(() -> {
             try {
                 if (preFlightChecks(config)) return;
@@ -213,7 +241,11 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private boolean preFlightChecks(NetoWoodcuttingConfig config) {
-        if (!Microbot.isLoggedIn()) return true;
+        if (!Microbot.isLoggedIn()) {
+            if (runtimeDisable.updateRuntime(NetoWoodcuttingPlugin.class)) return true;
+            if (breakManager.updateBreakState()) return true;
+            return true;
+        }
         if (!super.run()) return true;
         if (Rs2Player.getRealSkillLevel(Skill.WOODCUTTING) <= 0) return true;
 
@@ -253,7 +285,9 @@ public class NetoWoodcuttingScript extends Script {
         }
 
         if (!getActiveTree().hasRequiredLevel()) {
-            Microbot.showMessage("You do not have the required woodcutting level to cut this tree. " + Rs2Player.getRealSkillLevel(Skill.WOODCUTTING));
+            Microbot.getClientThread().invoke(() -> {
+                Microbot.getClient().addChatMessage(ChatMessageType.ENGINE, "", "<col=ff0000>You do not have the required woodcutting level to cut this tree. " + Rs2Player.getRealSkillLevel(Skill.WOODCUTTING) + "</col>", "");
+            });
             shutdown();
             return true;
         }
@@ -285,12 +319,12 @@ public class NetoWoodcuttingScript extends Script {
             case DROP:
                 var itemNames = Arrays.stream(config.itemsToKeep().split(",")).map(String::trim).toArray(String[]::new);
                 Rs2Inventory.dropAllExcept(false, config.interactOrder(), itemNames);
-                woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                enterWoodcuttingPhase();
                 break;
             case BANK:
                 if (!handleBanking(config))
                     return;
-                woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                enterWoodcuttingPhase();
                 break;
             case BURN_CAMPFIRE:
             case BURN:
@@ -304,15 +338,20 @@ public class NetoWoodcuttingScript extends Script {
                 if (config.firemakeOnly()){
                     woodcuttingScriptState = WoodcuttingScriptState.FIREMAKING;
                 } else {
-                    woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                    enterWoodcuttingPhase();
                 }
                 break;
             case FLETCH:
                 if (handleFletchingWorkflow(config)) {
-                    woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
+                    enterWoodcuttingPhase();
                 }
                 break;
         }
+    }
+
+    private void enterWoodcuttingPhase() {
+        Rs2Tab.switchTo(InterfaceTab.INVENTORY);
+        woodcuttingScriptState = WoodcuttingScriptState.WOODCUTTING;
     }
 
     private boolean ensureProgressiveLocation(NetoWoodcuttingConfig config) {
@@ -350,6 +389,11 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private boolean handleBanking(NetoWoodcuttingConfig config) {
+        if (!needsToBank(config)) {
+            walkToLocation(getReturnPoint(config), 5);
+            return true;
+        }
+
         BankLocation nearestBank = Rs2Bank.getNearestBank();
         boolean isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
         if (!isBankOpen || !Rs2Bank.isOpen()) return false;
@@ -358,15 +402,35 @@ public class NetoWoodcuttingScript extends Script {
         Rs2LogBasket.emptyLogBasketAtBank();
         currentLogBasketCount = 0;
         // deposit items
-        List<String> itemNames = Arrays.stream(config.itemsToBank().split(",")).map(String::toLowerCase).collect(Collectors.toList());
-        itemNames.add(config.fletchingType().getContainsInventoryName().toLowerCase());
-        Rs2Bank.depositAll(i -> itemNames.stream().anyMatch(itemName -> i.getName().toLowerCase().contains(itemName)));
+        List<String> itemsToKeep = Arrays.stream(config.itemsToKeepBanking().split(","))
+                .map(String::trim)
+                .filter(x -> !x.isEmpty())
+                .collect(Collectors.toList());
+        if (!itemsToKeep.contains("log basket")) {
+            itemsToKeep.add("log basket");
+        }
+        if (!itemsToKeep.contains("forestry basket")) {
+            itemsToKeep.add("forestry basket");
+        }
+        Rs2Bank.depositAllExcept(false, itemsToKeep.toArray(new String[0]));
         Rs2Inventory.waitForInventoryChanges(1800);
+
+        if (Rs2Equipment.isWearing("Forestry basket")) {
+            Widget emptyContainersWidget = Rs2Widget.findWidget("Empty containers");
+            if (emptyContainersWidget != null) {
+                Rs2Widget.clickWidget(emptyContainersWidget);
+                Rs2Inventory.waitForInventoryChanges(1800);
+            }
+        }
 
         Rs2Bank.closeBank();
         sleepUntil(() -> !Rs2Bank.isOpen());
 
-        Rs2Walker.walkTo(getReturnPoint(config));
+        if (checkForBreakOrHop()) {
+            return false;
+        }
+
+        walkToLocation(getReturnPoint(config), 5);
         return true;
     }
 
@@ -488,8 +552,32 @@ public class NetoWoodcuttingScript extends Script {
     }
 
     private void walkBack(NetoWoodcuttingConfig config) {
-        Rs2Walker.walkTo(new WorldPoint(getReturnPoint(config).getX() - Rs2Random.between(-1, 1), getReturnPoint(config).getY() - Rs2Random.between(-1, 1), getReturnPoint(config).getPlane()));
-        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(getReturnPoint(config)) <= 4);
+        walkToLocation(getReturnPoint(config), 5);
+    }
+
+    private void walkToLocation(WorldPoint dst, int distance) {
+        WorldPoint myLocation = Rs2Player.getWorldLocation();
+        if (myLocation == null) return;
+
+        if (myLocation.distanceTo(dst) <= distance) {
+            return;
+        }
+
+        try {
+            var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(dst));
+
+            while (!future.isDone()) {
+                WorldPoint currentLocation = Rs2Player.getWorldLocation();
+                if (currentLocation != null && currentLocation.distanceTo(dst) <= distance) {
+                    Rs2Walker.setTarget(null);
+                    future.cancel(true);
+                    break;
+                }
+                sleep(100);
+            }
+        } catch (Exception e) {
+            log.error("Error walking to location", e);
+        }
     }
     
     /**
@@ -659,18 +747,39 @@ public class NetoWoodcuttingScript extends Script {
         }
     }
 
-    private void withdrawAndEquipFirstAvailable(int[] ids) {
+    private int findFirstAvailableEquipment(int[] ids) {
         for (int id : ids) {
             if (Rs2Equipment.isWearing(id)) {
-                return;
+                return id;
             }
         }
         for (int id : ids) {
             if (Rs2Bank.hasItem(id)) {
-                Rs2Bank.withdrawAndEquip(id);
-                sleep(600, 1200);
-                return;
+                return id;
             }
+        }
+        return -1;
+    }
+
+    private void withdrawEquipmentIfNeeded(int id, List<Integer> equipmentToWear) {
+        if (id == -1 || Rs2Equipment.isWearing(id)) {
+            return;
+        }
+        if (Rs2Bank.withdrawItem(id) && sleepUntil(() -> Rs2Inventory.hasItem(id), 3000)) {
+            equipmentToWear.add(id);
+        } else {
+            Microbot.log("Prep State: Failed to withdraw equipment item " + id + ".");
+        }
+    }
+
+    private void withdrawEquipmentIfNeeded(String name, List<String> equipmentToWear) {
+        if (name == null || Rs2Equipment.isWearing(name)) {
+            return;
+        }
+        if (Rs2Bank.withdrawItem(name) && sleepUntil(() -> Rs2Inventory.hasItem(name), 3000)) {
+            equipmentToWear.add(name);
+        } else {
+            Microbot.log("Prep State: Failed to withdraw " + name + ".");
         }
     }
 
@@ -707,49 +816,88 @@ public class NetoWoodcuttingScript extends Script {
         Rs2Bank.depositAll();
         sleepUntil(Rs2Inventory::isEmpty, 5000);
 
-        Microbot.log("Prep State: Equipping Lumberjack outfit...");
-        withdrawAndEquipFirstAvailable(new int[]{10941, 28173, 28174}); // Hats
-        withdrawAndEquipFirstAvailable(new int[]{10939, 28169, 28170}); // Tops
-        withdrawAndEquipFirstAvailable(new int[]{10940, 28171, 28172}); // Legs
-        withdrawAndEquipFirstAvailable(new int[]{10933, 28175, 28176}); // Boots
+        List<Integer> equipmentIdsToWear = new ArrayList<>();
+        List<String> equipmentNamesToWear = new ArrayList<>();
 
-        Microbot.log("Prep State: Equipping best axe...");
-        withdrawAndEquipFirstAvailable(new int[]{28217, 6739, 28214, 1359}); // Dragon felling, Dragon, Rune felling, Rune axe
+        Microbot.log("Prep State: Withdrawing Lumberjack outfit...");
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10941, 28173, 28174}), equipmentIdsToWear); // Hats
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10939, 28169, 28170}), equipmentIdsToWear); // Tops
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10940, 28171, 28172}), equipmentIdsToWear); // Legs
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{10933, 28175, 28176}), equipmentIdsToWear); // Boots
 
-        Microbot.log("Prep State: Equipping back/cape slot item...");
-        if (Rs2Equipment.isWearing(28136) || Rs2Bank.hasItem(28136)) {
-            if (!Rs2Equipment.isWearing(28136)) {
-                Microbot.log("Prep State: Withdrawing Forestry kit...");
-                Rs2Bank.withdrawItem(28136);
-                if (sleepUntil(() -> Rs2Inventory.hasItem(28136), 3000)) {
-                    Microbot.log("Prep State: Closing bank to equip Forestry kit...");
-                    Rs2Bank.closeBank();
-                    sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+        if (Rs2Bank.hasItem("Twitcher's gloves") || Rs2Equipment.isWearing("Twitcher's gloves")) {
+            withdrawEquipmentIfNeeded("Twitcher's gloves", equipmentNamesToWear);
+        }
 
-                    Rs2Inventory.wield(28136);
-                    sleepUntil(() -> Rs2Equipment.isWearing(28136), 3000);
+        Microbot.log("Prep State: Withdrawing best axe...");
+        withdrawEquipmentIfNeeded(findFirstAvailableEquipment(new int[]{28217, 6739, 28214, 1359}), equipmentIdsToWear); // Dragon felling, Dragon, Rune felling, Rune axe
 
-                    Microbot.log("Prep State: Re-opening bank...");
-                    isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
-                    if (!isBankOpen || !Rs2Bank.isOpen()) {
-                        return;
-                    }
-                }
-            }
+        Microbot.log("Prep State: Withdrawing back/cape slot item...");
+        boolean useForestryBasket = false;
+        if (Rs2Equipment.isWearing("Forestry basket") || Rs2Bank.hasItem("Forestry basket")) {
+            useForestryBasket = true;
+            withdrawEquipmentIfNeeded("Forestry basket", equipmentNamesToWear);
+        } else if (Rs2Equipment.isWearing(28136) || Rs2Bank.hasItem(28136)) {
+            withdrawEquipmentIfNeeded(28136, equipmentIdsToWear);
         } else if (Rs2Equipment.isWearing("Agility cape") || Rs2Bank.hasItem("Agility cape")) {
-            if (!Rs2Equipment.isWearing("Agility cape")) {
-                Rs2Bank.withdrawAndEquip("Agility cape");
-                sleep(600, 1200);
-            }
+            withdrawEquipmentIfNeeded("Agility cape", equipmentNamesToWear);
         } else if (Rs2Equipment.isWearing("Graceful cape") || Rs2Bank.hasItem("Graceful cape")) {
-            if (!Rs2Equipment.isWearing("Graceful cape")) {
-                Rs2Bank.withdrawAndEquip("Graceful cape");
-                sleep(600, 1200);
+            withdrawEquipmentIfNeeded("Graceful cape", equipmentNamesToWear);
+        }
+
+        Microbot.log("Prep State: Closing bank to equip all items...");
+        Rs2Bank.closeBank();
+        if (!sleepUntil(() -> !Rs2Bank.isOpen(), 3000)) {
+            return;
+        }
+
+        for (int id : equipmentIdsToWear) {
+            if (Rs2Inventory.hasItem(id)) {
+                Rs2Inventory.wield(id);
+                sleepUntil(() -> Rs2Equipment.isWearing(id), 3000);
+            }
+        }
+        for (String name : equipmentNamesToWear) {
+            if (Rs2Inventory.hasItem(name)) {
+                Rs2Inventory.wield(name);
+                sleepUntil(() -> Rs2Equipment.isWearing(name), 3000);
             }
         }
 
+        if (useForestryBasket && Rs2Equipment.isWearing("Forestry basket")) {
+            Rs2ItemModel basket = Rs2Equipment.get("Forestry basket");
+            if (basket != null) {
+                boolean hasOpenAction = basket.getEquipmentActions().stream()
+                        .anyMatch(action -> action != null && action.equalsIgnoreCase("Open"));
+                if (hasOpenAction) {
+                    Microbot.log("Prep State: Opening Forestry basket from equipment menu...");
+                    Rs2Equipment.interact("Forestry basket", "Open");
+                    sleep(600, 1200);
+                } else {
+                    Microbot.log("Prep State: Forestry basket is already open.");
+                }
+            }
+        }
+
+        Microbot.log("Prep State: Re-opening bank to deposit unnecessary items...");
+        isBankOpen = Rs2Bank.isNearBank(nearestBank, 8) ? Rs2Bank.openBank() : Rs2Bank.walkToBankAndUseBank(nearestBank);
+        if (!isBankOpen || !Rs2Bank.isOpen()) {
+            return;
+        }
+        Rs2Bank.depositAll();
+        sleepUntil(Rs2Inventory::isEmpty, 5000);
+
         Microbot.log("Prep State: Preparing travel teleport item...");
         boolean isPrifddinas = Rs2Random.between(1, 100) <= 75;
+
+        if (isPrifddinas) {
+            boolean isSongOfTheElvesFinished = Rs2Player.getQuestState(Quest.SONG_OF_THE_ELVES) == QuestState.FINISHED;
+            if (!isSongOfTheElvesFinished) {
+                Microbot.log("Prep State: Song of the Elves quest is not completed. Defaulting to Woodcutting Guild.");
+                isPrifddinas = false;
+            }
+        }
+
         int teleportItemId = -1;
         String teleportItemName = null;
 
@@ -759,7 +907,7 @@ public class NetoWoodcuttingScript extends Script {
                 teleportItemId = 59409;
             }
         } else {
-            Microbot.log("Prep State: Rolled Woodcutting Guild (25%)");
+            Microbot.log("Prep State: Selecting Woodcutting Guild (25% or quest fallback)");
             for (int i = 1; i <= 6; i++) {
                 String name = "Skills necklace(" + i + ")";
                 if (Rs2Bank.hasItem(name) || Rs2Inventory.hasItem(name)) {
@@ -812,15 +960,6 @@ public class NetoWoodcuttingScript extends Script {
             Rs2Walker.walkTo(targetPoint);
             reached = sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(targetPoint) <= 4, 60000);
         } else {
-            if (teleportItemName != null && Rs2Inventory.hasItem(teleportItemName)) {
-                Microbot.log("Prep State: Teleporting to Woodcutting Guild...");
-                if (Rs2Inventory.interact(teleportItemName, "rub")) {
-                    if (Rs2Dialogue.sleepUntilSelectAnOption()) {
-                        Rs2Dialogue.clickOption("Woodcutting Guild");
-                        sleepUntil(() -> !Rs2Player.isAnimating() && Rs2Player.getWorldLocation().distanceTo(new WorldPoint(1662, 3505, 0)) < 20, 10000);
-                    }
-                }
-            }
             WorldPoint targetPoint = new WorldPoint(1588, 3483, 0);
             Microbot.log("Prep State: Walking to Woodcutting Guild destination...");
             Rs2Walker.walkTo(targetPoint);
@@ -842,8 +981,48 @@ public class NetoWoodcuttingScript extends Script {
         }
     }
 
+    private boolean needsToBank(NetoWoodcuttingConfig config) {
+        if (Rs2LogBasket.hasLogBasket() && currentLogBasketCount > 0) {
+            return true;
+        }
+        List<String> itemsToKeep = Arrays.stream(config.itemsToKeepBanking().split(","))
+                .map(String::trim)
+                .filter(x -> !x.isEmpty())
+                .collect(Collectors.toList());
+        if (!itemsToKeep.contains("log basket")) {
+            itemsToKeep.add("log basket");
+        }
+        if (!itemsToKeep.contains("forestry basket")) {
+            itemsToKeep.add("forestry basket");
+        }
+        return Rs2Inventory.items().anyMatch(item -> {
+            if (item == null || item.getName() == null) return false;
+            String name = item.getName().toLowerCase();
+            return itemsToKeep.stream().noneMatch(keep -> name.contains(keep.toLowerCase()));
+        });
+    }
+
+    private boolean checkForBreakOrHop() {
+        if (runtimeDisable.updateRuntime(NetoWoodcuttingPlugin.class)) {
+            return true;
+        }
+
+        if (breakManager.tryStartBreakAtSafePoint()) {
+            return true;
+        }
+
+        if (worldHopManager.tryHopIfDue(this::isRunning).isAttempted()) {
+            return true;
+        }
+
+        return false;
+    }
+
     @Override
     public void shutdown() {
+        breakManager.reset();
+        worldHopManager.reset();
+        runtimeDisable.reset();
         super.shutdown();
         currentLogBasketCount = -1;
         Rs2Fletching.stopFletchingWhileMoving();
@@ -855,4 +1034,3 @@ public class NetoWoodcuttingScript extends Script {
         activeLocation = null;
     }
 }
-

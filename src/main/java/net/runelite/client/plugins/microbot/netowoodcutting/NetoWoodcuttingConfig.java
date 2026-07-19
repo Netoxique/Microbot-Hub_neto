@@ -7,9 +7,13 @@ import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingPri
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingSecondaryAction;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingTree;
 import net.runelite.client.plugins.microbot.netowoodcutting.enums.WoodcuttingWalkBack;
+import net.runelite.client.plugins.microbot.shared.session.BreakSettings;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopRegion;
+import net.runelite.client.plugins.microbot.shared.session.RuntimeSettings;
+import net.runelite.client.plugins.microbot.shared.session.WorldHopSettings;
 
 @ConfigGroup(NetoWoodcuttingConfig.configGroup)
-public interface NetoWoodcuttingConfig extends Config {
+public interface NetoWoodcuttingConfig extends Config, BreakSettings, WorldHopSettings, RuntimeSettings {
     String configGroup = "NetoWoodcutting";
     @ConfigSection(
             name = "General",
@@ -182,14 +186,14 @@ public interface NetoWoodcuttingConfig extends Config {
         return InteractOrder.STANDARD;
     }
     @ConfigItem(
-            keyName = "ItemsToBank",
-            name = "Additional items to bank",
-            description = "Extra items to bank (comma separated)",
+            keyName = "ItemsToKeepBanking",
+            name = "Items to keep when banking",
+            description = "Items to keep in inventory when banking (comma separated)",
             position = 5,
             section = inventorySection
     )
-    default String itemsToBank() {
-        return "logs,sturdy beehive parts,petal garland,golden pheasant egg,pheasant tail feathers,fox whistle,key,nest,fruit";
+    default String itemsToKeepBanking() {
+        return "axe,tinderbox,knife,bowstring";
     }
     @ConfigItem(
             keyName = "ItemsToKeep",
@@ -335,6 +339,177 @@ public interface NetoWoodcuttingConfig extends Config {
      )
      default boolean saplingEvent() {
          return true;
+     }
+
+     @ConfigSection(
+             name = "World Jumping",
+             description = "World jumping settings",
+             position = 3
+     )
+     String worldJumpingSection = "World Jumping";
+
+     @ConfigSection(
+             name = "Breaks",
+             description = "Break settings",
+             position = 4
+     )
+     String breaksSection = "Breaks";
+
+     @ConfigSection(
+             name = "Runtime",
+             description = "Runtime disable settings",
+             position = 5
+     )
+     String runtimeSection = "Runtime";
+
+     @Override
+     @ConfigItem(
+             keyName = "enableWorldJumping",
+             name = "Enable World Jumping",
+             description = "Hop to another members world after a random number of minutes.",
+             position = 1,
+             section = worldJumpingSection
+     )
+     default boolean enableWorldJumping() {
+         return true;
+     }
+
+     @Override
+     @Range(min = 1)
+     @ConfigItem(
+             keyName = "minMinutes",
+             name = "Min. Minutes",
+             description = "Minimum minutes before world jumping.",
+             position = 2,
+             section = worldJumpingSection
+     )
+     default int minMinutes() {
+         return 20;
+     }
+
+     @Override
+     @Range(min = 1)
+     @ConfigItem(
+             keyName = "maxMinutes",
+             name = "Max. Minutes",
+             description = "Maximum minutes before world jumping.",
+             position = 3,
+             section = worldJumpingSection
+     )
+     default int maxMinutes() {
+         return 30;
+     }
+
+     @Override
+     @ConfigItem(
+             keyName = "worldJumpRegion",
+             name = "Region",
+             description = "World region to jump to.",
+             position = 4,
+             section = worldJumpingSection
+     )
+     default NetoWorldHopRegion worldJumpRegion() {
+         return NetoWorldHopRegion.UNITED_STATES_OF_AMERICA;
+     }
+
+     @Override
+     @ConfigItem(
+             keyName = "enableBreaks",
+             name = "Enable",
+             description = "Enable logout breaks.",
+             position = 1,
+             section = breaksSection
+     )
+     default boolean enableBreaks() {
+         return true;
+     }
+
+     @Override
+     @Range(min = 1)
+     @ConfigItem(
+             keyName = "minPlaytime",
+             name = "Min. Playtime",
+             description = "Minimum playtime before a break, in minutes.",
+             position = 2,
+             section = breaksSection
+     )
+     default int minPlaytime() {
+         return 70;
+     }
+
+     @Override
+     @Range(min = 1)
+     @ConfigItem(
+             keyName = "maxPlaytime",
+             name = "Max. Playtime",
+             description = "Maximum playtime before a break, in minutes.",
+             position = 3,
+             section = breaksSection
+     )
+     default int maxPlaytime() {
+         return 90;
+     }
+
+     @Override
+     @Range(min = 1)
+     @ConfigItem(
+             keyName = "minBreak",
+             name = "Min. Break",
+             description = "Minimum break duration, in minutes.",
+             position = 4,
+             section = breaksSection
+     )
+     default int minBreak() {
+         return 10;
+     }
+
+     @Override
+     @Range(min = 1)
+     @ConfigItem(
+             keyName = "maxBreak",
+             name = "Max. Break",
+             description = "Maximum break duration, in minutes.",
+             position = 5,
+             section = breaksSection
+     )
+     default int maxBreak() {
+         return 15;
+     }
+
+     @Override
+     @ConfigItem(
+             keyName = "enableRuntime",
+             name = "Enable",
+             description = "Enable runtime limit.",
+             position = 0,
+             section = "Runtime"
+     )
+     default boolean enableRuntime() {
+         return true;
+     }
+
+     @Override
+     @ConfigItem(
+             keyName = "minRuntime",
+             name = "Min. Runtime",
+             description = "Minimum runtime before stopping the plugin (in minutes). 0 to disable.",
+             position = 1,
+             section = "Runtime"
+     )
+     default int minRuntime() {
+         return 420;
+     }
+
+     @Override
+     @ConfigItem(
+             keyName = "maxRuntime",
+             name = "Max. Runtime",
+             description = "Maximum runtime before stopping the plugin (in minutes). 0 to disable.",
+             position = 2,
+             section = "Runtime"
+     )
+     default int maxRuntime() {
+         return 480;
      }
 }
 

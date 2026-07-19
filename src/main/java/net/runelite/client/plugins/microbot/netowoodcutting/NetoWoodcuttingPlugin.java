@@ -50,7 +50,7 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 )
 @Slf4j
 public class NetoWoodcuttingPlugin extends Plugin {
-    public static final String version = "1.8.3";
+    public static final String version = "1.9.4";
     @Inject
     @Getter(AccessLevel.MODULE)
     public NetoWoodcuttingScript netoWoodcuttingScript;

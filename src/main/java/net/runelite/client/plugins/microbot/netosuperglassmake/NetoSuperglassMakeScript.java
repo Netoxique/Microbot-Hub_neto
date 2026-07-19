@@ -163,6 +163,11 @@ public class NetoSuperglassMakeScript extends Script {
 
         sleepUntil(() -> !Rs2Inventory.contains("Molten Glass"), 3000); // Wait for inventory to empty
 
+        if (Rs2Inventory.contains("Bucket of sand")) {
+            Rs2Bank.depositAll("Bucket of sand");
+            sleepUntil(() -> !Rs2Inventory.contains("Bucket of sand"), 3000);
+        }
+
         if (currentItem == NetoSuperglassMakeInfo.items.GiantSeaweed) {
             if (Rs2Bank.count("Giant seaweed") < 3 || Rs2Bank.count("Bucket of sand") < 18) {
                 notifier.notify("Out of materials");
@@ -196,7 +201,7 @@ public class NetoSuperglassMakeScript extends Script {
         castSuperglassMake();
         Rs2Bank.preHover();
 //        sleep(600 * 2, 600 * 4);
-        sleepGaussian(1500, 150);
+        sleepGaussian(1500, 22);
     }
 
     private void picking() {
@@ -233,14 +238,6 @@ public class NetoSuperglassMakeScript extends Script {
             }
         }
 
-        Rs2Bank.depositAll();
-        sleepUntil(() -> Rs2Inventory.isEmpty(), 2000);
-
-        if (Rs2Bank.hasItem("Astral rune")) {
-            Rs2Bank.withdrawAll("Astral rune");
-            sleepUntil(() -> Rs2Inventory.contains("Astral rune"), 2000);
-        }
-
         boolean isWearingSmokeStaff = Rs2Equipment.isWearing(item -> {
             String name = item.getName().toLowerCase();
             return name.contains("smoke") && (name.contains("staff") || name.contains("battlestaff"));
@@ -261,6 +258,14 @@ public class NetoSuperglassMakeScript extends Script {
             } else {
                 Microbot.log("No Smoke staff found in bank!");
             }
+        }
+
+        Rs2Bank.depositAll();
+        sleepUntil(() -> Rs2Inventory.isEmpty(), 2000);
+
+        if (Rs2Bank.hasItem("Astral rune")) {
+            Rs2Bank.withdrawAll("Astral rune");
+            sleepUntil(() -> Rs2Inventory.contains("Astral rune"), 2000);
         }
     }
 
@@ -441,7 +446,7 @@ public class NetoSuperglassMakeScript extends Script {
             java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
             while (!Rs2Bank.isOpen()) {
                 Microbot.getMouse().click(new Point(currentPos.x, currentPos.y), entry);
-                sleepGaussian(105, 22);
+                sleepGaussian(600, 22);
             }
             return Rs2Bank.isOpen();
         }
@@ -449,7 +454,7 @@ public class NetoSuperglassMakeScript extends Script {
             java.awt.Point currentPos = Microbot.getMouse().getMousePosition();
             while (!Rs2Bank.isOpen()) {
                 Microbot.getMouse().click(new Point(currentPos.x, currentPos.y));
-                sleepGaussian(105, 22);
+                sleepGaussian(600, 22);
             }
             return Rs2Bank.isOpen();
         }

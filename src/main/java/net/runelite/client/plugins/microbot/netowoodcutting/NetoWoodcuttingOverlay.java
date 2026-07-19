@@ -11,6 +11,9 @@ import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
 
 import javax.inject.Inject;
 import java.awt.*;
@@ -36,6 +39,13 @@ public class NetoWoodcuttingOverlay extends OverlayPanel {
     private int startLevel;
     private int logsChopped;
     private boolean firstRun = false;
+
+    @Inject
+    private NetoBreakManager breakManager;
+    @Inject
+    private NetoWorldHopManager worldHopManager;
+    @Inject
+    private NetoRuntimeDisable runtimeDisable;
 
     @Inject
     NetoWoodcuttingOverlay(NetoWoodcuttingPlugin plugin, NetoWoodcuttingConfig config, Client client) {
@@ -120,34 +130,7 @@ public class NetoWoodcuttingOverlay extends OverlayPanel {
                     .leftColor(HEADER_COLOR)
                     .build());
 
-            // Current level
-            int currentLevel = client.getRealSkillLevel(Skill.WOODCUTTING);
-            int currentXp = client.getSkillExperience(Skill.WOODCUTTING);
-            int xpGained = currentXp - startXp;
 
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Level:")
-                    .right(currentLevel + (currentLevel > startLevel ? " (+" + (currentLevel - startLevel) + ")" : ""))
-                    .rightColor(NORMAL_TEXT_COLOR)
-                    .build());
-
-            // XP Info
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("XP Gained:")
-                    .right(NumberFormat.getInstance().format(xpGained))
-                    .rightColor(NORMAL_TEXT_COLOR)
-                    .build());
-
-            // Calculate XP per hour
-            long secondsElapsed = Duration.between(startTime, Instant.now()).getSeconds();
-            if (secondsElapsed > 0) {
-                double xpPerHour = (double) xpGained / secondsElapsed * 3600;
-                panelComponent.getChildren().add(LineComponent.builder()
-                        .left("XP/Hour:")
-                        .right(NumberFormat.getInstance().format((long) xpPerHour))
-                        .rightColor(NORMAL_TEXT_COLOR)
-                        .build());
-            }
 
             // Logs chopped
             panelComponent.getChildren().add(LineComponent.builder()
@@ -160,6 +143,27 @@ public class NetoWoodcuttingOverlay extends OverlayPanel {
             panelComponent.getChildren().add(LineComponent.builder()
                     .left("Time Running:")
                     .right(formatDuration(Duration.between(startTime, Instant.now())))
+                    .rightColor(NORMAL_TEXT_COLOR)
+                    .build());
+
+            // World Hop In
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("World Hop In:")
+                    .right(worldHopManager.getWorldHopDisplay())
+                    .rightColor(NORMAL_TEXT_COLOR)
+                    .build());
+
+            // Break In
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Break In:")
+                    .right(breakManager.getBreakInDisplay())
+                    .rightColor(NORMAL_TEXT_COLOR)
+                    .build());
+
+            // Shutdown in
+            panelComponent.getChildren().add(LineComponent.builder()
+                    .left("Shutdown in:")
+                    .right(runtimeDisable.getShutdownInDisplay())
                     .rightColor(NORMAL_TEXT_COLOR)
                     .build());
 

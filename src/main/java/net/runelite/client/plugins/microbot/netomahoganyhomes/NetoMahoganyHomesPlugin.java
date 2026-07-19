@@ -50,7 +50,7 @@ import java.util.stream.Collectors;
         isExternal = PluginConstants.IS_EXTERNAL
 )
 public class NetoMahoganyHomesPlugin extends Plugin {
-    public static final String version = "0.0.24";
+    public static final String version = "1.0.8";
     private static final List<Integer> PLANKS = Arrays.asList(ItemID.PLANK, ItemID.OAK_PLANK, ItemID.TEAK_PLANK, ItemID.MAHOGANY_PLANK);
     private static final Map<Integer, Integer> MAHOGANY_HOMES_REPAIRS = new HashMap<>();
 
@@ -448,6 +448,23 @@ public class NetoMahoganyHomesPlugin extends Plugin {
                 }
             }
         }
+    }
+
+    boolean hasContractAssignmentDialogue() {
+        final Widget dialog = client.getWidget(ComponentID.DIALOG_NPC_TEXT);
+        if (dialog == null) {
+            return false;
+        }
+
+        final String npcText = Text.sanitizeMultilineText(dialog.getText());
+        return CONTRACT_PATTERN.matcher(npcText).matches() || REMINDER_PATTERN.matcher(npcText).matches();
+    }
+
+    void clearContractForVerification() {
+        clientThread.invokeLater(() -> {
+            applyCurrentHome(null);
+            updateConfig();
+        });
     }
 
     public void setCurrentHome(final Home h) {
