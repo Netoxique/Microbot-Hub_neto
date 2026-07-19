@@ -19,6 +19,7 @@ import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.npc.Rs2Npc;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.shortestpath.Restriction;
@@ -43,6 +44,12 @@ public class NetoBirdhouseRunsScript extends Script {
     private static final WorldPoint birdhouseLocation3 = new WorldPoint(3677, 3882, 0);
     private static final WorldPoint birdhouseLocation4 = new WorldPoint(3679, 3815, 0);
     private static final WorldPoint VERDANT_MUSHTREE = new WorldPoint(3757, 3757, 0);
+    private static final WorldPoint RING_CAPTAIN_WAYPOINT = new WorldPoint(3286, 3214, 0);
+    private static final WorldPoint LEMANTO_ANDRA_ARRIVAL = new WorldPoint(3321, 3429, 0);
+    private static final WorldPoint RING_BARGE_WAYPOINT = new WorldPoint(3361, 3445, 0);
+    private static final WorldPoint RING_HOUSE_4_WAYPOINT = new WorldPoint(3680, 3815, 0);
+    private static final WorldPoint RING_HOUSE_3_WAYPOINT = new WorldPoint(3677, 3881, 0);
+    private static final int PENDANT_ARRIVAL_MUSHTREE_OBJECT_ID = 30920;
     private static final int MUSHTREE_OBJECT_ID = 30924;
     // Each location maps to a BIRDHOUSE_TRANSMIT_* varp. See isEmpty/isBuilt/isSeeded
     // below for the canonical state decoding (matches RuneLite's BirdHouseState).
@@ -50,8 +57,7 @@ public class NetoBirdhouseRunsScript extends Script {
     private static final int VARP_HOUSE_2 = VarPlayerID.BIRDHOUSE_TRANSMIT_C; // Verdant NE
     private static final int VARP_HOUSE_3 = VarPlayerID.BIRDHOUSE_TRANSMIT_A; // Meadow N
     private static final int VARP_HOUSE_4 = VarPlayerID.BIRDHOUSE_TRANSMIT_B; // Meadow S
-    private static final int ARRIVAL_RADIUS = 4;
-    private static final int SCENE_INTERACT_RANGE = 25;
+    private static final int WALK_STOP_DISTANCE = 7;
     private static final int[] DIGSITE_PENDANT_IDS_LOWEST_CHARGE_FIRST = {
             ItemID.NECKLACE_OF_DIGSITE_1,
             ItemID.NECKLACE_OF_DIGSITE_2,
@@ -108,6 +114,7 @@ public class NetoBirdhouseRunsScript extends Script {
     private Log selectedLogType;
     private TravelTeleport travelTeleport = TravelTeleport.NONE;
     private BankingTeleport bankingTeleport = BankingTeleport.NONE;
+    private BirdhouseRoute activeRoute = BirdhouseRoute.STANDARD;
     private boolean fossilTravelUsed;
     @Inject
     private Notifier notifier;
@@ -130,6 +137,12 @@ public class NetoBirdhouseRunsScript extends Script {
         FARMING_CAPE,
         DUELING_RING,
         VARROCK_TABLET
+    }
+
+    private enum BirdhouseRoute {
+        STANDARD,
+        DIGSITE_PENDANT,
+        DUELING_RING
     }
 
     public boolean run() {
@@ -155,11 +168,7 @@ public class NetoBirdhouseRunsScript extends Script {
                 }
                 if (!super.run()) return;
 
-                if (!Rs2Walker.disableTeleports && isOnFossilIsland()) {
-                    Rs2Walker.disableTeleports = true;
-                    blockRubberCapMushrooms();
-                    log.info("On Fossil Island — disabling teleports and rubber cap mushrooms for remaining walks");
-                }
+                if (isOnFossilIsland()) prepareFossilIslandWalking();
 
                 boolean advanced = true;
                 while (advanced) {
@@ -196,17 +205,74 @@ public class NetoBirdhouseRunsScript extends Script {
                             advanced = true;
                             break;
                         case TELEPORTING:
-                        case VERDANT_TELEPORT:
-                            if (!isOnFossilIsland() && !fossilTravelUsed) {
-                                if (!useFossilIslandTeleport()) {
-                                    failAndStop("Could not use the selected Fossil Island travel teleport");
-                                    return;
-                                }
-                                fossilTravelUsed = true;
+                            if (isOnFossilIsland()) {
+                                activeRoute = BirdhouseRoute.STANDARD;
+                                botStatus = states.STANDARD_WALK_TO_HOUSE_1;
+                                advanced = true;
+                                break;
                             }
-                            Rs2Walker.walkTo(birdhouseLocation1);
-                            botStatus = states.DISMANTLE_HOUSE_1;
+                            if (fossilTravelUsed || !useFossilIslandTeleport()) {
+                                failAndStop("Could not use the selected Fossil Island travel teleport");
+                                return;
+                            }
+                            fossilTravelUsed = true;
+                            activeRoute = travelTeleport == TravelTeleport.DIGSITE_PENDANT
+                                    ? BirdhouseRoute.DIGSITE_PENDANT
+                                    : BirdhouseRoute.DUELING_RING;
+                            botStatus = activeRoute == BirdhouseRoute.DIGSITE_PENDANT
+                                    ? states.PENDANT_MUSHTREE
+                                    : states.RING_WALK_TO_CAPTAIN;
                             advanced = true;
+                            break;
+                        case STANDARD_WALK_TO_HOUSE_1:
+                            if (walkUntilWithin(birdhouseLocation1)) {
+                                botStatus = states.DISMANTLE_HOUSE_1;
+                                advanced = true;
+                            }
+                            break;
+                        case PENDANT_MUSHTREE:
+                            if (useMushtree(PENDANT_ARRIVAL_MUSHTREE_OBJECT_ID,
+                                    "Verdant Valley", birdhouseLocation1)) {
+                                botStatus = states.DISMANTLE_HOUSE_1;
+                                advanced = true;
+                            }
+                            break;
+                        case RING_WALK_TO_CAPTAIN:
+                            if (walkUntilWithin(RING_CAPTAIN_WAYPOINT)) {
+                                botStatus = states.RING_GLIDER;
+                                advanced = true;
+                            }
+                            break;
+                        case RING_GLIDER:
+                            if (useGliderToLemantoAndra()) {
+                                botStatus = states.RING_WALK_TO_BARGE;
+                                advanced = true;
+                            }
+                            break;
+                        case RING_WALK_TO_BARGE:
+                            if (walkUntilWithin(RING_BARGE_WAYPOINT)) {
+                                botStatus = states.RING_BARGE;
+                                advanced = true;
+                            }
+                            break;
+                        case RING_BARGE:
+                            if (quickTravelToFossilIsland()) {
+                                prepareFossilIslandWalking();
+                                botStatus = states.RING_WALK_TO_HOUSE_4;
+                                advanced = true;
+                            }
+                            break;
+                        case RING_WALK_TO_HOUSE_4:
+                            if (walkUntilWithin(RING_HOUSE_4_WAYPOINT)) {
+                                botStatus = states.DISMANTLE_HOUSE_4;
+                                advanced = true;
+                            }
+                            break;
+                        case RING_WALK_TO_HOUSE_3:
+                            if (walkUntilWithin(RING_HOUSE_3_WAYPOINT)) {
+                                botStatus = states.DISMANTLE_HOUSE_3;
+                                advanced = true;
+                            }
                             break;
                         case DISMANTLE_HOUSE_1:
                             if (dismantleBirdhouse(birdhouseLocation1, VARP_HOUSE_1)) {
@@ -240,17 +306,23 @@ public class NetoBirdhouseRunsScript extends Script {
                             break;
                         case SEED_HOUSE_2:
                             if (seedHouse(birdhouseLocation2, VARP_HOUSE_2)) {
-                                botStatus = states.MUSHROOM_TELEPORT;
+                                botStatus = activeRoute == BirdhouseRoute.DUELING_RING
+                                        ? states.FINISHING
+                                        : states.MUSHROOM_TO_MEADOW;
                                 advanced = true;
                             }
                             break;
-                        case MUSHROOM_TELEPORT:
-                            Rs2GameObject.interact(MUSHTREE_OBJECT_ID, "Use");
-                            sleepUntil(() -> Rs2Widget.findWidget("Mycelium Transportation System") != null, 5000);
-                            Rs2Widget.clickWidget("Mushroom Meadow");
-                            sleepUntil(() -> Rs2Player.distanceTo(birdhouseLocation3) < 20, 10000);
-                            botStatus = states.DISMANTLE_HOUSE_3;
-                            advanced = true;
+                        case MUSHROOM_TO_MEADOW:
+                            if (useMushtree(MUSHTREE_OBJECT_ID, "Mushroom Meadow", birdhouseLocation3)) {
+                                botStatus = states.DISMANTLE_HOUSE_3;
+                                advanced = true;
+                            }
+                            break;
+                        case MUSHROOM_TO_VERDANT:
+                            if (useMushtree(MUSHTREE_OBJECT_ID, "Verdant Valley", VERDANT_MUSHTREE)) {
+                                botStatus = states.DISMANTLE_HOUSE_1;
+                                advanced = true;
+                            }
                             break;
                         case DISMANTLE_HOUSE_3:
                             if (dismantleBirdhouse(birdhouseLocation3, VARP_HOUSE_3)) {
@@ -266,7 +338,9 @@ public class NetoBirdhouseRunsScript extends Script {
                             break;
                         case SEED_HOUSE_3:
                             if (seedHouse(birdhouseLocation3, VARP_HOUSE_3)) {
-                                botStatus = states.DISMANTLE_HOUSE_4;
+                                botStatus = activeRoute == BirdhouseRoute.DUELING_RING
+                                        ? states.MUSHROOM_TO_VERDANT
+                                        : states.DISMANTLE_HOUSE_4;
                                 advanced = true;
                             }
                             break;
@@ -284,7 +358,9 @@ public class NetoBirdhouseRunsScript extends Script {
                             break;
                         case SEED_HOUSE_4:
                             if (seedHouse(birdhouseLocation4, VARP_HOUSE_4)) {
-                                botStatus = states.FINISHING;
+                                botStatus = activeRoute == BirdhouseRoute.DUELING_RING
+                                        ? states.RING_WALK_TO_HOUSE_3
+                                        : states.FINISHING;
                                 advanced = true;
                             }
                             break;
@@ -292,7 +368,10 @@ public class NetoBirdhouseRunsScript extends Script {
                             emptyNests();
                             Rs2Walker.disableTeleports = false;
                             useBankingTeleport();
-                            Rs2Walker.walkTo(Rs2Bank.getNearestBank().getWorldPoint(), 20);
+                            if (!walkUntilWithin(Rs2Bank.getNearestBank().getWorldPoint())) {
+                                failAndStop("Could not reach a bank after the birdhouse run");
+                                return;
+                            }
                             if (!Rs2Bank.isOpen()) Rs2Bank.openBank();
                             if (!sleepUntil(Rs2Bank::isOpen, 10000)) {
                                 failAndStop("Could not open a bank after the birdhouse run");
@@ -340,6 +419,66 @@ public class NetoBirdhouseRunsScript extends Script {
                 return false;
         }
         return sleepUntil(() -> hasTeleportedFrom(origin), 10000);
+    }
+
+    private boolean useMushtree(int objectId, String destination, WorldPoint expectedArrival) {
+        if (isNear(expectedArrival, 20)) return true;
+        WorldPoint origin = Rs2Player.getWorldLocation();
+        if (Rs2Widget.findWidget("Mycelium Transportation System") == null) {
+            if (!Rs2GameObject.interact(objectId, "Use")) {
+                log.warn("Could not interact with mushtree {} for {}", objectId, destination);
+                return false;
+            }
+        }
+        if (!sleepUntil(() -> Rs2Widget.findWidget("Mycelium Transportation System") != null, 5000)) {
+            log.warn("Mycelium Transportation System did not open for {}", destination);
+            return false;
+        }
+        if (!Rs2Widget.clickWidget(destination)) {
+            log.warn("Could not select mushtree destination {}", destination);
+            return false;
+        }
+        boolean arrived = sleepUntil(() -> isNear(expectedArrival, 20) || hasTeleportedFrom(origin), 10000);
+        if (!arrived) log.warn("Mushtree travel to {} did not complete", destination);
+        return arrived;
+    }
+
+    private boolean useGliderToLemantoAndra() {
+        if (isNear(LEMANTO_ANDRA_ARRIVAL, 20)) return true;
+        WorldPoint origin = Rs2Player.getWorldLocation();
+        if (Rs2Widget.findWidget("Lemanto Andra") == null) {
+            if (!Rs2Npc.interact("Captain Dalbur", "Glider")) {
+                log.warn("Could not interact with Captain Dalbur using Glider");
+                return false;
+            }
+        }
+        if (!sleepUntil(() -> Rs2Widget.findWidget("Lemanto Andra") != null, 5000)) {
+            log.warn("Lemanto Andra was not found in the glider interface");
+            return false;
+        }
+        if (!Rs2Widget.clickWidget("Lemanto Andra")) {
+            log.warn("Could not select Lemanto Andra in the glider interface");
+            return false;
+        }
+        boolean arrived = sleepUntil(() -> isNear(LEMANTO_ANDRA_ARRIVAL, 20) || hasTeleportedFrom(origin), 10000);
+        if (!arrived) log.warn("Glider travel to Lemanto Andra did not complete");
+        return arrived;
+    }
+
+    private boolean quickTravelToFossilIsland() {
+        if (isOnFossilIsland()) return true;
+        if (!Rs2Npc.interact("Barge Guard", "Quick-Travel")) {
+            log.warn("Could not interact with Barge Guard using Quick-Travel");
+            return false;
+        }
+        boolean arrived = sleepUntil(this::isOnFossilIsland, 15000);
+        if (!arrived) log.warn("Barge quick-travel did not reach Fossil Island");
+        return arrived;
+    }
+
+    private static boolean isNear(WorldPoint destination, int distance) {
+        WorldPoint current = Rs2Player.getWorldLocation();
+        return current != null && destination != null && current.distanceTo(destination) <= distance;
     }
 
     private boolean useBankingTeleport() {
@@ -415,6 +554,7 @@ public class NetoBirdhouseRunsScript extends Script {
     @Override
     public void shutdown() {
         super.shutdown();
+        Rs2Walker.setTarget(null);
         Rs2Walker.disableTeleports = false;
         ShortestPathPlugin.getPathfinderConfig().setRestrictedTiles();
         initialized = false;
@@ -424,7 +564,15 @@ public class NetoBirdhouseRunsScript extends Script {
         selectedLogType = null;
         travelTeleport = TravelTeleport.NONE;
         bankingTeleport = BankingTeleport.NONE;
+        activeRoute = BirdhouseRoute.STANDARD;
         fossilTravelUsed = false;
+    }
+
+    private static void prepareFossilIslandWalking() {
+        if (Rs2Walker.disableTeleports) return;
+        Rs2Walker.disableTeleports = true;
+        blockRubberCapMushrooms();
+        log.info("On Fossil Island — disabling teleports and rubber cap mushrooms for remaining walks");
     }
 
     private static void blockRubberCapMushrooms() {
@@ -438,6 +586,35 @@ public class NetoBirdhouseRunsScript extends Script {
         ShortestPathPlugin.getPathfinderConfig().setRestrictedTiles(restrictions);
     }
 
+    private boolean walkUntilWithin(WorldPoint destination) {
+        if (destination == null) {
+            log.warn("Cannot walk to a null destination");
+            return false;
+        }
+        if (isNear(destination, WALK_STOP_DISTANCE)) return true;
+        if (isOnFossilIsland()) prepareFossilIslandWalking();
+
+        WorldPoint origin = Rs2Player.getWorldLocation();
+        log.info("Walking from {} toward {} (stop within {} tiles)",
+                origin, destination, WALK_STOP_DISTANCE);
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination));
+        try {
+            while (isRunning() && !future.isDone()) {
+                if (isNear(destination, WALK_STOP_DISTANCE)) break;
+                sleep(100);
+            }
+            boolean arrived = isNear(destination, WALK_STOP_DISTANCE);
+            if (!arrived) {
+                log.warn("Walker stopped before reaching {} tiles of {} (player at {})",
+                        WALK_STOP_DISTANCE, destination, Rs2Player.getWorldLocation());
+            }
+            return arrived;
+        } finally {
+            Rs2Walker.setTarget(null);
+            if (!future.isDone()) future.cancel(true);
+        }
+    }
+
     /** Throttle for arrivedAndStill log lines (one per second per target). */
     private long lastArrivedLogMs;
     private WorldPoint lastArrivedLogTarget;
@@ -445,7 +622,7 @@ public class NetoBirdhouseRunsScript extends Script {
     private boolean arrivedAndStill(WorldPoint loc) {
         WorldPoint pos = Rs2Player.getWorldLocation();
         int dist = Rs2Player.distanceTo(loc);
-        if (dist <= ARRIVAL_RADIUS) {
+        if (dist <= WALK_STOP_DISTANCE) {
             return true;
         }
         boolean moving = Rs2Player.isMoving();
@@ -461,12 +638,11 @@ public class NetoBirdhouseRunsScript extends Script {
         }
         if (logThisTick) {
             log.info("arrivedAndStill[{}]: not arrived (at {}, dist={}); walking via WebWalker (stop at {})",
-                    loc, pos, dist, SCENE_INTERACT_RANGE);
+                    loc, pos, dist, WALK_STOP_DISTANCE);
             lastArrivedLogMs = now;
             lastArrivedLogTarget = loc;
         }
-        Rs2Walker.walkTo(loc, SCENE_INTERACT_RANGE);
-        return false;
+        return walkUntilWithin(loc);
     }
 
     // Canonical state predicates, matching BirdHouseState.fromVarpValue:
@@ -479,9 +655,7 @@ public class NetoBirdhouseRunsScript extends Script {
 
     /** Click Empty on the birdhouse at {@code loc}. Wait for varp to hit 0. */
     private boolean dismantleBirdhouse(WorldPoint loc, int varpId) {
-        if (!isOnFossilIsland()) {
-            if (!arrivedAndStill(loc)) return false;
-        }
+        if (!arrivedAndStill(loc)) return false;
         int varp = Microbot.getVarbitPlayerValue(varpId);
         if (!isSeeded(varp)) {
             log.info("Dismantle[{}]: varp={} not seeded (empty={}, built={}) — skipping",
@@ -505,9 +679,7 @@ public class NetoBirdhouseRunsScript extends Script {
 
     /** Click Build at {@code loc}. Game auto-combines hammer+log. Wait for varp != 0. */
     private boolean buildBirdhouse(WorldPoint loc, int varpId) {
-        if (!isOnFossilIsland()) {
-            if (!arrivedAndStill(loc)) return false;
-        }
+        if (!arrivedAndStill(loc)) return false;
         int varp = Microbot.getVarbitPlayerValue(varpId);
         if (!isEmpty(varp)) {
             log.info("Build[{}]: varp={} not empty (built={}, seeded={}) — skipping",
@@ -539,9 +711,7 @@ public class NetoBirdhouseRunsScript extends Script {
 
     /** Use a seed stack on the birdhouse at {@code loc}. Wait for seeds-down OR varp change. */
     private boolean seedHouse(WorldPoint loc, int varpId) {
-        if (!isOnFossilIsland()) {
-            if (!arrivedAndStill(loc)) return false;
-        }
+        if (!arrivedAndStill(loc)) return false;
         int varp = Microbot.getVarbitPlayerValue(varpId);
         if (isEmpty(varp)) {
             log.error("Seed[{}]: varp=0, can't seed empty space — aborting. Inventory: [{}]",
@@ -737,7 +907,11 @@ public class NetoBirdhouseRunsScript extends Script {
     private boolean setupManualInventory() {
         log.info("setupManualInventory: start (player at {}, onFossilIsland={}, inv=[{}])",
                 Rs2Player.getWorldLocation(), isOnFossilIsland(), dumpInventory());
-        Rs2Walker.walkTo(Rs2Bank.getNearestBank().getWorldPoint(), 20);
+        if (!walkUntilWithin(Rs2Bank.getNearestBank().getWorldPoint())) {
+            setupErrorMessage = "Could not reach a bank";
+            log.error(setupErrorMessage);
+            return false;
+        }
 
         if (!Rs2Bank.openBank()) {
             setupErrorMessage = "Could not open bank";

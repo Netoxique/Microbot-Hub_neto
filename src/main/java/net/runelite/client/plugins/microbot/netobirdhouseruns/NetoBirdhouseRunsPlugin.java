@@ -26,7 +26,7 @@ import java.awt.*;
 )
 @Slf4j
 public class NetoBirdhouseRunsPlugin extends Plugin {
-    static final String version = "1.1.5";
+    static final String version = "1.1.6";
     @Provides
     NetoBirdhouseRunsConfig provideConfig(ConfigManager configManager) {
         return configManager.getConfig(NetoBirdhouseRunsConfig.class);
