@@ -43,6 +43,7 @@ public class TutorialIslandScript extends Script {
     final int CharacterCreation = 679;
     final int[] CharacterCreation_Arrows = new int[]{13, 17, 21, 25, 29, 33, 37, 44, 48, 52, 56, 60};
     private static final int MIN_RANDOMIZATION_ROUNDS = 8;
+    private static final int WALK_REACHED_DISTANCE = 2;
     private final TutorialIslandPlugin plugin;
     private final int NameCreation = 558;
     private boolean toggledSettings = false;
@@ -309,21 +310,16 @@ public class TutorialIslandScript extends Script {
     }
 
     private boolean walkAndTalk(Rs2NpcModel npc) {
-        return walkAndTalk(npc, 2);
+        return walkAndAct(npc, "Talk-to", () -> sleepUntil(Rs2Dialogue::isInDialogue, 5000));
     }
 
-    private boolean walkAndTalk(Rs2NpcModel npc, int reach) {
-        return walkAndAct(npc, reach, "Talk-to", () -> sleepUntil(Rs2Dialogue::isInDialogue, 5000));
-    }
-
-    private boolean walkAndAct(Rs2NpcModel npc, int reach, String action, Runnable afterClick) {
+    private boolean walkAndAct(Rs2NpcModel npc, String action, Runnable afterClick) {
         if (npc == null) return false;
         WorldPoint npcLoc = npc.getWorldLocation();
         WorldPoint playerLoc = Rs2Player.getWorldLocation();
         if (npcLoc == null || playerLoc == null) return false;
-        if (playerLoc.distanceTo(npcLoc) > reach) {
-            Rs2Walker.walkTo(npcLoc, reach);
-            Rs2Player.waitForWalking();
+        if (playerLoc.distanceTo(npcLoc) > WALK_REACHED_DISTANCE) {
+            walkUntilWithin(npcLoc);
             return false;
         }
         if (npc.click(action)) {
@@ -331,6 +327,40 @@ public class TutorialIslandScript extends Script {
             return true;
         }
         return false;
+    }
+
+    private boolean walkUntilWithin(WorldPoint destination) {
+        if (destination == null) return false;
+
+        WorldPoint currentLocation = Rs2Player.getWorldLocation();
+        if (currentLocation != null && currentLocation.distanceTo(destination) <= WALK_REACHED_DISTANCE) {
+            Rs2Walker.setTarget(null);
+            return true;
+        }
+
+        var future = scheduledExecutorService.submit(() -> Rs2Walker.walkTo(destination));
+        try {
+            while (!future.isDone()) {
+                currentLocation = Rs2Player.getWorldLocation();
+                if (currentLocation != null && currentLocation.distanceTo(destination) <= WALK_REACHED_DISTANCE) {
+                    Rs2Walker.setTarget(null);
+                    future.cancel(true);
+                    return true;
+                }
+                sleep(100);
+            }
+        } finally {
+            if (!future.isDone()) {
+                future.cancel(true);
+            }
+        }
+
+        currentLocation = Rs2Player.getWorldLocation();
+        boolean reached = currentLocation != null && currentLocation.distanceTo(destination) <= WALK_REACHED_DISTANCE;
+        if (reached) {
+            Rs2Walker.setTarget(null);
+        }
+        return reached;
     }
 
     private boolean walkAndAttackRat() {
@@ -460,8 +490,8 @@ public class TutorialIslandScript extends Script {
             WorldPoint targetPoint = (npc != null) ? npc.getWorldLocation() : worldPoint;
             int distance = Rs2Player.distanceTo(targetPoint);
 
-            if (distance > 8) {
-                Rs2Walker.walkTo(targetPoint, 8);
+            if (distance > WALK_REACHED_DISTANCE) {
+                walkUntilWithin(targetPoint);
             } else {
                 walkAndTalk(npc);
             }
@@ -507,7 +537,7 @@ public class TutorialIslandScript extends Script {
         var npc = Microbot.getRs2NpcCache().query().withId(NpcID.BROTHER_BRACE).nearest();
 
         if (Microbot.getVarbitPlayerValue(281) == 640 || Microbot.getVarbitPlayerValue(281) == 550 || Microbot.getVarbitPlayerValue(281) == 540) {
-            Rs2Walker.walkTo(new WorldPoint(3124, 3106, 0));
+            walkUntilWithin(new WorldPoint(3124, 3106, 0));
             walkAndTalk(npc);
         } else if (Microbot.getVarbitPlayerValue(281) == 560) {
             var widget = Rs2Widget.findWidget("Prayer", true);
@@ -584,8 +614,7 @@ public class TutorialIslandScript extends Script {
                 }
             }
 
-            Rs2Walker.walkTo(npc.getWorldLocation(), 3);
-            Rs2Player.waitForWalking();
+            walkUntilWithin(npc.getWorldLocation());
             walkAndTalk(npc);
         } else if (Microbot.getVarbitPlayerValue(281) == 531) {
             var widget = Rs2Widget.findWidget("Account Management", true);
@@ -604,8 +633,7 @@ public class TutorialIslandScript extends Script {
         var npc = Microbot.getRs2NpcCache().query().withId(NpcID.COMBAT_INSTRUCTOR).nearest();
 
         if (Microbot.getVarbitPlayerValue(281) <= 370) {
-            Rs2Walker.walkTo(new WorldPoint(Rs2Random.between(3106, 3108), Rs2Random.between(9508, 9510), 0));
-            Rs2Player.waitForWalking();
+            walkUntilWithin(new WorldPoint(Rs2Random.between(3106, 3108), Rs2Random.between(9508, 9510), 0));
             walkAndTalk(npc);
         } else if (Microbot.getVarbitPlayerValue(281) <= 410) {
             if (isInDialogue()) {
@@ -640,8 +668,7 @@ public class TutorialIslandScript extends Script {
 
             walkAndTalk(npc);
         } else if (Microbot.getVarbitPlayerValue(281) == 500) {
-            Rs2Walker.walkTo(new WorldPoint(3111, 9526, Rs2Player.getWorldLocation().getPlane()));
-            Rs2Player.waitForWalking();
+            walkUntilWithin(new WorldPoint(3111, 9526, Rs2Player.getWorldLocation().getPlane()));
             Microbot.getClientThread().invoke(() -> Microbot.getRs2TileObjectCache().query().withName("Ladder").interact("Climb-up"));
             sleepUntil(() -> Microbot.getVarbitPlayerValue(281) != 500);
         } else if (Microbot.getVarbitPlayerValue(281) == 480 || Microbot.getVarbitPlayerValue(281) == 490) {
@@ -687,7 +714,7 @@ public class TutorialIslandScript extends Script {
         var npc = Microbot.getRs2NpcCache().query().withId(NpcID.MINING_INSTRUCTOR).nearest();
 
         if (Microbot.getVarbitPlayerValue(281) == 260) {
-            Rs2Walker.walkTo(new WorldPoint(Rs2Random.between(3082, 3085), Rs2Random.between(9502, 9505), 0));
+            walkUntilWithin(new WorldPoint(Rs2Random.between(3082, 3085), Rs2Random.between(9502, 9505), 0));
             walkAndTalk(npc);
         } else {
             if (Rs2Inventory.contains("Bronze dagger")) {
@@ -740,7 +767,7 @@ public class TutorialIslandScript extends Script {
         var npc = Microbot.getRs2NpcCache().query().withId(NpcID.QUEST_GUIDE).nearest();
 
         if (Microbot.getVarbitPlayerValue(281) == 200 || Microbot.getVarbitPlayerValue(281) == 210) {
-            Rs2Walker.walkTo(new WorldPoint(Rs2Random.between(3083, 3086), Rs2Random.between(3127, 3129), 0));
+            walkUntilWithin(new WorldPoint(Rs2Random.between(3083, 3086), Rs2Random.between(3127, 3129), 0));
             Microbot.getRs2TileObjectCache().query().interact(9716, "Open");
             Rs2Random.waitEx(1200, 300);
         } else if (Microbot.getVarbitPlayerValue(281) == 220 || Microbot.getVarbitPlayerValue(281) == 240) {
@@ -789,8 +816,7 @@ public class TutorialIslandScript extends Script {
     public void LightFire() {
         if (Rs2Player.isStandingOnGameObject()) {
             WorldPoint nearestWalkable = Rs2Tile.getNearestWalkableTileWithLineOfSight(Rs2Player.getWorldLocation());
-            Rs2Walker.walkFastCanvas(nearestWalkable);
-            Rs2Player.waitForWalking();
+            walkUntilWithin(nearestWalkable);
         }
         Rs2Inventory.combine("Logs", "Tinderbox");
         sleepUntil(() -> !Rs2Inventory.hasItem("Logs") && !Rs2Player.isAnimating(2400));
