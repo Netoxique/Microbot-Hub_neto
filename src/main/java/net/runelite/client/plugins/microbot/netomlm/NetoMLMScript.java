@@ -80,6 +80,7 @@ public class NetoMLMScript extends Script
     // Static areas for lower floor to avoid getting stuck behind rockfall
     private static final WorldArea WEST_LOWER_AREA = new WorldArea(3729, 5653, 10, 22, 0);
     private static final WorldArea SOUTH_LOWER_AREA = new WorldArea(3740, 5640, 20, 20, 0);
+	private static final WorldArea MLM_INTERIOR_AREA = new WorldArea(3747, 5659, 14, 12, 0);
 
 	private static final WorldPoint HOPPER_DEPOSIT_DOWN = new WorldPoint(3748, 5672, 0);
 	private static final WorldPoint HOPPER_DEPOSIT_UP = new WorldPoint(3755, 5677, 0);
@@ -88,6 +89,8 @@ public class NetoMLMScript extends Script
 	private static final WorldPoint SECOND_ROCKFALL_LOCATION = new WorldPoint(3733, 5680, 0);
 	private static final WorldPoint ROCKSLIDE_LOCATION = new WorldPoint(3741, 5676, 0);
 	private static final WorldPoint MLM_CRATE_LOCATION = new WorldPoint(3756, 5668, 0);
+	private static final WorldPoint NORTHERN_BROKEN_STRUT_LOCATION = new WorldPoint(3742, 5669, 0);
+	private static final WorldPoint SOUTHERN_BROKEN_STRUT_LOCATION = new WorldPoint(3742, 5663, 0);
 	private static final String IMCANDO_HAMMER_OFFHAND_NAME = "Imcando hammer (off-hand)";
 
 	private static final int[] DRAGON_PICKAXE_IDS =
@@ -181,6 +184,7 @@ public class NetoMLMScript extends Script
     {
         log.debug("Initializing MLM runtime state");
         Rs2Antiban.antibanSetupTemplates.applyMiningSetup();
+		configureLowMouseSpeed();
         miningSpot = MLMMiningSpot.IDLE;
         status = MLMStatus.PREP;
         lastLoggedStatus = null;
@@ -192,6 +196,14 @@ public class NetoMLMScript extends Script
 		shouldRepairWaterwheel = false;
 		emptySackWorkflowActive = false;
     }
+
+	private void configureLowMouseSpeed()
+	{
+		Rs2AntibanSettings.simulateFatigue = false;
+		Rs2AntibanSettings.dynamicIntensity = false;
+		Rs2AntibanSettings.dynamicActivity = false;
+		Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
+	}
 
     private void executeTaskSafely()
     {
@@ -240,16 +252,13 @@ public class NetoMLMScript extends Script
 			case WALKING:
             case IDLE:
                 break;
-            case MINING:
-				if (Rs2Antiban.getActivity() != null)
-				{
-					Rs2Antiban.setActivityIntensity(Rs2Antiban.getActivity().getActivityIntensity());
-				}
+			case MINING:
+				Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
                 handleMining();
                 break;
             case EMPTY_SACK:
                 if (Rs2Player.isAnimating()) return;
-                Rs2Antiban.setActivityIntensity(ActivityIntensity.EXTREME);
+				Rs2Antiban.setActivityIntensity(ActivityIntensity.LOW);
                 emptySack();
                 break;
             case FIXING_WATERWHEEL:
@@ -511,6 +520,14 @@ public class NetoMLMScript extends Script
 
 	private void handleWalking()
 	{
+		WorldPoint playerLocation = Rs2Player.getWorldLocation();
+		if (playerLocation != null && MLM_INTERIOR_AREA.contains(playerLocation))
+		{
+			status = MLMStatus.IDLE;
+			log.info("Skipping WALKING because the player is already inside Motherlode Mine");
+			return;
+		}
+
 		switch (walkingStep)
 		{
 			case REACH_MINING_GUILD:
@@ -900,7 +917,7 @@ public class NetoMLMScript extends Script
 			if (!obtainHammer()) return;
 		}
 
-		if (rs2TileObjectCache.query().interact(ObjectID.MOTHERLODE_WHEEL_STRUT_BROKEN))
+		if (interactWithBrokenStrut())
 		{
 			// We use a modified version of waitForXpDrop to ensure we break out of the sleep if the strut is repaired
 			final int skillExp = Microbot.getClientThread().invoke(() -> Microbot.getClient().getSkillExperience(Skill.SMITHING));
@@ -911,6 +928,33 @@ public class NetoMLMScript extends Script
             log.info("Waterwheel repair complete");
 		}
     }
+
+	private boolean interactWithBrokenStrut()
+	{
+		WorldPoint preferredStrutLocation = null;
+		if (status == MLMStatus.EMPTY_SACK || emptySackWorkflowActive)
+		{
+			preferredStrutLocation = SOUTHERN_BROKEN_STRUT_LOCATION;
+		}
+		else if (config.mineUpstairs())
+		{
+			preferredStrutLocation = NORTHERN_BROKEN_STRUT_LOCATION;
+		}
+
+		if (preferredStrutLocation != null)
+		{
+			Rs2TileObjectModel preferredStrut = findObjectAt(
+				ObjectID.MOTHERLODE_WHEEL_STRUT_BROKEN,
+				preferredStrutLocation
+			);
+			if (preferredStrut != null && preferredStrut.click("Hammer"))
+			{
+				return true;
+			}
+		}
+
+		return rs2TileObjectCache.query().interact(ObjectID.MOTHERLODE_WHEEL_STRUT_BROKEN);
+	}
 
     private void depositHopper()
     {
