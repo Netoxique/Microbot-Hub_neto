@@ -925,7 +925,7 @@ public class NetoBirdhouseRunsScript extends Script {
         Rs2Inventory.waitForInventoryChanges(5000);
         log.info("setupManualInventory: after depositAll, inv=[{}]", dumpInventory());
 
-        if (!Rs2Bank.withdrawX(ItemID.CHISEL, 1)) {
+        if (!Rs2Bank.withdrawOne(ItemID.CHISEL)) {
             setupErrorMessage = "Missing chisel in bank";
             log.error(setupErrorMessage);
             return false;
@@ -1042,7 +1042,7 @@ public class NetoBirdhouseRunsScript extends Script {
     private int withdrawFirstAvailable(int[] itemIds) {
         for (int itemId : itemIds) {
             if (!isRunning()) break;
-            if (Rs2Bank.count(itemId) > 0 && Rs2Bank.withdrawX(itemId, 1)) {
+            if (Rs2Bank.count(itemId) > 0 && Rs2Bank.withdrawOne(itemId)) {
                 Rs2Inventory.waitForInventoryChanges(2000);
                 return itemId;
             }
