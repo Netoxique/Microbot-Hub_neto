@@ -33,7 +33,7 @@ import net.runelite.api.events.GrandExchangeOfferChanged;
 
 import javax.inject.Inject;
 import java.awt.Rectangle;
-import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
 import java.util.concurrent.TimeUnit;
@@ -67,24 +67,28 @@ public class NetoGeSellerScript extends Script {
 
     public static class SellItemConfig {
         private final String name;
+        private final Integer itemId;
         private final int threshold;
         private final SellMode mode;
         private final boolean sellHighest;
 
-        public SellItemConfig(String name, int threshold, SellMode mode, boolean sellHighest) {
+        public SellItemConfig(String name, Integer itemId, int threshold, SellMode mode, boolean sellHighest) {
             this.name = name;
+            this.itemId = itemId;
             this.threshold = threshold;
             this.mode = mode;
             this.sellHighest = sellHighest;
         }
 
         public String getName() { return name; }
+        public Integer getItemId() { return itemId; }
+        public boolean isItemIdSelector() { return itemId != null; }
         public int getThreshold() { return threshold; }
         public SellMode getMode() { return mode; }
         public boolean isSellHighest() { return sellHighest; }
     }
 
-    private Map<String, SellItemConfig> itemsToSellMap = new HashMap<>();
+    private Map<String, SellItemConfig> itemsToSellMap = new LinkedHashMap<>();
     private boolean hasUnsoldBankItems = false;
     private volatile int totalProfit = 0;
 
@@ -180,8 +184,8 @@ public class NetoGeSellerScript extends Script {
         return true;
     }
 
-    private Map<String, SellItemConfig> parseItemsToSell(String configStr) {
-        Map<String, SellItemConfig> map = new HashMap<>();
+    Map<String, SellItemConfig> parseItemsToSell(String configStr) {
+        Map<String, SellItemConfig> map = new LinkedHashMap<>();
         if (configStr == null || configStr.trim().isEmpty()) {
             return map;
         }
@@ -228,7 +232,21 @@ public class NetoGeSellerScript extends Script {
             }
 
             if (!name.isEmpty()) {
-                map.put(name.toLowerCase(), new SellItemConfig(name, threshold, mode, sellHighest));
+                Integer itemId = null;
+                if (name.matches("\\d+")) {
+                    try {
+                        itemId = Integer.valueOf(name);
+                        if (itemId <= 0) {
+                            Microbot.log("Invalid item ID in Neto GE Seller list: " + name);
+                            continue;
+                        }
+                    } catch (NumberFormatException e) {
+                        Microbot.log("Invalid item ID in Neto GE Seller list: " + name);
+                        continue;
+                    }
+                }
+                String key = itemId == null ? "name:" + name.toLowerCase() : "id:" + itemId;
+                map.put(key, new SellItemConfig(name, itemId, threshold, mode, sellHighest));
             }
         }
         return map;
@@ -252,12 +270,10 @@ public class NetoGeSellerScript extends Script {
         sleep(600, 1000);
         hasUnsoldBankItems = false;
 
-        for (Map.Entry<String, SellItemConfig> entry : itemsToSellMap.entrySet()) {
-            String itemNameLower = entry.getKey();
-            SellItemConfig itemConfig = entry.getValue();
+        for (SellItemConfig itemConfig : itemsToSellMap.values()) {
 
-            int bankQty = getBankQuantity(itemNameLower);
-            int invQty = getInventoryQuantity(itemNameLower);
+            int bankQty = getBankQuantity(itemConfig);
+            int invQty = getInventoryQuantity(itemConfig);
             int totalQty = bankQty + invQty;
             
             int excess = 0;
@@ -282,13 +298,13 @@ public class NetoGeSellerScript extends Script {
 
                 int toWithdraw = Math.min(excess - invQty, bankQty);
                 if (toWithdraw > 0) {
-                    String exactName = getExactItemName(itemNameLower);
-                    if (exactName != null) {
-                        Microbot.status = "Withdrawing " + toWithdraw + " " + exactName;
+                    Rs2ItemModel bankItem = getMatchingBankItem(itemConfig);
+                    if (bankItem != null) {
+                        Microbot.status = "Withdrawing " + toWithdraw + " " + bankItem.getName();
                         if (toWithdraw == bankQty) {
-                            Rs2Bank.withdrawAll(exactName, true);
+                            Rs2Bank.withdrawAll(bankItem.getId());
                         } else {
-                            Rs2Bank.withdrawX(exactName, toWithdraw);
+                            Rs2Bank.withdrawX(bankItem.getId(), toWithdraw);
                         }
                         sleep(600, 1000);
                     }
@@ -297,11 +313,9 @@ public class NetoGeSellerScript extends Script {
         }
 
         // Check if there are still more items to withdraw later
-        for (Map.Entry<String, SellItemConfig> entry : itemsToSellMap.entrySet()) {
-            String itemNameLower = entry.getKey();
-            SellItemConfig itemConfig = entry.getValue();
-            int bankQty = getBankQuantity(itemNameLower);
-            int invQty = getInventoryQuantity(itemNameLower);
+        for (SellItemConfig itemConfig : itemsToSellMap.values()) {
+            int bankQty = getBankQuantity(itemConfig);
+            int invQty = getInventoryQuantity(itemConfig);
             int totalQty = bankQty + invQty;
             
             int excess = 0;
@@ -344,9 +358,9 @@ public class NetoGeSellerScript extends Script {
 
         boolean foundItemToSell = false;
         for (Rs2ItemModel item : Rs2Inventory.all(Rs2ItemModel::isTradeable)) {
-            String nameLower = item.getName().toLowerCase();
-            log.info("Considering tradeable inventory item '{}', quantity={}, configuredForSale={}", item.getName(), item.getQuantity(), itemsToSellMap.containsKey(nameLower));
-            SellItemConfig itemConfig = itemsToSellMap.get(nameLower);
+            SellItemConfig itemConfig = findMatchingConfig(item);
+            log.info("Considering tradeable inventory item '{}' (id={}), quantity={}, configuredForSale={}",
+                    item.getName(), item.getId(), item.getQuantity(), itemConfig != null);
             if (itemConfig != null) {
                 int quantityToSell = item.getQuantity();
                 if (quantityToSell <= 0) {
@@ -362,7 +376,7 @@ public class NetoGeSellerScript extends Script {
                     Microbot.status = "Selling " + quantityToSell + " " + item.getName();
                     String sellHotkey = itemConfig.isSellHighest() ? config.highValueHotkey() : config.hotkey();
                     log.info("Attempting to sell '{}' with hotkey '{}'.", item.getName(), sellHotkey);
-                    boolean sold = sellItemWithHotkey(item.getName(), quantityToSell, sellHotkey);
+                    boolean sold = sellItemWithHotkey(item, quantityToSell, sellHotkey);
                     log.info("sellItemWithHotkey result for '{}': {}", item.getName(), sold);
 //                    if (sold) {
 //                        sleep(1000, 1500);
@@ -496,7 +510,7 @@ public class NetoGeSellerScript extends Script {
                 }
 
                 String itemName = Microbot.getItemManager().getItemComposition(offer.getItemId()).getName();
-                if (itemName == null || !itemsToSellMap.containsKey(itemName.toLowerCase())) {
+                if (findMatchingConfig(offer.getItemId(), itemName) == null) {
                     continue;
                 }
 
@@ -661,7 +675,7 @@ public class NetoGeSellerScript extends Script {
                     int itemId = offer.getItemId();
                     if (itemId <= 0) continue;
                     String itemName = Microbot.getItemManager().getItemComposition(itemId).getName();
-                    if (itemName != null && itemsToSellMap.containsKey(itemName.toLowerCase())) {
+                    if (findMatchingConfig(itemId, itemName) != null) {
                         log.info("Active offer found for configured item: '{}' (State: {})", itemName, state);
                         return true;
                     }
@@ -671,10 +685,11 @@ public class NetoGeSellerScript extends Script {
         }).orElse(false);
     }
 
-    private boolean sellItemWithHotkey(String itemName, int quantity, String hotkey) {
+    private boolean sellItemWithHotkey(Rs2ItemModel item, int quantity, String hotkey) {
+        String itemName = item.getName();
         log.info("sellItemWithHotkey started. itemName='{}', quantity={}, hotkey='{}'", itemName, quantity, hotkey);
-        if (!Rs2Inventory.hasItem(itemName, true)) {
-            log.warn("sellItemWithHotkey returning false: inventory does not contain '{}'.", itemName);
+        if (!Rs2Inventory.hasItem(item.getId())) {
+            log.warn("sellItemWithHotkey returning false: inventory does not contain '{}' (id={}).", itemName, item.getId());
             return false;
         }
         int availableSlots = Rs2GrandExchange.getAvailableSlotsCount();
@@ -688,7 +703,7 @@ public class NetoGeSellerScript extends Script {
         }
 
         log.info("Interacting with '{}' using Offer action.", itemName);
-        boolean offerInteraction = Rs2Inventory.interact(itemName, "Offer", true);
+        boolean offerInteraction = Rs2Inventory.interact(item.getId(), "Offer");
         log.info("Offer interaction result for '{}': {}", itemName, offerInteraction);
         if (!offerInteraction) {
             log.warn("sellItemWithHotkey returning false: Offer interaction failed for '{}'.", itemName);
@@ -862,40 +877,65 @@ public class NetoGeSellerScript extends Script {
         }
     }
 
-    private int getBankQuantity(String itemNameLower) {
+    private int getBankQuantity(SellItemConfig itemConfig) {
         return Rs2Bank.bankItems().stream()
-                .filter(item -> item.getName().toLowerCase().equals(itemNameLower))
+                .filter(item -> matches(itemConfig, item))
                 .mapToInt(Rs2ItemModel::getQuantity)
                 .sum();
     }
 
-    private int getInventoryQuantity(String itemNameLower) {
+    private int getInventoryQuantity(SellItemConfig itemConfig) {
         return Rs2Inventory.all().stream()
-                .filter(item -> item.getName().toLowerCase().equals(itemNameLower))
+                .filter(item -> matches(itemConfig, item))
                 .mapToInt(Rs2ItemModel::getQuantity)
                 .sum();
     }
 
-    private String getExactItemNameFromBank(String itemNameLower) {
+    private Rs2ItemModel getMatchingBankItem(SellItemConfig itemConfig) {
         return Rs2Bank.bankItems().stream()
-                .filter(item -> item.getName().toLowerCase().equals(itemNameLower))
-                .map(Rs2ItemModel::getName)
+                .filter(item -> matches(itemConfig, item))
                 .findFirst()
                 .orElse(null);
     }
 
-    private String getExactItemNameFromInventory(String itemNameLower) {
-        return Rs2Inventory.all().stream()
-                .filter(item -> item.getName().toLowerCase().equals(itemNameLower))
-                .map(Rs2ItemModel::getName)
+    private SellItemConfig findMatchingConfig(Rs2ItemModel item) {
+        return itemsToSellMap.values().stream()
+                .filter(config -> matches(config, item))
                 .findFirst()
                 .orElse(null);
     }
 
-    private String getExactItemName(String itemNameLower) {
-        String name = getExactItemNameFromInventory(itemNameLower);
-        if (name != null) return name;
-        return getExactItemNameFromBank(itemNameLower);
+    private SellItemConfig findMatchingConfig(int itemId, String itemName) {
+        return itemsToSellMap.values().stream()
+                .filter(config -> matches(config, itemId, itemName))
+                .findFirst()
+                .orElse(null);
+    }
+
+    private boolean matches(SellItemConfig config, Rs2ItemModel item) {
+        return matches(config, item.getId(), item.getName());
+    }
+
+    private boolean matches(SellItemConfig config, int actualItemId, String actualItemName) {
+        if (!config.isItemIdSelector()) {
+            return actualItemName != null && actualItemName.equalsIgnoreCase(config.getName());
+        }
+
+        int linkedNoteId = getLinkedNoteId(actualItemId);
+        return matchesConfiguredId(config.getItemId(), actualItemId, linkedNoteId);
+    }
+
+    static boolean matchesConfiguredId(int configuredItemId, int actualItemId, int actualLinkedNoteId) {
+        return configuredItemId == actualItemId || configuredItemId == actualLinkedNoteId;
+    }
+
+    private int getLinkedNoteId(int itemId) {
+        try {
+            return Microbot.getItemManager().getItemComposition(itemId).getLinkedNoteId();
+        } catch (RuntimeException e) {
+            log.debug("Unable to resolve linked note ID for item {}", itemId, e);
+            return -1;
+        }
     }
 
     private void initializeSlotStates() {
@@ -940,7 +980,7 @@ public class NetoGeSellerScript extends Script {
         if (itemId <= 0) return;
 
         String itemName = Microbot.getItemManager().getItemComposition(itemId).getName();
-        if (itemName == null || !itemsToSellMap.containsKey(itemName.toLowerCase())) {
+        if (findMatchingConfig(itemId, itemName) == null) {
             return;
         }
 

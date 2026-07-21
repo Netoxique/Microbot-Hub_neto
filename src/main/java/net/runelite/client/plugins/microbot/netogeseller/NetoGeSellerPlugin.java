@@ -22,14 +22,14 @@ import java.awt.*;
         description = "Sells items to GE using Flipping Utilities hotkeys",
         tags = {"neto", "ge", "grand exchange", "seller"},
         authors = {"Neto"},
-        version = "1.0.3",
+        version = "1.0.4",
         minClientVersion = "2.0.0",
         enabledByDefault = false,
         isExternal = PluginConstants.IS_EXTERNAL
 )
 @Slf4j
 public class NetoGeSellerPlugin extends Plugin {
-    public static final String version = "1.0.3";
+    public static final String version = "1.0.4";
 
     @Inject
     private NetoGeSellerConfig config;

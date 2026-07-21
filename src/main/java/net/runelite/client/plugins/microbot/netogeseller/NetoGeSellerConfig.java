@@ -28,7 +28,7 @@ public interface NetoGeSellerConfig extends Config {
     @ConfigItem(
             keyName = "itemsToSell",
             name = "Items to Sell",
-            description = "Comma separated list of items to sell. Prefix an item with + to use the high-value price. Format: [+]ItemName:KeepAmount (e.g. +Magic log:100, Coal:500, Rune bar, Teak logs:>200)",
+            description = "Comma separated list of item names or exact item IDs to sell. Prefix an item with + to use the high-value price. Format: [+]ItemNameOrID:KeepAmount (e.g. +Magic log:100, 5075, Coal:500, Teak logs:>200)",
             position = 2,
             section = generalSettings
     )
