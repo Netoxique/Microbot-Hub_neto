@@ -9,18 +9,32 @@ import net.runelite.client.plugins.microbot.netomlm.NetoMLMPlugin;
 import net.runelite.client.plugins.microbot.netomlm.NetoMLMScript;
 import static net.runelite.client.plugins.microbot.netomlm.NetoMLMScript.status;
 import net.runelite.client.plugins.microbot.netomlm.enums.MLMMiningSpot;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
+import net.runelite.client.plugins.microbot.util.misc.TimeUtils;
 import net.runelite.client.ui.overlay.OverlayPanel;
 import net.runelite.client.ui.overlay.OverlayPosition;
 import net.runelite.client.ui.overlay.components.LineComponent;
 import net.runelite.client.ui.overlay.components.TitleComponent;
+import java.time.Instant;
 
 @Slf4j
 public class NetoMLMOverlay extends OverlayPanel {
+	private final NetoMLMPlugin plugin;
+	@Inject
+	private NetoBreakManager breakManager;
+	@Inject
+	private NetoWorldHopManager worldHopManager;
+	@Inject
+	private NetoRuntimeDisable runtimeDisable;
+
     @Inject
     NetoMLMOverlay(NetoMLMPlugin plugin) {
         super(plugin);
+		this.plugin = plugin;
         setPosition(OverlayPosition.TOP_LEFT);
         setSnappable(true);
     }
@@ -54,6 +68,16 @@ public class NetoMLMOverlay extends OverlayPanel {
                     .left(status.toString())
                     .right("Version: " + NetoMLMPlugin.version)
                     .build());
+
+			panelComponent.getChildren().add(LineComponent.builder()
+					.left("World Hop In:").right(worldHopManager.getWorldHopDisplay()).build());
+			panelComponent.getChildren().add(LineComponent.builder()
+					.left("Break In:").right(breakManager.getBreakInDisplay()).build());
+			panelComponent.getChildren().add(LineComponent.builder()
+					.left("Shutdown in:").right(runtimeDisable.getShutdownInDisplay()).build());
+			panelComponent.getChildren().add(LineComponent.builder()
+					.left("Time Running:")
+					.right(TimeUtils.getFormattedDurationBetween(plugin.getStartTime(), Instant.now())).build());
         } catch (Exception ex) {
             log.error("Error rendering Neto MLM overlay: ", ex);
         }

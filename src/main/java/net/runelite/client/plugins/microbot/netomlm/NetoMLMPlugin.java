@@ -4,6 +4,7 @@ import com.google.inject.Provides;
 import java.awt.AWTException;
 import java.util.ArrayList;
 import java.util.List;
+import java.time.Instant;
 import javax.inject.Inject;
 import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
@@ -29,7 +30,7 @@ import net.runelite.client.ui.overlay.OverlayManager;
 )
 public class NetoMLMPlugin extends Plugin {
 
-	static final String version = "1.0.7";
+	static final String version = "1.0.9";
 
     @Inject
     private NetoMLMConfig config;
@@ -43,6 +44,8 @@ public class NetoMLMPlugin extends Plugin {
 
 	@Getter
 	private List<WorldPoint> blacklistedCrates = new ArrayList<>();
+	@Getter
+	private Instant startTime;
 
     @Provides
 	NetoMLMConfig provideConfig(ConfigManager configManager) {
@@ -50,16 +53,18 @@ public class NetoMLMPlugin extends Plugin {
     }
 
     @Override
-    protected void startUp() throws AWTException {
+	protected void startUp() throws AWTException {
 		log.info("Starting Neto MLM plugin v{}", version);
+		startTime = Instant.now();
         overlayManager.add(netoMLMOverlay);
         netoMLMScript.run();
 		log.info("Neto MLM startup complete");
     }
 
     @Override
-    public void shutDown() {
+	public void shutDown() {
 		log.info("Starting Neto MLM shutdown");
+		startTime = null;
         netoMLMScript.shutdown();
         overlayManager.remove(netoMLMOverlay);
 		blacklistedCrates.clear();

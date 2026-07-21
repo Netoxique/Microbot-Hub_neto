@@ -28,6 +28,9 @@ import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.netomlm.enums.MLMMiningSpot;
 import net.runelite.client.plugins.microbot.netomlm.enums.MLMStatus;
+import net.runelite.client.plugins.microbot.shared.session.NetoBreakManager;
+import net.runelite.client.plugins.microbot.shared.session.NetoRuntimeDisable;
+import net.runelite.client.plugins.microbot.shared.session.NetoWorldHopManager;
 import net.runelite.client.plugins.microbot.util.antiban.AntibanPlugin;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2AntibanSettings;
@@ -55,6 +58,7 @@ public class NetoMLMScript extends Script
 		DEPOSIT_INVENTORY,
 		VALIDATE_REQUIRED_ITEMS,
 		EQUIP_PROSPECTOR,
+		EQUIP_MINING_CAPE,
 		EQUIP_PICKAXE,
 		EQUIP_RING,
 		EQUIP_NECKLACE,
@@ -125,6 +129,11 @@ public class NetoMLMScript extends Script
 		ItemID.MOTHERLODE_REWARD_BOOTS,
 		ItemID.FOSSIL_MOTHERLODE_REWARD_BOOTS
 	};
+	private static final int[] MINING_CAPE_IDS =
+	{
+		ItemID.SKILLCAPE_MINING,
+		ItemID.SKILLCAPE_MINING_TRIMMED
+	};
 
 	private static final WorldArea CRATE_AREA = new WorldArea(new WorldPoint(3750, 5659, 0), 10, 16);
 
@@ -149,6 +158,9 @@ public class NetoMLMScript extends Script
     private final NetoMLMConfig config;
     private final Rs2TileObjectCache rs2TileObjectCache;
     private final Rs2PlayerCache rs2PlayerCache;
+	private final NetoBreakManager breakManager;
+	private final NetoWorldHopManager worldHopManager;
+	private final NetoRuntimeDisable runtimeDisable;
 
 
 	private boolean shouldEmptySack = false;
@@ -162,14 +174,20 @@ public class NetoMLMScript extends Script
 	private WalkingStep walkingStep = WalkingStep.REACH_MINING_GUILD;
 	private int secondRockfallAttempts = 0;
 	private Integer selectedPickaxeId = null;
+	private boolean runtimeShutdownActive = false;
 
 	@Inject
-	public NetoMLMScript(NetoMLMPlugin plugin, NetoMLMConfig config, Rs2TileObjectCache rs2TileObjectCache, Rs2PlayerCache rs2PlayerCache)
+	public NetoMLMScript(NetoMLMPlugin plugin, NetoMLMConfig config, Rs2TileObjectCache rs2TileObjectCache,
+		Rs2PlayerCache rs2PlayerCache, NetoBreakManager breakManager,
+		NetoWorldHopManager worldHopManager, NetoRuntimeDisable runtimeDisable)
 	{
 		this.plugin = plugin;
 		this.config = config;
         this.rs2TileObjectCache = rs2TileObjectCache;
         this.rs2PlayerCache = rs2PlayerCache;
+		this.breakManager = breakManager;
+		this.worldHopManager = worldHopManager;
+		this.runtimeDisable = runtimeDisable;
     }
 
     public boolean run()
@@ -183,6 +201,12 @@ public class NetoMLMScript extends Script
     private void initialize()
     {
         log.debug("Initializing MLM runtime state");
+		breakManager.configure(config, "Neto MLM");
+		worldHopManager.configure(config, "Neto MLM");
+		runtimeDisable.configure(config, "Neto MLM");
+		breakManager.reset();
+		worldHopManager.reset();
+		runtimeDisable.reset();
         Rs2Antiban.antibanSetupTemplates.applyMiningSetup();
 		configureLowMouseSpeed();
         miningSpot = MLMMiningSpot.IDLE;
@@ -195,6 +219,7 @@ public class NetoMLMScript extends Script
         shouldEmptySack = false;
 		shouldRepairWaterwheel = false;
 		emptySackWorkflowActive = false;
+		runtimeShutdownActive = false;
     }
 
 	private void configureLowMouseSpeed()
@@ -220,6 +245,17 @@ public class NetoMLMScript extends Script
 
     private void executeTask()
     {
+		if (runtimeShutdownActive)
+		{
+			runtimeDisable.updateRuntime(NetoMLMPlugin.class);
+			return;
+		}
+
+		if (breakManager.updateBreakState())
+		{
+			return;
+		}
+
         if (!super.run() || !isWorkflowRunnable())
         {
             abortCurrentWorkflow();
@@ -323,6 +359,12 @@ public class NetoMLMScript extends Script
 				break;
 			case EQUIP_PROSPECTOR:
 				if (equipProspectorSet())
+				{
+					prepStep = PrepStep.EQUIP_MINING_CAPE;
+				}
+				break;
+			case EQUIP_MINING_CAPE:
+				if (equipBestAvailableItem(MINING_CAPE_IDS))
 				{
 					prepStep = PrepStep.EQUIP_PICKAXE;
 				}
@@ -835,12 +877,31 @@ public class NetoMLMScript extends Script
 		shouldEmptySack = false;
 		shouldRepairWaterwheel = false;
 		emptySackWorkflowActive = false;
+		status = MLMStatus.IDLE;
+
+		if (runtimeDisable.updateRuntime(NetoMLMPlugin.class))
+		{
+			runtimeShutdownActive = true;
+			log.info("Runtime shutdown started at the completed sack workflow safe point");
+			return;
+		}
+
+		boolean breakDue = breakManager.shouldStartBreakAtSafePoint();
+		boolean worldHopAttempted = worldHopManager.tryHopIfDue(this::isRunning).isAttempted();
+		if (worldHopAttempted && breakDue)
+		{
+			sleep(6_000);
+		}
+		if (breakDue)
+		{
+			breakManager.tryStartBreakAtSafePoint();
+		}
+
 		if (config.mineUpstairs())
 		{
 			selectRandomUpperMiningSpot();
 		}
 		Rs2Antiban.takeMicroBreakByChance();
-		status = MLMStatus.IDLE;
         log.info("Emptying sack workflow complete");
 	}
 
@@ -1333,6 +1394,10 @@ public class NetoMLMScript extends Script
     public void shutdown()
     {
         log.info("Starting Neto MLM script shutdown");
+		breakManager.reset();
+		worldHopManager.reset();
+		runtimeDisable.reset();
+		runtimeShutdownActive = false;
         Rs2Antiban.resetAntibanSettings();
         Rs2Walker.setTarget(null);
 		itemsToKeep = null;
