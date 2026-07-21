@@ -18,6 +18,8 @@ The build system uses **Gradle with custom plugin discovery and packaging**:
 
 ### Build Commands
 
+Always prefer building specific plugin only.
+
 ```bash
 # Build all plugins
 ./gradlew clean build
