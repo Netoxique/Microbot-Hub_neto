@@ -16,28 +16,37 @@ import net.runelite.api.coords.WorldPoint;
 import net.runelite.api.events.ChatMessage;
 import net.runelite.api.events.GameTick;
 import net.runelite.api.gameval.InterfaceID;
+import net.runelite.api.gameval.ItemID;
 import net.runelite.api.widgets.Widget;
 import net.runelite.client.eventbus.EventBus;
 import net.runelite.client.eventbus.Subscribe;
+import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.api.boat.Rs2BoatCache;
 import net.runelite.client.plugins.microbot.api.player.models.Rs2PlayerModel;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
-import net.runelite.client.plugins.microbot.netosailingsalv.AlchOrder;
 import net.runelite.client.plugins.microbot.netosailingsalv.NetoSailingSalvConfig;
+import net.runelite.client.plugins.microbot.netosailingsalv.NetoSailingSalvPlugin;
 import net.runelite.client.plugins.microbot.util.antiban.Rs2Antiban;
+import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
+import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
+import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
+import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
+import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
+import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.util.Text;
 
 import javax.inject.Inject;
+import javax.inject.Provider;
 import javax.inject.Singleton;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
@@ -60,6 +69,24 @@ import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 @Slf4j
 @Singleton
 public class SalvagingScript {
+
+    private static final int DEFAULT_MINIMUM_ALCH_VALUE = 2000;
+    private static final int PREP_TIMEOUT_MS = 10000;
+    private static final int BOAT_TELEPORT_TIMEOUT_MS = 15000;
+    private static final int STARTUP_SCENE_GRACE_MS = 2000;
+    private static final List<String> CONTAINERS = List.of("Gem sack", "Gem bag", "Herb sack", "Seed box");
+    /** Kept in the same priority order as Neto Alching; plugins compile into isolated source sets. */
+    private static final List<String> FIRE_STAVES = List.of(
+            "Twinflame staff", "Fire battlestaff", "Mystic fire staff", "Lava battlestaff",
+            "Mystic lava staff", "Smoke battlestaff", "Mystic smoke staff", "Steam battlestaff",
+            "Mystic steam staff", "Staff of fire");
+    private static final Set<String> PROTECTED_ITEM_NAMES = Set.of(
+            "gem sack", "gem bag", "herb sack", "seed box", "coins", "platinum tokens",
+            "rune pouch", "divine rune pouch", "law rune", "mud rune", "nature rune", "earth rune", "water rune");
+    private static final Map<Runes, Integer> BOAT_AND_ALCH_RUNES = Map.of(
+            Runes.LAW, 16000,
+            Runes.MUD, 16000,
+            Runes.NATURE, 16000);
 
     /** First decimal number in the occupied widget text (often just {@code X}; still works if the client shows {@code X / N}). */
     private static final Pattern CARGO_HOLD_FIRST_NUMBER = Pattern.compile("(\\d+)");
@@ -98,6 +125,15 @@ public class SalvagingScript {
     @SuppressWarnings("unused")
     private final Rs2BoatCache boatCache;
     private final EventBus eventBus;
+    private final PluginManager pluginManager;
+    private final Provider<NetoSailingSalvPlugin> pluginProvider;
+
+    private volatile SalvagingState state = SalvagingState.PREP;
+    private boolean alchingAvailable = true;
+    private boolean prepComplete;
+    private WorldPoint locationBeforeBoatTeleport;
+    private String equippedBankTeleport;
+    private long activationStartedAt;
 
     /**
      * Shipwreck lists rebuilt each {@link GameTick} on the client thread by scanning {@link Client#getTopLevelWorldView()}
@@ -127,18 +163,337 @@ public class SalvagingScript {
     private long lastCargoHoldWidgetResyncMs;
 
     @Inject
-    public SalvagingScript(Rs2TileObjectCache tileObjectCache, Rs2BoatCache boatCache, EventBus eventBus) {
+    public SalvagingScript(Rs2TileObjectCache tileObjectCache, Rs2BoatCache boatCache, EventBus eventBus,
+                           PluginManager pluginManager, Provider<NetoSailingSalvPlugin> pluginProvider) {
         this.tileObjectCache = tileObjectCache;
         this.boatCache = boatCache;
         this.eventBus = eventBus;
+        this.pluginManager = pluginManager;
+        this.pluginProvider = pluginProvider;
     }
 
     public void register() {
+        resetForActivation();
         eventBus.register(this);
     }
 
     public void unregister() {
         eventBus.unregister(this);
+        resetForActivation();
+    }
+
+    private void resetForActivation() {
+        state = SalvagingState.PREP;
+        prepComplete = false;
+        alchingAvailable = true;
+        locationBeforeBoatTeleport = null;
+        equippedBankTeleport = null;
+        activationStartedAt = System.currentTimeMillis();
+        resetCargoHoldState();
+    }
+
+    public SalvagingState getState() {
+        return state;
+    }
+
+    public boolean isAlchingAvailable() {
+        return alchingAvailable;
+    }
+
+    /**
+     * Handles activation while the player is already aboard their boat. Scene/tile caches can trail plugin startup by
+     * one game tick, so normal PREP is held briefly before deciding that the boat facilities are absent.
+     *
+     * @return true when this script tick is handled (waiting, started salvaging, or stopped the plugin)
+     */
+    private boolean handleAlreadyOnBoatActivation() {
+        boolean stationVisible = findSalvagingStation() != null;
+        boolean hookVisible = hasValidSalvagingHook();
+        if (stationVisible && hookVisible) {
+            String carriedTeleport = findCarriedBankTeleport();
+            if (carriedTeleport == null) {
+                stopPluginWithChat("A valid bank teleport is required before starting salvaging on your boat.");
+                return true;
+            }
+            equippedBankTeleport = carriedTeleport;
+            prepComplete = true;
+            state = SalvagingState.SALVAGING;
+            Microbot.status = "Salvaging prepared (already on boat)";
+            log.info("Boat facilities and bank teleport '{}' detected; skipping PREP", carriedTeleport);
+            return true;
+        }
+        return System.currentTimeMillis() - activationStartedAt < STARTUP_SCENE_GRACE_MS;
+    }
+
+    private String findCarriedBankTeleport() {
+        List<Rs2ItemModel> carried = new ArrayList<>(Rs2Equipment.items());
+        carried.addAll(Rs2Inventory.all());
+        for (Rs2ItemModel item : carried) {
+            String name = item.getName();
+            if (name == null) {
+                continue;
+            }
+            if (isValidBankTeleportName(name)) {
+                return name;
+            }
+        }
+        return null;
+    }
+
+    static boolean isValidBankTeleportName(String name) {
+        if (name == null) {
+            return false;
+        }
+        String lower = name.toLowerCase();
+        return lower.equals("crafting cape")
+                || lower.equals("crafting cape(t)")
+                || lower.equals("sailors' amulet")
+                || lower.matches("skills necklace\\(\\d+\\)")
+                || lower.matches("ring of dueling\\(\\d+\\)");
+    }
+
+    private void runPrep() {
+        Microbot.status = "Salvaging PREP: opening closest bank";
+        if (!Rs2Bank.isOpen()) {
+            Rs2Bank.walkToBankAndUseBank();
+            sleepUntil(Rs2Bank::isOpen, PREP_TIMEOUT_MS);
+            return;
+        }
+
+        if (!Rs2Bank.depositAll()) {
+            failPrep("Could not deposit inventory during salvaging preparation.");
+            return;
+        }
+        sleepUntil(Rs2Inventory::isEmpty, PREP_TIMEOUT_MS);
+
+        equippedBankTeleport = equipBestBankTeleport();
+        if (equippedBankTeleport == null) {
+            failPrep("No supported bank teleport was found.");
+            return;
+        }
+
+        String staff = findFirstAvailableItem(FIRE_STAVES);
+        if (staff == null) {
+            disableAlching("No fire staff found; alching is disabled for this activation.");
+        } else if (!Rs2Equipment.isWearing(staff) && !Rs2Bank.withdrawAndEquip(staff)) {
+            disableAlching("Could not equip a fire staff; alching is disabled for this activation.");
+        }
+
+        boolean hasPouch = Rs2Bank.hasRunePouch();
+        if (hasPouch) {
+            if (!Rs2Bank.withdrawRunePouch() || !sleepUntil(Rs2Inventory::hasRunePouch, PREP_TIMEOUT_MS)) {
+                failPrep("Could not withdraw the rune pouch.");
+                return;
+            }
+            if (Rs2Bank.count(ItemID.LAWRUNE) <= 0 || Rs2Bank.count(ItemID.MUDRUNE) <= 0) {
+                failPrep("Law and Mud runes are required to prepare the rune pouch.");
+                return;
+            }
+            boolean hasNatureRunes = Rs2Bank.count(ItemID.NATURERUNE) > 0;
+            if (!hasNatureRunes) {
+                disableAlching("No Nature runes found; alching is disabled for this activation.");
+            }
+            Map<Runes, Integer> loadout = hasNatureRunes
+                    ? BOAT_AND_ALCH_RUNES
+                    : Map.of(Runes.LAW, 16000, Runes.MUD, 16000);
+            if (!Rs2RunePouch.load(loadout)) {
+                failPrep("Could not fill the rune pouch with the required boat teleport runes.");
+                return;
+            }
+            Rs2Bank.depositAllExcept("Rune pouch", "Divine rune pouch");
+        } else {
+            if (!withdrawRequiredLooseRune(ItemID.LAWRUNE, "Law rune")
+                    || !withdrawRequiredLooseRune(ItemID.EARTHRUNE, "Earth rune")
+                    || !withdrawRequiredLooseRune(ItemID.WATERRUNE, "Water rune")) {
+                failPrep("Two Law, Earth, and Water runes are required when no rune pouch is available.");
+                return;
+            }
+            if (Rs2Bank.count(ItemID.NATURERUNE) <= 0) {
+                disableAlching("No Nature runes found; alching is disabled for this activation.");
+            } else if (alchingAvailable && !Rs2Bank.withdrawAll(ItemID.NATURERUNE)) {
+                disableAlching("Could not withdraw Nature runes; alching is disabled for this activation.");
+            }
+            Rs2Bank.depositAllExcept("Law rune", "Earth rune", "Water rune", "Nature rune");
+        }
+
+        if (!Rs2Bank.withdrawX(ItemID.COINS, 100000)
+                || !sleepUntil(() -> Rs2Inventory.count(ItemID.COINS) >= 100000, PREP_TIMEOUT_MS)) {
+            failPrep("Could not withdraw 100,000 Coins.");
+            return;
+        }
+
+        for (String container : CONTAINERS) {
+            if (Rs2Bank.hasItem(container) && !Rs2Bank.withdrawOne(container)) {
+                failPrep("Could not withdraw " + container + ".");
+                return;
+            }
+        }
+        if (!Rs2Bank.emptyContainers()) {
+            Widget emptyContainers = Rs2Widget.findWidget("Empty containers");
+            if (emptyContainers == null) {
+                failPrep("Could not find the bank Empty containers action.");
+                return;
+            }
+            Rs2Widget.clickWidget(emptyContainers);
+        }
+
+        Rs2Bank.closeBank();
+        if (!sleepUntil(() -> !Rs2Bank.isOpen(), PREP_TIMEOUT_MS)) {
+            failPrep("Could not close the bank after preparation.");
+            return;
+        }
+
+        locationBeforeBoatTeleport = Rs2Player.getWorldLocation();
+        if (!castTeleportToBoat()) {
+            failPrep("Could not cast Teleport to Boat.");
+            return;
+        }
+        boolean moved = sleepUntil(() -> {
+            WorldPoint now = Rs2Player.getWorldLocation();
+            return now != null && locationBeforeBoatTeleport != null && now.distanceTo(locationBeforeBoatTeleport) > 10;
+        }, BOAT_TELEPORT_TIMEOUT_MS);
+        boolean validBoatSetup = moved && sleepUntil(
+                () -> findSalvagingStation() != null && hasValidSalvagingHook(), BOAT_TELEPORT_TIMEOUT_MS);
+        if (!validBoatSetup) {
+            Microbot.log("Boat setup validation failed; returning to a bank and stopping the plugin.");
+            teleportBackToBank();
+            stopPlugin();
+            return;
+        }
+
+        prepComplete = true;
+        state = SalvagingState.SALVAGING;
+        Microbot.status = "Salvaging prepared";
+    }
+
+    private boolean withdrawRequiredLooseRune(int itemId, String name) {
+        return Rs2Bank.count(itemId) >= 2 && Rs2Bank.withdrawX(itemId, 2)
+                && sleepUntil(() -> Rs2Inventory.count(itemId) >= 2, PREP_TIMEOUT_MS);
+    }
+
+    private String equipBestBankTeleport() {
+        String selected = findFirstAvailableItem(List.of("Crafting cape", "Crafting cape(t)"));
+        if (selected == null) {
+            selected = findFirstAvailableItem(List.of("Sailors' amulet"));
+        }
+        if (selected == null) {
+            selected = findLowestChargeAvailableItem("Skills necklace");
+        }
+        if (selected == null) {
+            selected = findLowestChargeAvailableItem("Ring of dueling");
+        }
+        if (selected == null) {
+            return null;
+        }
+        if (Rs2Equipment.isWearing(selected)) {
+            return selected;
+        }
+        if (!Rs2Bank.withdrawAndEquip(selected)) {
+            return null;
+        }
+        final String equipped = selected;
+        return sleepUntil(() -> Rs2Equipment.isWearing(equipped), PREP_TIMEOUT_MS) ? selected : null;
+    }
+
+    private String findFirstAvailableItem(List<String> names) {
+        for (String name : names) {
+            Rs2ItemModel equipped = Rs2Equipment.get(item -> item.getName() != null && item.getName().equalsIgnoreCase(name));
+            if (equipped != null) {
+                return equipped.getName();
+            }
+            if (Rs2Bank.hasItem(name)) {
+                Rs2ItemModel item = Rs2Bank.getBankItem(name);
+                return item == null ? name : item.getName();
+            }
+        }
+        return null;
+    }
+
+    private String findLowestChargeAvailableItem(String baseName) {
+        List<Rs2ItemModel> candidates = new ArrayList<>(Rs2Bank.bankItems());
+        candidates.addAll(Rs2Equipment.items());
+        return candidates.stream()
+                .filter(item -> item.getName() != null && item.getName().startsWith(baseName + "("))
+                .min(Comparator.comparingInt(item -> chargeFromName(item.getName())))
+                .map(Rs2ItemModel::getName)
+                .orElse(null);
+    }
+
+    private static int chargeFromName(String name) {
+        Matcher matcher = Pattern.compile("\\((\\d+)\\)$").matcher(name);
+        return matcher.find() ? Integer.parseInt(matcher.group(1)) : Integer.MAX_VALUE;
+    }
+
+    private boolean castTeleportToBoat() {
+        Rs2Tab.switchToMagicTab();
+        sleep(300, 600);
+        Widget spell = Rs2Widget.findWidget("Teleport to Boat");
+        if (spell == null || spell.isHidden()) {
+            return false;
+        }
+        Rs2Widget.clickWidget(spell);
+        return true;
+    }
+
+    private boolean hasValidSalvagingHook() {
+        Set<String> validHooks = Set.of(
+                "dragon salvaging hook", "rune salvaging hook", "adamant salvaging hook");
+        return tileObjectCache.query().fromWorldView()
+                .where(obj -> obj.getName() != null && validHooks.contains(obj.getName().toLowerCase()))
+                .nearestOnClientThread() != null;
+    }
+
+    private void teleportBackToBank() {
+        if (equippedBankTeleport == null) {
+            return;
+        }
+        String[][] actions;
+        if (equippedBankTeleport.startsWith("Crafting cape")) {
+            actions = new String[][]{{"Teleport"}, {"Crafting Guild"}};
+        } else if (equippedBankTeleport.startsWith("Sailors' amulet")) {
+            actions = new String[][]{{"Teleport"}};
+        } else if (equippedBankTeleport.startsWith("Skills necklace")) {
+            actions = new String[][]{{"Cooking Guild"}, {"Teleport"}};
+        } else {
+            actions = new String[][]{{"Castle Wars"}, {"Teleport"}};
+        }
+        WorldPoint before = Rs2Player.getWorldLocation();
+        for (String[] action : actions) {
+            if (Rs2Equipment.interact(equippedBankTeleport, action[0])) {
+                if (sleepUntil(() -> {
+                    WorldPoint now = Rs2Player.getWorldLocation();
+                    return now != null && before != null && now.distanceTo(before) > 10;
+                }, BOAT_TELEPORT_TIMEOUT_MS)) {
+                    Rs2Bank.walkToBankAndUseBank();
+                    return;
+                }
+            }
+        }
+    }
+
+    private void failPrep(String reason) {
+        Microbot.log(reason);
+        stopPlugin();
+    }
+
+    private void stopPluginWithChat(String reason) {
+        state = SalvagingState.STOPPED;
+        Microbot.getClientThread().invoke(() -> Microbot.getClient().addChatMessage(
+                ChatMessageType.GAMEMESSAGE, "", "<col=ff0000>" + reason + "</col>", null));
+        stopPlugin();
+    }
+
+    private void stopPlugin() {
+        state = SalvagingState.STOPPED;
+        Microbot.getClientThread().invoke(() -> {
+            NetoSailingSalvPlugin plugin = pluginProvider.get();
+            pluginManager.setPluginEnabled(plugin, false);
+            try {
+                pluginManager.stopPlugin(plugin);
+            } catch (Exception ex) {
+                log.error("Failed to stop Neto Sailing Salv plugin", ex);
+            }
+        });
     }
 
     @Subscribe
@@ -257,14 +612,20 @@ public class SalvagingScript {
 
     public void run(NetoSailingSalvConfig config) {
         try {
+            if (!prepComplete) {
+                state = SalvagingState.PREP;
+                if (handleAlreadyOnBoatActivation()) {
+                    return;
+                }
+                runPrep();
+                return;
+            }
+
+            state = SalvagingState.SALVAGING;
             var player = new Rs2PlayerModel();
 
-            if (!config.useCargoHold()) {
-                resetCargoHoldState();
-            } else {
-                if (cargoHoldCapacity == -1) {
-                    initCargoHold();
-                }
+            if (cargoHoldCapacity == -1) {
+                initCargoHold();
             }
 
             if (isPlayerAnimating(player)) {
@@ -273,10 +634,8 @@ public class SalvagingScript {
                 return;
             }
 
-            if (config.useCargoHold()) {
-                if (handleCargoHoldMode(config, player)) {
-                    return;
-                }
+            if (handleCargoHoldMode(config, player)) {
+                return;
             }
 
             if (tryRunIdleInventoryCleanup(config)) {
@@ -284,7 +643,7 @@ public class SalvagingScript {
             }
 
             if (isInventoryFull()) {
-                if (config.useCargoHold() && cargoHoldProcessing && hasSalvageItems()) {
+                if (cargoHoldProcessing && hasSalvageItems()) {
                     log.info("Inventory full during cargo-hold processing; processing salvage at station before more withdraws");
                 } else {
                     log.info("Inventory full, handling before salvaging");
@@ -1269,63 +1628,15 @@ public class SalvagingScript {
     }
 
     private boolean inventoryCleanupConfigured(NetoSailingSalvConfig config) {
-        if (config.openCaskets()) {
-            return true;
-        }
-        String drop = config.dropItems();
-        if (drop != null) {
-            if (!drop.isBlank()) {
-                return true;
-            }
-        }
-        if (!config.enableAlching()) {
-            return false;
-        }
-        String alch = config.alchItems();
-        return alch != null && !alch.isBlank();
+        return true;
     }
 
     private boolean inventoryHasCleanupWork(NetoSailingSalvConfig config) {
-        if (config.openCaskets()) {
-            if (Rs2Inventory.hasItem("casket")) {
-                return true;
-            }
-        }
-        String dropItems = config.dropItems();
-        if (dropItems != null) {
-            if (!dropItems.isBlank()) {
-                for (String raw : dropItems.split(",")) {
-                    String name = raw.trim();
-                    if (name.isEmpty()) {
-                        continue;
-                    }
-                    if (Rs2Inventory.hasItem(name)) {
-                        return true;
-                    }
-                }
-            }
-        }
-        if (config.enableAlching()) {
-            String alchItems = config.alchItems();
-            if (alchItems != null) {
-                if (!alchItems.isBlank()) {
-                    List<String> fragments = Arrays.stream(alchItems.split(","))
-                            .map(String::trim)
-                            .map(String::toLowerCase)
-                            .filter(s -> !s.isEmpty())
-                            .collect(Collectors.toList());
-                    for (Rs2ItemModel item : Rs2Inventory.all()) {
-                        String n = item.getName();
-                        if (n == null) {
-                            continue;
-                        }
-                        String lower = n.toLowerCase();
-                        for (String fragment : fragments) {
-                            if (lower.contains(fragment)) {
-                                return true;
-                            }
-                        }
-                    }
+        int minimum = minimumAlchValue(config);
+        for (Rs2ItemModel item : Rs2Inventory.all()) {
+            if (!isProtected(item) && item.isTradeable()) {
+                if (!alchingAvailable || item.getHaPrice() < minimum || (!item.isStackable() && item.getHaPrice() >= minimum)) {
+                    return true;
                 }
             }
         }
@@ -1334,11 +1645,9 @@ public class SalvagingScript {
 
     private void handleFullInventory(NetoSailingSalvConfig config, Rs2PlayerModel player) {
         if (hasSalvageItems() && !isPlayerAnimating(player)) {
-            if (config.useCargoHold()) {
-                if (canDepositSalvageToCargoHold() && !suppressSalvageDepositDuringCargoHoldProcessing()) {
-                    depositToCargoHold();
-                    return;
-                }
+            if (canDepositSalvageToCargoHold() && !suppressSalvageDepositDuringCargoHoldProcessing()) {
+                depositToCargoHold();
+                return;
             }
             depositSalvageOrDrop(config);
             return;
@@ -1347,14 +1656,15 @@ public class SalvagingScript {
     }
 
     private void clearInventoryViaAlchDropAndCaskets(NetoSailingSalvConfig config) {
+        state = SalvagingState.FILLING;
+        fillContainers();
+        state = SalvagingState.ALCHING;
+        alchItems(config);
+        state = SalvagingState.FILLING;
+        fillContainers();
+        state = SalvagingState.DROPPING;
         dropJunk(config);
-        if (config.openCaskets()) {
-            openCaskets();
-        }
-        if (config.enableAlching()) {
-            alchItems(config);
-        }
-        dropJunk(config);
+        state = SalvagingState.SALVAGING;
     }
 
     private void depositSalvageOrDrop(NetoSailingSalvConfig config) {
@@ -1466,96 +1776,92 @@ public class SalvagingScript {
         }
     }
 
-    private void openCaskets() {
-        while (Rs2Inventory.hasItem("casket")) {
-            int slotsBefore = Rs2Inventory.emptySlotCount();
-            log.info("Opening casket ({} casket(s) remaining)", Rs2Inventory.count("casket"));
-            Rs2Inventory.interact("casket", "Open");
-            sleepUntil(() -> !Rs2Inventory.hasItem("casket") ||
-                    Rs2Inventory.emptySlotCount() != slotsBefore, 5000);
-            if (Rs2Inventory.hasItem("casket") && Rs2Inventory.emptySlotCount() == slotsBefore) {
-                log.warn("Casket open had no effect, stopping casket loop");
-                break;
-            }
-            sleep(300, 600);
-        }
-        log.info("All caskets opened");
-    }
-
     private void alchItems(NetoSailingSalvConfig config) {
-        var alchItems = config.alchItems();
-        if (alchItems == null || alchItems.isBlank()) return;
-
-        var itemNamesToAlch = Arrays.stream(alchItems.split(","))
-                .map(String::trim)
-                .map(String::toLowerCase)
-                .filter(item -> !item.isEmpty())
-                .collect(Collectors.toList());
-
-        AlchOrder order = config.alchOrder();
-
-        if (order == AlchOrder.LIST_ORDER) {
-            for (String itemName : itemNamesToAlch) {
-                while (Rs2Inventory.hasItem(itemName)) {
-                    log.info("Alching (list order): {}", itemName);
-                    Rs2Magic.alch(itemName);
-                    Rs2Player.waitForXpDrop(Skill.MAGIC, 10000, false);
-                }
+        if (!alchingAvailable) {
+            return;
+        }
+        if (!Rs2Magic.canCast(Rs2Spells.HIGH_LEVEL_ALCHEMY)) {
+            disableAlching("High Level Alchemy is not castable; switching to drop fallback.");
+            return;
+        }
+        int minimum = minimumAlchValue(config);
+        while (true) {
+            Rs2ItemModel next = Rs2Inventory.all().stream()
+                    .filter(item -> shouldAlch(item, minimum))
+                    .min(Comparator.comparingInt(Rs2ItemModel::getSlot))
+                    .orElse(null);
+            if (next == null) {
+                return;
             }
-        } else {
-            final int COLUMNS = 4;
-            Comparator<Rs2ItemModel> slotOrder;
-            switch (order) {
-                case RIGHT_TO_LEFT:
-                    slotOrder = Comparator
-                            .comparingInt((Rs2ItemModel i) -> i.getSlot() / COLUMNS)
-                            .thenComparingInt(i -> -(i.getSlot() % COLUMNS));
-                    break;
-                case TOP_TO_BOTTOM:
-                    slotOrder = Comparator
-                            .comparingInt((Rs2ItemModel i) -> i.getSlot() % COLUMNS)
-                            .thenComparingInt(i -> i.getSlot() / COLUMNS);
-                    break;
-                case BOTTOM_TO_TOP:
-                    slotOrder = Comparator
-                            .comparingInt((Rs2ItemModel i) -> i.getSlot() % COLUMNS)
-                            .thenComparingInt(i -> -(i.getSlot() / COLUMNS));
-                    break;
-                default: // LEFT_TO_RIGHT
-                    slotOrder = Comparator.comparingInt(Rs2ItemModel::getSlot);
-                    break;
+            int countBefore = Rs2Inventory.count(next.getId());
+            log.info("Alching slot {}: {} (HA value {})", next.getSlot(), next.getName(), next.getHaPrice());
+            Rs2Magic.alch(next);
+            Rs2Player.waitForXpDrop(Skill.MAGIC, 10000, false);
+            if (Rs2Inventory.count(next.getId()) >= countBefore) {
+                disableAlching("High Level Alchemy failed; switching to drop fallback.");
+                return;
             }
-
-            boolean alched;
-            do {
-                alched = false;
-                List<Rs2ItemModel> candidates = Rs2Inventory.all().stream()
-                        .filter(item -> itemNamesToAlch.stream()
-                                .anyMatch(name -> item.getName().toLowerCase().contains(name)))
-                        .sorted(slotOrder)
-                        .collect(Collectors.toList());
-                if (!candidates.isEmpty()) {
-                    Rs2ItemModel next = candidates.get(0);
-                    log.info("Alching ({}) slot {}: {}", order, next.getSlot(), next.getName());
-                    Rs2Magic.alch(next);
-                    Rs2Player.waitForXpDrop(Skill.MAGIC, 10000, false);
-                    alched = true;
-                }
-            } while (alched);
         }
     }
 
     private void dropJunk(NetoSailingSalvConfig config) {
-        var dropItems = config.dropItems();
-        if (dropItems == null || dropItems.isBlank()) return;
+        int minimum = minimumAlchValue(config);
+        Rs2Inventory.dropAll(item -> shouldDrop(item, minimum));
+    }
 
-        var junkItems = Arrays.stream(dropItems.split(","))
-                .map(String::trim)
-                .filter(item -> !item.isEmpty())
-                .toArray(String[]::new);
+    private void fillContainers() {
+        for (String container : CONTAINERS) {
+            if (Rs2Inventory.hasItem(container)) {
+                Rs2Inventory.interact(container, "Fill");
+                sleep(250, 500);
+            }
+        }
+    }
 
-        if (junkItems.length > 0) {
-            Rs2Inventory.dropAll(junkItems);
+    static int parseMinimumAlchValue(String configured) {
+        try {
+            int value = Integer.parseInt(configured == null ? "" : configured.trim());
+            return value < 0 ? DEFAULT_MINIMUM_ALCH_VALUE : value;
+        } catch (NumberFormatException ignored) {
+            return DEFAULT_MINIMUM_ALCH_VALUE;
+        }
+    }
+
+    private int minimumAlchValue(NetoSailingSalvConfig config) {
+        return parseMinimumAlchValue(config.minimumAlchValue());
+    }
+
+    private boolean shouldAlch(Rs2ItemModel item, int minimum) {
+        return alchingAvailable && item != null && !isProtected(item) && item.isTradeable()
+                && !item.isStackable() && item.getHaPrice() >= minimum;
+    }
+
+    private boolean shouldDrop(Rs2ItemModel item, int minimum) {
+        if (item == null || isProtected(item) || !item.isTradeable()) {
+            return false;
+        }
+        return !alchingAvailable || item.getHaPrice() < minimum;
+    }
+
+    private boolean isProtected(Rs2ItemModel item) {
+        String name = item.getName();
+        if (name == null) {
+            return true;
+        }
+        String lower = name.toLowerCase();
+        return PROTECTED_ITEM_NAMES.contains(lower)
+                || lower.contains("rune pouch")
+                || lower.startsWith("crafting cape")
+                || lower.startsWith("sailors' amulet")
+                || lower.startsWith("skills necklace")
+                || lower.startsWith("ring of dueling")
+                || FIRE_STAVES.stream().anyMatch(staff -> staff.equalsIgnoreCase(name));
+    }
+
+    private void disableAlching(String reason) {
+        if (alchingAvailable) {
+            alchingAvailable = false;
+            Microbot.log(reason);
         }
     }
 }

@@ -5,7 +5,6 @@ import net.runelite.client.config.Config;
 import net.runelite.client.config.ConfigGroup;
 import net.runelite.client.config.ConfigItem;
 import net.runelite.client.config.ConfigSection;
-import net.runelite.client.plugins.microbot.netosailingsalv.AlchOrder;
 import net.runelite.client.plugins.microbot.netosailingsalv.features.trials.data.TrialRanks;
 
 import java.awt.*;
@@ -48,75 +47,15 @@ public interface NetoSailingSalvConfig extends Config {
 	}
 
 	@ConfigItem(
-		keyName = "enableAlching",
-		name = "Enable Alching",
-		description = "Enable high alching items when inventory is full.",
+		keyName = "minimumAlchValue",
+		name = "Min. Alch value",
+		description = "Minimum High Level Alchemy value for automatic alching.",
 		position = 1,
 		section = generalSection
 	)
-	default boolean enableAlching()
+	default String minimumAlchValue()
 	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "alchItems",
-		name = "Alch items",
-		description = "Comma-separated list of items to high alch when salvaging.",
-		position = 1,
-		section = generalSection
-	)
-	default String alchItems()
-	{
-		return "gold ring, sapphire ring, emerald ring, ruby ring, diamond ring, ruby bracelet, emerald bracelet, diamond bracelet, mithril scimitar";
-	}
-
-	@ConfigItem(
-		keyName = "openCaskets",
-		name = "Open Caskets",
-		description = "Automatically open all caskets in your inventory before alching and dropping.",
-		position = 2,
-		section = generalSection
-	)
-	default boolean openCaskets()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "useCargoHold",
-		name = "Use Cargo Hold",
-		description = "When salvaging, open the cargo hold and use Deposit inventory, then read the hold grid for fullness. When the hold is full or nearly full, the script withdraws and processes salvage (alch/drop/caskets) until salvage stacks in the hold reach zero.",
-		position = 3,
-		section = generalSection
-	)
-	default boolean useCargoHold()
-	{
-		return false;
-	}
-
-	@ConfigItem(
-		keyName = "alchOrder",
-		name = "Alch Order",
-		description = "Order in which to high alch items. LIST_ORDER follows your alch list. LEFT_TO_RIGHT sweeps row by row. RIGHT_TO_LEFT sweeps rows right to left. TOP_TO_BOTTOM sweeps column by column. BOTTOM_TO_TOP sweeps columns bottom to top.",
-		position = 4,
-		section = generalSection
-	)
-	default AlchOrder alchOrder()
-	{
-		return AlchOrder.LIST_ORDER;
-	}
-
-	@ConfigItem(
-		keyName = "dropItems",
-		name = "Drop items",
-		description = "Comma-separated list of items to drop when salvaging.",
-		position = 5,
-		section = generalSection
-	)
-	default String dropItems()
-	{
-		return "casket, oyster pearl, oyster pearls, teak logs, steel nails, mithril nails, giant seaweed, mithril cannonball, adamant cannonball, elkhorn frag, plank, oak plank, hemp seed, flax seed, mahogany repair kit, teak repair kit, rum";
+		return "2000";
 	}
 
 	@ConfigItem(

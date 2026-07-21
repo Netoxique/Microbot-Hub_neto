@@ -160,12 +160,16 @@ public class NetoSailingSalvOverlay extends OverlayPanel {
                     .build());
         }
 
-        if (config.enableAlching()) {
-            panelComponent.getChildren().add(LineComponent.builder()
-                    .left("Alching:")
-                    .right("Enabled")
-                    .rightColor(Color.YELLOW)
-                    .build());
-        }
+        panelComponent.getChildren().add(LineComponent.builder()
+                .left("State:")
+                .right(netoSalvagingScript.getState().name())
+                .rightColor(Color.CYAN)
+                .build());
+
+        panelComponent.getChildren().add(LineComponent.builder()
+                .left("Alching:")
+                .right(netoSalvagingScript.isAlchingAvailable() ? "Enabled" : "Fallback drop")
+                .rightColor(netoSalvagingScript.isAlchingAvailable() ? Color.YELLOW : Color.ORANGE)
+                .build());
     }
 }
