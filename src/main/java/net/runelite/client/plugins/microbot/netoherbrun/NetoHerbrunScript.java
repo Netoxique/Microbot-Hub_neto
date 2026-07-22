@@ -179,7 +179,7 @@ public class NetoHerbrunScript extends Script {
                         break;
                     case "Ardougne":
                         if (Rs2Inventory.hasItem("Ardougne cloak 4") || Rs2Equipment.isWearing("Ardougne cloak 4")) {
-                            teleportInteractionSucceeded = interactTeleportItem("Ardougne cloak 4", "Ardougne Farm");
+                            teleportInteractionSucceeded = interactTeleportItem("Ardougne cloak 4", "Farm Teleport");
                         } else {
                             String necklace = findSkillsNecklaceInInventory();
                             if (necklace != null) {
