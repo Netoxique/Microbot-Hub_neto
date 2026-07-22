@@ -506,7 +506,8 @@ public class NetoRCScript extends Script {
     }
 
     private void handlePrep() {
-        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)
+        if (Rs2Player.getRealSkillLevel(Skill.RUNECRAFT) < 99
+                && !Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)
                 && !handleLunarSpellbookSwitch()) {
             return;
         }
