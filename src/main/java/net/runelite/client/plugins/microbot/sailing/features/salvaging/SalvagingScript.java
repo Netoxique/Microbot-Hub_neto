@@ -353,6 +353,11 @@ public class SalvagingScript {
                 cargoHoldProcessing = false;
                 cargoHoldWithdrawFailures = 0;
                 cargoHoldWithdrawNoGainStreak = 0;
+                if (hasSalvageItems()) {
+                    log.info("No salvage left in cargo hold; processing withdrawn salvage at station before resuming");
+                    depositSalvageOrDrop(config);
+                    return true;
+                }
                 log.info("No salvage left in cargo hold, resuming normal salvaging");
                 return false;
             }

@@ -72,6 +72,7 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleep;
+import static net.runelite.client.plugins.microbot.util.Global.sleepGaussian;
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
 import static net.runelite.client.plugins.microbot.util.world.Rs2WorldUtil.isMemberAccount;
 import static net.runelite.client.plugins.microbot.util.world.Rs2WorldUtil.isWorldAccessible;
@@ -102,6 +103,7 @@ public class SalvagingScript {
     private static final int SIZE_SALVAGEABLE_AREA = 15;
     private static final String SALVAGING_WORLD_ACTIVITY = "Salvaging";
     private static final int WORLD_LIST_RETRY_DELAY_MS = 3000;
+    private static final int WORLD_SWITCHER_LOAD_TIMEOUT_MS = 3000;
     private static final int POST_HOP_SCENE_TIMEOUT_MS = 5000;
     private static final int MIN_INVENTORY_FULL = 24;
     private static final int SALVAGE_TIMEOUT = 20000;
@@ -936,6 +938,11 @@ public class SalvagingScript {
                 cargoHoldProcessing = false;
                 cargoHoldWithdrawFailures = 0;
                 cargoHoldWithdrawNoGainStreak = 0;
+                if (hasSalvageItems()) {
+                    log.info("No salvage left in cargo hold; processing withdrawn salvage at station before resuming");
+                    depositSalvageOrDrop(config);
+                    return true;
+                }
                 log.info("No salvage left in cargo hold, resuming normal salvaging");
                 return false;
             }
@@ -1854,6 +1861,11 @@ public class SalvagingScript {
         visitedWorlds.add(targetWorld);
         log.info("Hopping from world {} to world {} (activity: {}, region: {})",
                 currentWorld, targetWorld, target.getActivity(), target.getRegion());
+        if (!prepareWorldSwitcher()) {
+            log.warn("World switcher did not open before hopping to {}; excluding it for this sequence", targetWorld);
+            sleep(WORLD_LIST_RETRY_DELAY_MS);
+            return;
+        }
         if (!Microbot.hopToWorld(targetWorld)) {
             log.warn("World hop to {} failed; excluding it for this sequence", targetWorld);
             sleep(WORLD_LIST_RETRY_DELAY_MS);
@@ -1864,6 +1876,25 @@ public class SalvagingScript {
         if (!sleepUntil(() -> wreckSnapshotGeneration > landedGeneration, POST_HOP_SCENE_TIMEOUT_MS)) {
             log.warn("Timed out waiting for a fresh shipwreck scan after hopping to world {}", targetWorld);
         }
+    }
+
+    /** Mirrors {@code NetoWorldHopManager}: load the switcher buttons before asking Microbot to hop. */
+    private boolean prepareWorldSwitcher() {
+        if (!Microbot.isLoggedIn()) {
+            return false;
+        }
+        if (Rs2Widget.isHidden(69, 18)) {
+            log.info("World switcher interface is closed or not loaded; opening it before hopping");
+            Microbot.getClientThread().runOnClientThreadOptional(() -> {
+                Microbot.getClient().openWorldHopper();
+                return true;
+            });
+            if (!sleepUntil(() -> !Rs2Widget.isHidden(69, 18), WORLD_SWITCHER_LOAD_TIMEOUT_MS)) {
+                return false;
+            }
+        }
+        sleepGaussian(600, 100);
+        return true;
     }
 
     private World selectNextWorld(List<World> worlds) {
@@ -1972,8 +2003,6 @@ public class SalvagingScript {
         fillContainers();
         state = SalvagingState.ALCHING;
         alchItems(config);
-        state = SalvagingState.FILLING;
-        fillContainers();
         state = SalvagingState.DROPPING;
         dropJunk(config);
         state = SalvagingState.SALVAGING;

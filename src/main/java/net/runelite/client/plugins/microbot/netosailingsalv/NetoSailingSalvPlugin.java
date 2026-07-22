@@ -17,7 +17,7 @@ import javax.inject.Inject;
 import java.awt.*;
 
 @PluginDescriptor(
-	name = "Neto Sailing Salv.",
+	name = "Neto Sailing",
 	description = "Microbot Sailing Plugin",
 	tags = {"sailing"},
 	authors = { "neto" },
@@ -31,7 +31,7 @@ import java.awt.*;
 @Slf4j
 public class NetoSailingSalvPlugin extends Plugin {
 
-	static final String version = "2.2.61";
+	static final String version = "2.2.64";
 
     @Inject
     private NetoSailingSalvConfig config;
