@@ -6,6 +6,7 @@ import net.runelite.api.Client;
 import net.runelite.api.Constants;
 import net.runelite.api.DecorativeObject;
 import net.runelite.api.GameObject;
+import net.runelite.api.MenuAction;
 import net.runelite.api.Player;
 import net.runelite.api.Scene;
 import net.runelite.api.Skill;
@@ -24,6 +25,7 @@ import net.runelite.client.plugins.PluginManager;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.api.boat.Rs2BoatCache;
 import net.runelite.client.plugins.microbot.api.player.models.Rs2PlayerModel;
+import net.runelite.client.plugins.microbot.api.npc.models.Rs2NpcModel;
 import net.runelite.client.plugins.microbot.api.tileobject.Rs2TileObjectCache;
 import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectModel;
 import net.runelite.client.plugins.microbot.netosailingsalv.NetoSailingSalvConfig;
@@ -33,30 +35,36 @@ import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2ItemModel;
-import net.runelite.client.plugins.microbot.util.inventory.Rs2RunePouch;
 import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
-import net.runelite.client.plugins.microbot.util.magic.Runes;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
 import net.runelite.client.plugins.microbot.util.magic.Rs2Spells;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.tabs.Rs2Tab;
+import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.walker.Rs2Walker;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 import net.runelite.client.util.Text;
+import net.runelite.http.api.worlds.World;
+import net.runelite.http.api.worlds.WorldRegion;
+import net.runelite.http.api.worlds.WorldResult;
 
 import javax.inject.Inject;
 import javax.inject.Provider;
 import javax.inject.Singleton;
+import java.awt.Rectangle;
 import java.awt.event.KeyEvent;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashSet;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
@@ -65,6 +73,8 @@ import java.util.regex.Pattern;
 
 import static net.runelite.client.plugins.microbot.util.Global.sleep;
 import static net.runelite.client.plugins.microbot.util.Global.sleepUntil;
+import static net.runelite.client.plugins.microbot.util.world.Rs2WorldUtil.isMemberAccount;
+import static net.runelite.client.plugins.microbot.util.world.Rs2WorldUtil.isWorldAccessible;
 
 @Slf4j
 @Singleton
@@ -72,8 +82,10 @@ public class SalvagingScript {
 
     private static final int DEFAULT_MINIMUM_ALCH_VALUE = 2000;
     private static final int PREP_TIMEOUT_MS = 10000;
-    private static final int BOAT_TELEPORT_TIMEOUT_MS = 15000;
+    private static final int TRAVEL_TIMEOUT_MS = 15000;
     private static final int STARTUP_SCENE_GRACE_MS = 2000;
+    private static final WorldPoint ALDARING_DOCK = new WorldPoint(1450, 2968, 0);
+    private static final WorldPoint DEEPFIN_DOCK = new WorldPoint(1932, 2760, 0);
     private static final List<String> CONTAINERS = List.of("Gem sack", "Gem bag", "Herb sack", "Seed box");
     /** Kept in the same priority order as Neto Alching; plugins compile into isolated source sets. */
     private static final List<String> FIRE_STAVES = List.of(
@@ -81,17 +93,16 @@ public class SalvagingScript {
             "Mystic lava staff", "Smoke battlestaff", "Mystic smoke staff", "Steam battlestaff",
             "Mystic steam staff", "Staff of fire");
     private static final Set<String> PROTECTED_ITEM_NAMES = Set.of(
-            "gem sack", "gem bag", "herb sack", "seed box", "coins", "platinum tokens",
-            "rune pouch", "divine rune pouch", "law rune", "mud rune", "nature rune", "earth rune", "water rune");
-    private static final Map<Runes, Integer> BOAT_AND_ALCH_RUNES = Map.of(
-            Runes.LAW, 16000,
-            Runes.MUD, 16000,
-            Runes.NATURE, 16000);
+            "gem sack", "gem bag", "herb sack", "seed box", "coins", "platinum token", "platinum tokens",
+            "nature rune");
 
     /** First decimal number in the occupied widget text (often just {@code X}; still works if the client shows {@code X / N}). */
     private static final Pattern CARGO_HOLD_FIRST_NUMBER = Pattern.compile("(\\d+)");
 
     private static final int SIZE_SALVAGEABLE_AREA = 15;
+    private static final String SALVAGING_WORLD_ACTIVITY = "Salvaging";
+    private static final int WORLD_LIST_RETRY_DELAY_MS = 3000;
+    private static final int POST_HOP_SCENE_TIMEOUT_MS = 5000;
     private static final int MIN_INVENTORY_FULL = 24;
     private static final int SALVAGE_TIMEOUT = 20000;
     private static final int DEPLOY_TIMEOUT = 5000;
@@ -131,9 +142,25 @@ public class SalvagingScript {
     private volatile SalvagingState state = SalvagingState.PREP;
     private boolean alchingAvailable = true;
     private boolean prepComplete;
-    private WorldPoint locationBeforeBoatTeleport;
     private String equippedBankTeleport;
+    private String equippedCape;
+    private String equippedNecklace;
+    private WorldPoint prepTargetDock;
     private long activationStartedAt;
+    private boolean startupContextResolved;
+    private PrepStep prepStep = PrepStep.OPEN_BANK;
+
+    private enum PrepStep {
+        OPEN_BANK,
+        BANK_LOADOUT,
+        TRAVEL_TO_DOCK,
+        WALK_TO_DOCK,
+        RECOVER_BOAT,
+        RECOVER_INTERFACE,
+        BOARD_GANGPLANK,
+        BOARD_INTERFACE,
+        VALIDATE_BOAT
+    }
 
     /**
      * Shipwreck lists rebuilt each {@link GameTick} on the client thread by scanning {@link Client#getTopLevelWorldView()}
@@ -146,6 +173,8 @@ public class SalvagingScript {
     private final Map<String, Rs2TileObjectModel> inactiveWreckByKey = new HashMap<>();
     private volatile List<Rs2TileObjectModel> activeWreckSnapshot = List.of();
     private volatile List<Rs2TileObjectModel> inactiveWreckSnapshot = List.of();
+    private volatile long wreckSnapshotGeneration;
+    private final Set<Integer> visitedWorlds = new HashSet<>();
 
     /** Max cargo slots for this boat tier ({@link CargoHoldObjectIds#ID_TO_CAPACITY}). */
     private int cargoHoldCapacity = -1;
@@ -186,9 +215,15 @@ public class SalvagingScript {
         state = SalvagingState.PREP;
         prepComplete = false;
         alchingAvailable = true;
-        locationBeforeBoatTeleport = null;
         equippedBankTeleport = null;
+        equippedCape = null;
+        equippedNecklace = null;
+        prepTargetDock = null;
         activationStartedAt = System.currentTimeMillis();
+        startupContextResolved = false;
+        prepStep = PrepStep.OPEN_BANK;
+        visitedWorlds.clear();
+        wreckSnapshotGeneration = 0;
         resetCargoHoldState();
     }
 
@@ -207,6 +242,9 @@ public class SalvagingScript {
      * @return true when this script tick is handled (waiting, started salvaging, or stopped the plugin)
      */
     private boolean handleAlreadyOnBoatActivation() {
+        if (startupContextResolved) {
+            return false;
+        }
         boolean stationVisible = findSalvagingStation() != null;
         boolean hookVisible = hasValidSalvagingHook();
         if (stationVisible && hookVisible) {
@@ -222,7 +260,18 @@ public class SalvagingScript {
             log.info("Boat facilities and bank teleport '{}' detected; skipping PREP", carriedTeleport);
             return true;
         }
-        return System.currentTimeMillis() - activationStartedAt < STARTUP_SCENE_GRACE_MS;
+        if (findVisibleShipwright() != null && findVisibleGangplank() != null) {
+            startupContextResolved = true;
+            prepStep = PrepStep.RECOVER_BOAT;
+            Microbot.status = "Salvaging PREP: dock detected";
+            log.info("Visible Shipwright and Gangplank detected; skipping bank and dock travel");
+            return false;
+        }
+        if (System.currentTimeMillis() - activationStartedAt < STARTUP_SCENE_GRACE_MS) {
+            return true;
+        }
+        startupContextResolved = true;
+        return false;
     }
 
     private String findCarriedBankTeleport() {
@@ -245,154 +294,61 @@ public class SalvagingScript {
             return false;
         }
         String lower = name.toLowerCase();
-        return lower.equals("crafting cape")
+        return lower.equals("construction cape")
+                || lower.equals("construction cape(t)")
+                || lower.equals("crafting cape")
                 || lower.equals("crafting cape(t)")
+                || lower.equals("farming cape")
+                || lower.equals("farming cape(t)")
                 || lower.equals("sailors' amulet")
                 || lower.matches("skills necklace\\(\\d+\\)")
                 || lower.matches("ring of dueling\\(\\d+\\)");
     }
 
     private void runPrep() {
-        Microbot.status = "Salvaging PREP: opening closest bank";
-        if (!Rs2Bank.isOpen()) {
-            Rs2Bank.walkToBankAndUseBank();
-            sleepUntil(Rs2Bank::isOpen, PREP_TIMEOUT_MS);
-            return;
-        }
-
-        if (!Rs2Bank.depositAll()) {
-            failPrep("Could not deposit inventory during salvaging preparation.");
-            return;
-        }
-        sleepUntil(Rs2Inventory::isEmpty, PREP_TIMEOUT_MS);
-
-        equippedBankTeleport = equipBestBankTeleport();
-        if (equippedBankTeleport == null) {
-            failPrep("No supported bank teleport was found.");
-            return;
-        }
-
-        String staff = findFirstAvailableItem(FIRE_STAVES);
-        if (staff == null) {
-            disableAlching("No fire staff found; alching is disabled for this activation.");
-        } else if (!Rs2Equipment.isWearing(staff) && !Rs2Bank.withdrawAndEquip(staff)) {
-            disableAlching("Could not equip a fire staff; alching is disabled for this activation.");
-        }
-
-        boolean hasPouch = Rs2Bank.hasRunePouch();
-        if (hasPouch) {
-            if (!Rs2Bank.withdrawRunePouch() || !sleepUntil(Rs2Inventory::hasRunePouch, PREP_TIMEOUT_MS)) {
-                failPrep("Could not withdraw the rune pouch.");
+        switch (prepStep) {
+            case OPEN_BANK:
+                Microbot.status = "Salvaging PREP: opening closest bank";
+                if (!Rs2Bank.isOpen()) {
+                    Rs2Bank.walkToBankAndUseBank();
+                    sleepUntil(Rs2Bank::isOpen, PREP_TIMEOUT_MS);
+                    return;
+                }
+                prepStep = PrepStep.BANK_LOADOUT;
                 return;
-            }
-            if (Rs2Bank.count(ItemID.LAWRUNE) <= 0 || Rs2Bank.count(ItemID.MUDRUNE) <= 0) {
-                failPrep("Law and Mud runes are required to prepare the rune pouch.");
+            case BANK_LOADOUT:
+                prepareBankLoadout();
                 return;
-            }
-            boolean hasNatureRunes = Rs2Bank.count(ItemID.NATURERUNE) > 0;
-            if (!hasNatureRunes) {
-                disableAlching("No Nature runes found; alching is disabled for this activation.");
-            }
-            Map<Runes, Integer> loadout = hasNatureRunes
-                    ? BOAT_AND_ALCH_RUNES
-                    : Map.of(Runes.LAW, 16000, Runes.MUD, 16000);
-            if (!Rs2RunePouch.load(loadout)) {
-                failPrep("Could not fill the rune pouch with the required boat teleport runes.");
+            case TRAVEL_TO_DOCK:
+                state = SalvagingState.TRAVELLING;
+                teleportToDock();
                 return;
-            }
-            Rs2Bank.depositAllExcept("Rune pouch", "Divine rune pouch");
-        } else {
-            if (!withdrawRequiredLooseRune(ItemID.LAWRUNE, "Law rune")
-                    || !withdrawRequiredLooseRune(ItemID.EARTHRUNE, "Earth rune")
-                    || !withdrawRequiredLooseRune(ItemID.WATERRUNE, "Water rune")) {
-                failPrep("Two Law, Earth, and Water runes are required when no rune pouch is available.");
+            case WALK_TO_DOCK:
+                state = SalvagingState.TRAVELLING;
+                walkToDock();
                 return;
-            }
-            if (Rs2Bank.count(ItemID.NATURERUNE) <= 0) {
-                disableAlching("No Nature runes found; alching is disabled for this activation.");
-            } else if (alchingAvailable && !Rs2Bank.withdrawAll(ItemID.NATURERUNE)) {
-                disableAlching("Could not withdraw Nature runes; alching is disabled for this activation.");
-            }
-            Rs2Bank.depositAllExcept("Law rune", "Earth rune", "Water rune", "Nature rune");
-        }
-
-        if (!Rs2Bank.withdrawX(ItemID.COINS, 100000)
-                || !sleepUntil(() -> Rs2Inventory.count(ItemID.COINS) >= 100000, PREP_TIMEOUT_MS)) {
-            failPrep("Could not withdraw 100,000 Coins.");
-            return;
-        }
-
-        for (String container : CONTAINERS) {
-            if (Rs2Bank.hasItem(container) && !Rs2Bank.withdrawOne(container)) {
-                failPrep("Could not withdraw " + container + ".");
+            case RECOVER_BOAT:
+                state = SalvagingState.RECOVERING;
+                recoverBoat();
                 return;
-            }
-        }
-        if (!Rs2Bank.emptyContainers()) {
-            Widget emptyContainers = Rs2Widget.findWidget("Empty containers");
-            if (emptyContainers == null) {
-                failPrep("Could not find the bank Empty containers action.");
+            case RECOVER_INTERFACE:
+                state = SalvagingState.RECOVERING;
+                recoverBoatFromInterface();
                 return;
-            }
-            Rs2Widget.clickWidget(emptyContainers);
+            case BOARD_GANGPLANK:
+                state = SalvagingState.BOARDING;
+                boardGangplank();
+                return;
+            case BOARD_INTERFACE:
+                state = SalvagingState.BOARDING;
+                boardBoatFromInterface();
+                return;
+            case VALIDATE_BOAT:
+                validatePreparedBoat();
+                return;
+            default:
+                failPrep("Unknown salvaging preparation state.");
         }
-
-        Rs2Bank.closeBank();
-        if (!sleepUntil(() -> !Rs2Bank.isOpen(), PREP_TIMEOUT_MS)) {
-            failPrep("Could not close the bank after preparation.");
-            return;
-        }
-
-        locationBeforeBoatTeleport = Rs2Player.getWorldLocation();
-        if (!castTeleportToBoat()) {
-            failPrep("Could not cast Teleport to Boat.");
-            return;
-        }
-        boolean moved = sleepUntil(() -> {
-            WorldPoint now = Rs2Player.getWorldLocation();
-            return now != null && locationBeforeBoatTeleport != null && now.distanceTo(locationBeforeBoatTeleport) > 10;
-        }, BOAT_TELEPORT_TIMEOUT_MS);
-        boolean validBoatSetup = moved && sleepUntil(
-                () -> findSalvagingStation() != null && hasValidSalvagingHook(), BOAT_TELEPORT_TIMEOUT_MS);
-        if (!validBoatSetup) {
-            Microbot.log("Boat setup validation failed; returning to a bank and stopping the plugin.");
-            teleportBackToBank();
-            stopPlugin();
-            return;
-        }
-
-        prepComplete = true;
-        state = SalvagingState.SALVAGING;
-        Microbot.status = "Salvaging prepared";
-    }
-
-    private boolean withdrawRequiredLooseRune(int itemId, String name) {
-        return Rs2Bank.count(itemId) >= 2 && Rs2Bank.withdrawX(itemId, 2)
-                && sleepUntil(() -> Rs2Inventory.count(itemId) >= 2, PREP_TIMEOUT_MS);
-    }
-
-    private String equipBestBankTeleport() {
-        String selected = findFirstAvailableItem(List.of("Crafting cape", "Crafting cape(t)"));
-        if (selected == null) {
-            selected = findFirstAvailableItem(List.of("Sailors' amulet"));
-        }
-        if (selected == null) {
-            selected = findLowestChargeAvailableItem("Skills necklace");
-        }
-        if (selected == null) {
-            selected = findLowestChargeAvailableItem("Ring of dueling");
-        }
-        if (selected == null) {
-            return null;
-        }
-        if (Rs2Equipment.isWearing(selected)) {
-            return selected;
-        }
-        if (!Rs2Bank.withdrawAndEquip(selected)) {
-            return null;
-        }
-        final String equipped = selected;
-        return sleepUntil(() -> Rs2Equipment.isWearing(equipped), PREP_TIMEOUT_MS) ? selected : null;
     }
 
     private String findFirstAvailableItem(List<String> names) {
@@ -424,17 +380,6 @@ public class SalvagingScript {
         return matcher.find() ? Integer.parseInt(matcher.group(1)) : Integer.MAX_VALUE;
     }
 
-    private boolean castTeleportToBoat() {
-        Rs2Tab.switchToMagicTab();
-        sleep(300, 600);
-        Widget spell = Rs2Widget.findWidget("Teleport to Boat");
-        if (spell == null || spell.isHidden()) {
-            return false;
-        }
-        Rs2Widget.clickWidget(spell);
-        return true;
-    }
-
     private boolean hasValidSalvagingHook() {
         Set<String> validHooks = Set.of(
                 "dragon salvaging hook", "rune salvaging hook", "adamant salvaging hook");
@@ -443,37 +388,311 @@ public class SalvagingScript {
                 .nearestOnClientThread() != null;
     }
 
-    private void teleportBackToBank() {
-        if (equippedBankTeleport == null) {
+    private void prepareBankLoadout() {
+        if (!Rs2Bank.isOpen()) {
+            prepStep = PrepStep.OPEN_BANK;
             return;
         }
-        String[][] actions;
-        if (equippedBankTeleport.startsWith("Crafting cape")) {
-            actions = new String[][]{{"Teleport"}, {"Crafting Guild"}};
-        } else if (equippedBankTeleport.startsWith("Sailors' amulet")) {
-            actions = new String[][]{{"Teleport"}};
-        } else if (equippedBankTeleport.startsWith("Skills necklace")) {
-            actions = new String[][]{{"Cooking Guild"}, {"Teleport"}};
-        } else {
-            actions = new String[][]{{"Castle Wars"}, {"Teleport"}};
+        if (!Rs2Bank.depositAll()) {
+            failPrep("Could not deposit inventory during salvaging preparation.");
+            return;
+        }
+        sleepUntil(Rs2Inventory::isEmpty, PREP_TIMEOUT_MS);
+
+        equippedCape = equipFirstAvailable(List.of(
+                "Construction cape", "Construction cape(t)",
+                "Crafting cape", "Crafting cape(t)",
+                "Farming cape", "Farming cape(t)"));
+        equippedNecklace = equipFirstAvailable(List.of("Sailors' amulet"));
+        if (equippedNecklace == null) {
+            equippedNecklace = equipLowestCharge("Skills necklace");
+        }
+        equippedBankTeleport = equippedCape != null ? equippedCape : equippedNecklace;
+        if (equippedBankTeleport == null) {
+            equippedBankTeleport = equipLowestCharge("Ring of dueling");
+        }
+        if (equippedBankTeleport == null) {
+            failPrep("No supported cape, necklace, or Ring of dueling was found.");
+            return;
+        }
+
+        String staff = findFirstAvailableItem(FIRE_STAVES);
+        if (staff == null) {
+            disableAlching("No fire staff found; alching is disabled for this activation.");
+        } else if (!Rs2Equipment.isWearing(staff) && !Rs2Bank.withdrawAndEquip(staff)) {
+            disableAlching("Could not equip a fire staff; alching is disabled for this activation.");
+        }
+
+        if (Rs2Bank.count(ItemID.NATURERUNE) <= 0) {
+            disableAlching("No Nature runes found; alching is disabled for this activation.");
+        } else if (alchingAvailable && !Rs2Bank.withdrawAll(ItemID.NATURERUNE)) {
+            disableAlching("Could not withdraw Nature runes; alching is disabled for this activation.");
+        }
+        Rs2Bank.depositAllExcept("Nature rune");
+
+        if (!Rs2Bank.withdrawX(ItemID.COINS, 100000)
+                || !sleepUntil(() -> Rs2Inventory.count(ItemID.COINS) >= 100000, PREP_TIMEOUT_MS)) {
+            failPrep("Could not withdraw 100,000 Coins.");
+            return;
+        }
+        for (String container : CONTAINERS) {
+            if (Rs2Bank.hasItem(container) && !Rs2Bank.withdrawOne(container)) {
+                failPrep("Could not withdraw " + container + ".");
+                return;
+            }
+        }
+        if (!Rs2Bank.emptyContainers()) {
+            Widget emptyContainers = Rs2Widget.findWidget("Empty containers");
+            if (emptyContainers == null) {
+                failPrep("Could not find the bank Empty containers action.");
+                return;
+            }
+            Rs2Widget.clickWidget(emptyContainers);
+        }
+        Rs2Bank.closeBank();
+        if (!sleepUntil(() -> !Rs2Bank.isOpen(), PREP_TIMEOUT_MS)) {
+            failPrep("Could not close the bank after preparation.");
+            return;
+        }
+        prepStep = PrepStep.TRAVEL_TO_DOCK;
+    }
+
+    private String equipFirstAvailable(List<String> names) {
+        return equipSelectedItem(findFirstAvailableItem(names));
+    }
+
+    private String equipLowestCharge(String baseName) {
+        return equipSelectedItem(findLowestChargeAvailableItem(baseName));
+    }
+
+    private String equipSelectedItem(String selected) {
+        if (selected == null) {
+            return null;
+        }
+        if (!Rs2Equipment.isWearing(selected) && !Rs2Bank.withdrawAndEquip(selected)) {
+            return null;
+        }
+        final String equipped = selected;
+        return sleepUntil(() -> Rs2Equipment.isWearing(equipped), PREP_TIMEOUT_MS) ? selected : null;
+    }
+
+    private void teleportToDock() {
+        int sailingLevel = Rs2Player.getRealSkillLevel(Skill.SAILING);
+        if (sailingLevel < 73) {
+            stopPluginWithChat("Sailing level 73 is required to reach a supported salvaging dock.");
+            return;
         }
         WorldPoint before = Rs2Player.getWorldLocation();
-        for (String[] action : actions) {
-            if (Rs2Equipment.interact(equippedBankTeleport, action[0])) {
-                if (sleepUntil(() -> {
-                    WorldPoint now = Rs2Player.getWorldLocation();
-                    return now != null && before != null && now.distanceTo(before) > 10;
-                }, BOAT_TELEPORT_TIMEOUT_MS)) {
-                    Rs2Bank.walkToBankAndUseBank();
-                    return;
+        boolean invoked;
+        if (sailingLevel >= 87) {
+            prepTargetDock = ALDARING_DOCK;
+            invoked = equippedCape != null && equippedCape.startsWith("Construction cape")
+                    && Rs2Equipment.interact(equippedCape, "Aldaring");
+            if (!invoked) {
+                invoked = useMasteringMixologyMinigameTeleport();
+            }
+        } else {
+            prepTargetDock = DEEPFIN_DOCK;
+            if (equippedNecklace == null || !equippedNecklace.equalsIgnoreCase("Sailors' amulet")) {
+                stopPluginWithChat("A Sailors' amulet is required for the Deepfin Point salvaging route.");
+                return;
+            }
+            invoked = Rs2Equipment.interact(equippedNecklace, "Deepfin Point");
+        }
+        if (!invoked || !waitForMovementFrom(before)) {
+            stopPluginWithChat("Could not teleport to the selected salvaging dock.");
+            return;
+        }
+        prepStep = PrepStep.WALK_TO_DOCK;
+    }
+
+    private boolean useMasteringMixologyMinigameTeleport() {
+        if (!Rs2Tab.switchToGroupingTab()) {
+            return false;
+        }
+        sleep(300, 600);
+        Widget minigameTeleport = Rs2Widget.findWidget("Minigame Teleport");
+        if (minigameTeleport != null) {
+            Rs2Widget.clickWidget(minigameTeleport);
+            sleep(250, 500);
+        }
+        Widget destination = Rs2Widget.findWidget("Mastering Mixology");
+        if (destination == null || destination.isHidden()) {
+            return false;
+        }
+        Rs2Widget.clickWidget(destination);
+        sleep(250, 500);
+        Widget teleport = Rs2Widget.findWidget("Teleport");
+        if (teleport == null || teleport.isHidden()) {
+            return false;
+        }
+        return Rs2Widget.clickWidget(teleport);
+    }
+
+    private boolean waitForMovementFrom(WorldPoint before) {
+        return sleepUntil(() -> {
+            WorldPoint now = Rs2Player.getWorldLocation();
+            return before != null && now != null && now.distanceTo(before) > 10;
+        }, TRAVEL_TIMEOUT_MS);
+    }
+
+    private void walkToDock() {
+        if (prepTargetDock == null) {
+            failPrep("No dock destination was selected.");
+            return;
+        }
+        WorldPoint player = Rs2Player.getWorldLocation();
+        if (player != null && player.distanceTo(prepTargetDock) <= 5) {
+            prepStep = PrepStep.RECOVER_BOAT;
+            return;
+        }
+        Rs2Walker.walkTo(prepTargetDock, 4);
+        sleepUntil(() -> {
+            WorldPoint now = Rs2Player.getWorldLocation();
+            return now != null && now.distanceTo(prepTargetDock) <= 5;
+        }, TRAVEL_TIMEOUT_MS);
+    }
+
+    private Rs2NpcModel findVisibleShipwright() {
+        return Microbot.getRs2NpcCache().query()
+                .where(npc -> npc.getName() != null && npc.getName().toLowerCase().startsWith("shipwright"))
+                .nearestOnClientThread();
+    }
+
+    private Rs2TileObjectModel findVisibleGangplank() {
+        Rs2TileObjectModel gangplank = tileObjectCache.query().fromWorldView()
+                .where(obj -> obj.getName() != null && obj.getName().equalsIgnoreCase("Gangplank"))
+                .nearestOnClientThread();
+        if (gangplank != null) {
+            return gangplank;
+        }
+        return tileObjectCache.query()
+                .where(obj -> obj.getName() != null && obj.getName().equalsIgnoreCase("Gangplank"))
+                .nearestOnClientThread();
+    }
+
+    private void recoverBoat() {
+        if (Rs2Widget.isWidgetVisible(InterfaceID.SailingBoatSelection.UNIVERSE)) {
+            prepStep = PrepStep.RECOVER_INTERFACE;
+            return;
+        }
+        Rs2NpcModel shipwright = findVisibleShipwright();
+        if (shipwright == null) {
+            sleepUntil(() -> findVisibleShipwright() != null, PREP_TIMEOUT_MS);
+            shipwright = findVisibleShipwright();
+        }
+        if (shipwright == null || !shipwright.click("Recover-boat")) {
+            failPrep("Could not find or interact with a Shipwright using Recover-boat.");
+            return;
+        }
+        if (!sleepUntil(() -> Rs2Widget.isWidgetVisible(InterfaceID.SailingBoatSelection.UNIVERSE), PREP_TIMEOUT_MS)) {
+            failPrep("The Recover Boat interface did not open.");
+            return;
+        }
+        prepStep = PrepStep.RECOVER_INTERFACE;
+    }
+
+    private void recoverBoatFromInterface() {
+        if (!invokeFirstBoatSelectionAction("Recover")) {
+            failPrep("Could not click the first Recover button.");
+            return;
+        }
+        sleep(Rs2Random.between(1200, 2400));
+        prepStep = PrepStep.BOARD_GANGPLANK;
+    }
+
+    private void boardGangplank() {
+        Rs2TileObjectModel gangplank = findVisibleGangplank();
+        if (gangplank == null) {
+            sleepUntil(() -> findVisibleGangplank() != null, PREP_TIMEOUT_MS);
+            gangplank = findVisibleGangplank();
+        }
+        if (gangplank == null || !gangplank.click("Board")) {
+            failPrep("Could not find or board the Gangplank.");
+            return;
+        }
+        if (!sleepUntil(() -> Rs2Widget.isWidgetVisible(InterfaceID.SailingBoatSelection.UNIVERSE), PREP_TIMEOUT_MS)) {
+            failPrep("The Board Boat interface did not open.");
+            return;
+        }
+        prepStep = PrepStep.BOARD_INTERFACE;
+    }
+
+    private void boardBoatFromInterface() {
+        if (!invokeFirstBoatSelectionAction("Board")) {
+            failPrep("Could not click the first Board button.");
+            return;
+        }
+        prepStep = PrepStep.VALIDATE_BOAT;
+    }
+
+    private boolean invokeFirstBoatSelectionAction(String action) {
+        AtomicBoolean invoked = new AtomicBoolean(false);
+        Microbot.getClientThread().invoke(() -> {
+            Widget root = Microbot.getClient().getWidget(InterfaceID.SailingBoatSelection.UNIVERSE);
+            Widget target = findFirstWidgetWithAction(root, action);
+            if (target == null) {
+                return;
+            }
+            String targetText = target.getName();
+            if (targetText == null || targetText.isBlank()) {
+                targetText = target.getText();
+            }
+            NewMenuEntry entry = new NewMenuEntry()
+                    .option(action)
+                    .target(targetText == null ? "" : targetText)
+                    .identifier(1)
+                    .type(MenuAction.CC_OP)
+                    .param0(target.getIndex())
+                    .param1(target.getId())
+                    .itemId(-1)
+                    .forceLeftClick(false);
+            Rectangle bounds = target.getBounds() == null ? new Rectangle(1, 1) : target.getBounds();
+            Microbot.doInvoke(entry, bounds);
+            invoked.set(true);
+        });
+        return invoked.get();
+    }
+
+    private static Widget findFirstWidgetWithAction(Widget widget, String action) {
+        if (widget == null || widget.isHidden()) {
+            return null;
+        }
+        String[] actions = widget.getActions();
+        if (actions != null) {
+            for (String candidate : actions) {
+                if (candidate != null && candidate.equalsIgnoreCase(action)) {
+                    return widget;
                 }
             }
         }
+        Widget[] children = widget.getChildren();
+        if (children != null) {
+            for (Widget child : children) {
+                Widget found = findFirstWidgetWithAction(child, action);
+                if (found != null) {
+                    return found;
+                }
+            }
+        }
+        return null;
+    }
+
+    private void validatePreparedBoat() {
+        boolean valid = sleepUntil(
+                () -> findSalvagingStation() != null && hasValidSalvagingHook(), TRAVEL_TIMEOUT_MS);
+        if (!valid) {
+            stopPluginWithChat("Boarded boat does not have a valid Salvaging Station and salvaging hook.");
+            return;
+        }
+        prepComplete = true;
+        state = SalvagingState.SALVAGING;
+        Microbot.status = "Salvaging prepared";
     }
 
     private void failPrep(String reason) {
         Microbot.log(reason);
-        stopPlugin();
+        stopPluginWithChat(reason);
     }
 
     private void stopPluginWithChat(String reason) {
@@ -501,6 +720,7 @@ public class SalvagingScript {
         rebuildShipwreckMapsFromTopLevelScene();
         activeWreckSnapshot = List.copyOf(activeWreckByKey.values());
         inactiveWreckSnapshot = List.copyOf(inactiveWreckByKey.values());
+        wreckSnapshotGeneration++;
     }
 
     /**
@@ -652,13 +872,17 @@ public class SalvagingScript {
                 return;
             }
 
-            var nearbyWreck = findNearestWreck(player.getWorldLocation());
-            if (nearbyWreck == null) {
-                log.info("No shipwreck found nearby");
-                sleep(WAIT_TIME);
+            var nearestWreck = findNearestWreck(player.getWorldLocation());
+            if (nearestWreck == null || !isWithinSalvageArea(player.getWorldLocation(), nearestWreck)) {
+                hopForNearbyWreck(nearestWreck, player.getWorldLocation());
                 return;
             }
 
+            if (!visitedWorlds.isEmpty()) {
+                log.info("Nearby shipwreck found on world {}; clearing {} visited worlds",
+                        Microbot.getClient().getWorld(), visitedWorlds.size());
+                visitedWorlds.clear();
+            }
             deploySalvagingHook(player);
 
         } catch (Exception ex) {
@@ -1578,18 +1802,106 @@ public class SalvagingScript {
 
         if (activeWrecks.isEmpty()) {
             log.info("No active shipwrecks found");
-            sleep(WAIT_TIME);
             return null;
         }
 
         return activeWrecks.stream()
-                .filter(wreck -> isWithinSalvageArea(playerLocation, wreck))
                 .min(Comparator.comparingInt(wreck -> playerLocation.distanceTo(wreck.getWorldLocation())))
                 .orElse(null);
     }
 
     private boolean isWithinSalvageArea(WorldPoint playerLocation, Rs2TileObjectModel wreck) {
-        return playerLocation.distanceTo(wreck.getWorldLocation()) <= SIZE_SALVAGEABLE_AREA;
+        return isWithinSalvageDistance(playerLocation.distanceTo(wreck.getWorldLocation()));
+    }
+
+    static boolean isWithinSalvageDistance(int distance) {
+        return distance <= SIZE_SALVAGEABLE_AREA;
+    }
+
+    private void hopForNearbyWreck(Rs2TileObjectModel nearestWreck, WorldPoint playerLocation) {
+        state = SalvagingState.HOPPING;
+        int currentWorld = Microbot.getClient().getWorld();
+        visitedWorlds.add(currentWorld);
+
+        if (nearestWreck == null) {
+            log.info("No active shipwreck on world {}; finding another world", currentWorld);
+        } else {
+            log.info("Nearest active shipwreck is {} tiles away on world {}; finding another world",
+                    playerLocation.distanceTo(nearestWreck.getWorldLocation()), currentWorld);
+        }
+
+        WorldResult worldResult = Microbot.getWorldService().getWorlds();
+        if (worldResult == null || worldResult.getWorlds() == null) {
+            log.warn("World list is not available; retrying");
+            sleep(WORLD_LIST_RETRY_DELAY_MS);
+            return;
+        }
+
+        World target = selectNextWorld(worldResult.getWorlds());
+        if (target == null) {
+            log.info("All eligible worlds were visited; starting a new world-hopping sequence");
+            visitedWorlds.clear();
+            visitedWorlds.add(currentWorld);
+            target = selectNextWorld(worldResult.getWorlds());
+        }
+        if (target == null) {
+            log.warn("No eligible world is currently available; retrying");
+            sleep(WORLD_LIST_RETRY_DELAY_MS);
+            return;
+        }
+
+        int targetWorld = target.getId();
+        visitedWorlds.add(targetWorld);
+        log.info("Hopping from world {} to world {} (activity: {}, region: {})",
+                currentWorld, targetWorld, target.getActivity(), target.getRegion());
+        if (!Microbot.hopToWorld(targetWorld)) {
+            log.warn("World hop to {} failed; excluding it for this sequence", targetWorld);
+            sleep(WORLD_LIST_RETRY_DELAY_MS);
+            return;
+        }
+
+        long landedGeneration = wreckSnapshotGeneration;
+        if (!sleepUntil(() -> wreckSnapshotGeneration > landedGeneration, POST_HOP_SCENE_TIMEOUT_MS)) {
+            log.warn("Timed out waiting for a fresh shipwreck scan after hopping to world {}", targetWorld);
+        }
+    }
+
+    private World selectNextWorld(List<World> worlds) {
+        boolean memberAccount = isMemberAccount();
+        boolean seasonal = Microbot.getClient().getWorldType().contains(net.runelite.api.WorldType.SEASONAL);
+        List<World> eligible = worlds.stream()
+                .filter(world -> world != null && !visitedWorlds.contains(world.getId()))
+                .filter(world -> isWorldAccessible(world, memberAccount, seasonal))
+                .filter(world -> worldPriority(world) < Integer.MAX_VALUE)
+                .collect(Collectors.toList());
+        if (eligible.isEmpty()) {
+            return null;
+        }
+
+        int bestPriority = eligible.stream().mapToInt(SalvagingScript::worldPriority).min().orElse(Integer.MAX_VALUE);
+        List<World> preferred = eligible.stream()
+                .filter(world -> worldPriority(world) == bestPriority)
+                .collect(Collectors.toList());
+        return preferred.get(ThreadLocalRandom.current().nextInt(preferred.size()));
+    }
+
+    static int worldPriority(World world) {
+        return worldPriority(world.getActivity(), world.getRegion());
+    }
+
+    static int worldPriority(String activity, WorldRegion region) {
+        boolean salvaging = activity != null && SALVAGING_WORLD_ACTIVITY.equalsIgnoreCase(activity.trim());
+        boolean unitedStates = region == WorldRegion.UNITED_STATES_OF_AMERICA;
+        if (salvaging && unitedStates) {
+            return 0;
+        }
+        if (salvaging) {
+            return 1;
+        }
+        if (unitedStates) {
+            return 2;
+        }
+        return Integer.MAX_VALUE;
     }
 
     /**
