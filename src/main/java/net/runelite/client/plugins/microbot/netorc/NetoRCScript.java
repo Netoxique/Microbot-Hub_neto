@@ -391,7 +391,126 @@ public class NetoRCScript extends Script {
                 && Rs2Equipment.isWearing("Boots of the eye", false);
     }
 
+    private boolean handleLunarSpellbookSwitch() {
+        Microbot.status = "Lunar Switch: Walking to bank";
+        if (!Rs2Bank.walkToBankAndUseBank()) {
+            return false;
+        }
+
+        if (!Rs2Inventory.isEmpty()) {
+            Rs2Bank.depositAll();
+            sleepUntil(Rs2Inventory::isEmpty, 5000);
+            if (!Rs2Inventory.isEmpty()) {
+                return false;
+            }
+        }
+
+        if (!Rs2Bank.hasItem("Moonclan teleport")) {
+            Microbot.showMessage("Missing Moonclan teleport in bank.");
+            shutdown();
+            return false;
+        }
+
+        Rs2ItemModel skillsNecklace = Rs2Bank.bankItems().stream()
+                .filter(item -> item.getName().toLowerCase().contains("skills necklace"))
+                .min(Comparator.comparingInt(Rs2ItemModel::getQuantity))
+                .orElse(null);
+
+        if (skillsNecklace == null && !Rs2Bank.hasItem("Varrock teleport")) {
+            Microbot.showMessage("Missing Skills necklace or Varrock teleport in bank.");
+            shutdown();
+            return false;
+        }
+
+        Rs2Bank.withdrawOne("Moonclan teleport");
+        sleepUntil(() -> Rs2Inventory.hasItem("Moonclan teleport"), 3000);
+        if (!Rs2Inventory.hasItem("Moonclan teleport")) {
+            return false;
+        }
+
+        boolean hasSkillsNecklace = false;
+        String necklaceName = "";
+        if (skillsNecklace != null) {
+            necklaceName = skillsNecklace.getName();
+            Rs2Bank.withdrawOne(necklaceName);
+            String finalNecklaceName = necklaceName;
+            sleepUntil(() -> Rs2Inventory.hasItem(finalNecklaceName), 3000);
+            hasSkillsNecklace = Rs2Inventory.hasItem(necklaceName);
+        } else {
+            Rs2Bank.withdrawOne("Varrock teleport");
+            sleepUntil(() -> Rs2Inventory.hasItem("Varrock teleport"), 3000);
+            if (!Rs2Inventory.hasItem("Varrock teleport")) {
+                return false;
+            }
+        }
+
+        Rs2Bank.closeBank();
+        sleepUntil(() -> !Rs2Bank.isOpen(), 3000);
+        if (Rs2Bank.isOpen()) {
+            return false;
+        }
+
+        WorldPoint initialLocation = Rs2Player.getWorldLocation();
+        Microbot.status = "Lunar Switch: Teleporting to Moonclan";
+        if (!Rs2Inventory.interact("Moonclan teleport", "Break")) {
+            return false;
+        }
+        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(initialLocation) > 50, 8000);
+        sleep(2000, 3000);
+
+        WorldPoint altarTile = new WorldPoint(2156, 3865, 0);
+        Microbot.status = "Lunar Switch: Walking to Altar";
+        if (!Rs2Walker.walkTo(altarTile, 2)
+                && Rs2Player.getWorldLocation().distanceTo(altarTile) > 6) {
+            return false;
+        }
+
+        Microbot.status = "Lunar Switch: Praying at Altar";
+        if (!Rs2GameObject.interact(34771, "Pray")) {
+            return false;
+        }
+        sleepUntil(() -> Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR), 5000);
+        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)) {
+            Microbot.log("Failed to confirm player is on Lunar Spellbook.");
+            return false;
+        }
+
+        if (hasSkillsNecklace) {
+            Microbot.status = "Lunar Switch: Teleporting to Farming Guild";
+            String finalNecklaceName = necklaceName;
+            if (!Rs2Inventory.interact(finalNecklaceName, "Farming Guild")
+                    && Rs2Inventory.interact(finalNecklaceName, "Rub")) {
+                sleepUntil(() -> Rs2Dialogue.hasDialogueOption("Farming Guild"), 3000);
+                Rs2Dialogue.clickOption("Farming Guild");
+            }
+        } else {
+            Microbot.status = "Lunar Switch: Teleporting to Varrock";
+            if (!Rs2Inventory.interact("Varrock teleport", "Break")) {
+                return false;
+            }
+        }
+
+        sleepUntil(() -> Rs2Player.getWorldLocation().distanceTo(altarTile) > 50, 8000);
+        sleep(2000, 3000);
+
+        Microbot.status = "Lunar Switch: Walking to bank";
+        if (hasSkillsNecklace) {
+            if (!Rs2Bank.openBank() && !Rs2Bank.walkToBankAndUseBank()) {
+                return false;
+            }
+        } else if (!Rs2Bank.walkToBankAndUseBank()) {
+            return false;
+        }
+
+        return true;
+    }
+
     private void handlePrep() {
+        if (!Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)
+                && !handleLunarSpellbookSwitch()) {
+            return;
+        }
+
         if (!Rs2Bank.isOpen()) {
             Rs2Bank.walkToBankAndUseBank();
             sleepUntil(Rs2Bank::isOpen, 5000);
@@ -628,14 +747,6 @@ public class NetoRCScript extends Script {
                 if (!super.run()) return;
                 if (!isCurrentRun(runId)) return;
                 
-                if (Rs2Player.getRealSkillLevel(Skill.RUNECRAFT) < 99
-                        && !Rs2Magic.isSpellbook(Rs2Spellbook.LUNAR)
-                        && !plugin.hasRunecraftCape()) {
-                    Microbot.showMessage("Please switch to the Lunar spellbook before starting Neto RC.");
-                    Microbot.stopPlugin(plugin);
-                    return;
-                }
-
                 long startTime = System.currentTimeMillis();
 
                 if (lumbyElite == -1) {

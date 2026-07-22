@@ -20,8 +20,6 @@ import net.runelite.client.plugins.microbot.breakhandler.BreakHandlerPlugin;
 import net.runelite.client.plugins.microbot.util.equipment.Rs2Equipment;
 import net.runelite.client.plugins.microbot.util.gameobject.Rs2GameObject;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
-import net.runelite.client.plugins.microbot.util.magic.Rs2Magic;
-import net.runelite.client.plugins.microbot.util.magic.Rs2Spellbook;
 import net.runelite.client.ui.overlay.OverlayManager;
 
 import javax.inject.Inject;
@@ -72,7 +70,7 @@ public class NetoRCPlugin extends Plugin {
     @Getter
     private WorldPoint myWorldPoint;
     @Getter
-    public static final String version = "1.4.16";
+    public static final String version = "1.4.17";
 
     @Subscribe
     public void onGameObjectSpawned(GameObjectSpawned event) {
