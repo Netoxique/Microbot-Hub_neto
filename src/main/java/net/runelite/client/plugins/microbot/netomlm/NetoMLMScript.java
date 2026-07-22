@@ -194,7 +194,7 @@ public class NetoMLMScript extends Script
     {
         log.info("Starting Neto MLM script");
         initialize();
-        mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(this::executeTaskSafely, 0, 600, TimeUnit.MILLISECONDS);
+        mainScheduledFuture = scheduledExecutorService.scheduleWithFixedDelay(this::executeTaskSafely, 0, 100, TimeUnit.MILLISECONDS);
         return true;
     }
 
@@ -1081,7 +1081,7 @@ public class NetoMLMScript extends Script
 				Rs2DepositBox.depositAll();
 			} else {
 				Rs2DepositBox.depositAllExcept(getItemsToKeep(), true);
-				Rs2Inventory.waitForInventoryChanges(5000);
+				sleepGaussian(700, 50);
 			}
 
 			Rectangle gameObjectBounds = getMotherloadSackBounds();
