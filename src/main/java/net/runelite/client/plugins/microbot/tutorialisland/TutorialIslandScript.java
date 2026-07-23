@@ -633,7 +633,8 @@ public class TutorialIslandScript extends Script {
         var npc = Microbot.getRs2NpcCache().query().withId(NpcID.COMBAT_INSTRUCTOR).nearest();
 
         if (Microbot.getVarbitPlayerValue(281) <= 370) {
-            walkUntilWithin(new WorldPoint(Rs2Random.between(3106, 3108), Rs2Random.between(9508, 9510), 0));
+            Rs2Walker.walkTo(new WorldPoint(Rs2Random.between(3106, 3108), Rs2Random.between(9508, 9510), 0));
+            Rs2Player.waitForWalking();
             walkAndTalk(npc);
         } else if (Microbot.getVarbitPlayerValue(281) <= 410) {
             if (isInDialogue()) {
