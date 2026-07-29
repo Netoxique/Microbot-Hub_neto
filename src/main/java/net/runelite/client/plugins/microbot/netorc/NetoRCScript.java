@@ -42,6 +42,7 @@ import net.runelite.client.plugins.microbot.api.tileobject.models.Rs2TileObjectM
 import net.runelite.client.plugins.microbot.api.tileobject.models.TileObjectType;
 import java.awt.Rectangle;
 import net.runelite.api.widgets.ComponentID;
+import net.runelite.api.gameval.InterfaceID;
 import net.runelite.api.gameval.VarbitID;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
 import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
@@ -56,6 +57,12 @@ import java.util.*;
 import java.util.concurrent.TimeUnit;
 
 public class NetoRCScript extends Script {
+    private static final String POH_FAIRY_RING_NAME = "Fairy ring";
+    private static final String POH_SPIRITUAL_FAIRY_TREE_NAME = "Spiritual Fairy Tree";
+    private static final String DLS_LAST_DESTINATION = "Last-destination (DLS)";
+    private static final String DLS_RING_LAST_DESTINATION = "Ring-last-destination (DLS)";
+    private static final int FAIRY_RING_DLS_DIAL_VALUE = 1;
+
     private final NetoRCPlugin plugin;
     public static State state = State.BANKING;
 
@@ -392,6 +399,10 @@ public class NetoRCScript extends Script {
     }
 
     private boolean handleLunarSpellbookSwitch() {
+        if (Rs2Player.getRealSkillLevel(Skill.RUNECRAFT) >= 99) {
+            return true;
+        }
+
         Microbot.status = "Lunar Switch: Walking to bank";
         if (!Rs2Bank.walkToBankAndUseBank()) {
             return false;
@@ -652,12 +663,13 @@ public class NetoRCScript extends Script {
 
                 if (!hasPohTeleport) {
                     if (Rs2Bank.hasItem(Teleports.CONSTRUCTION_CAPE.getItemIds())) {
+                        int constructionCapeId = getLeastChargedTeleportId(Teleports.CONSTRUCTION_CAPE);
                         if (runecraftLevel >= 99) {
-                            Rs2Bank.withdrawItem(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                            Rs2Bank.withdrawItem(constructionCapeId);
                             sleepUntil(Teleports.CONSTRUCTION_CAPE::isInInventory);
                             sleepGaussian(600, 200);
                         } else {
-                            Rs2Bank.withdrawAndEquip(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                            Rs2Bank.withdrawAndEquip(constructionCapeId);
                             sleepUntil(Teleports.CONSTRUCTION_CAPE::isWearing);
                             sleepGaussian(600, 200);
                         }
@@ -1061,11 +1073,12 @@ public class NetoRCScript extends Script {
         }
 
         if (Rs2Bank.hasItem(Teleports.CONSTRUCTION_CAPE.getItemIds())) {
+            int constructionCapeId = getLeastChargedTeleportId(Teleports.CONSTRUCTION_CAPE);
             if (runecraftLevel >= 99) {
-                Rs2Bank.withdrawItem(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                Rs2Bank.withdrawItem(constructionCapeId);
                 sleepUntil(Teleports.CONSTRUCTION_CAPE::isInInventory);
             } else {
-                Rs2Bank.withdrawAndEquip(Teleports.CONSTRUCTION_CAPE.firstItemId());
+                Rs2Bank.withdrawAndEquip(constructionCapeId);
                 sleepUntil(Teleports.CONSTRUCTION_CAPE::isWearing);
             }
         } else if (runecraftLevel >= 99 && Rs2Bank.hasRunePouch()) {
@@ -1346,29 +1359,261 @@ public class NetoRCScript extends Script {
     }
 
     private void handlePohFairyRing() {
-
-        // Wait for Fairy Ring / Tree with ring
-        sleepUntil(() ->
-            findObject(ObjectID.POH_FAIRY_RING) != null ||
-            new Rs2TileObjectQueryable().withNameContains("spirit").first() != null, 10000);
-
-        if (findObject(ObjectID.POH_FAIRY_RING) != null) {
-            interactObject(ObjectID.POH_FAIRY_RING, "Last-destination");
-            Microbot.log("Using fairy ring");
+        Rs2TileObjectModel[] fairyRingHolder = new Rs2TileObjectModel[1];
+        if (!sleepUntil(() -> {
+            fairyRingHolder[0] = findPohFairyRing();
+            return fairyRingHolder[0] != null;
+        }, 10000)) {
+            Microbot.log("Unable to find a Fairy ring or Spiritual Fairy Tree in the POH.");
+            setState(State.BANKING);
+            return;
         }
-        else {
-            var pohTreeRing = new Rs2TileObjectQueryable().withNameContains("spirit").first();
-            if (pohTreeRing != null) {
-                interactObject(pohTreeRing.getId(), "Last-destination");
-                Microbot.log("Using fairy tree");
-                Rs2Player.waitForAnimation();
-            }
-            else {
-                Microbot.log("Unable to find fairy ring, resetting to banking for a retry");
+
+        Rs2TileObjectModel fairyRing = fairyRingHolder[0];
+
+        ObjectActionMatch lastDestinationAction = findObjectAction(
+                fairyRing,
+                DLS_RING_LAST_DESTINATION,
+                DLS_LAST_DESTINATION);
+
+        if (lastDestinationAction != null) {
+            Microbot.log("Using " + getActiveObjectName(fairyRing)
+                    + " action: " + lastDestinationAction.action);
+            if (!interactObject(fairyRing, lastDestinationAction)) {
+                Microbot.log("Failed to interact with the POH fairy ring's DLS option.");
                 setState(State.BANKING);
+                return;
+            }
+        } else if (!configureFairyRingForDls(fairyRing)) {
+            Microbot.log("Failed to configure the POH fairy ring for DLS.");
+            setState(State.BANKING);
+            return;
+        }
+
+        if (waitForDlsTeleport()) {
+            Microbot.log("Travelled to DLS using " + getActiveObjectName(fairyRing) + ".");
+            setState(State.WALKING_TO);
+        } else {
+            Microbot.log("POH fairy ring interaction did not reach DLS; resetting to banking.");
+            setState(State.BANKING);
+        }
+    }
+
+    private boolean interactObject(Rs2TileObjectModel obj, ObjectActionMatch actionMatch) {
+        if (obj == null || actionMatch == null) {
+            return false;
+        }
+
+        TileObject tileObject = getUnderlyingTileObject(obj);
+        if (tileObject == null || actionMatch.optionIndex < 0 || actionMatch.optionIndex > 4) {
+            return false;
+        }
+
+        if (!Rs2Camera.isTileOnScreen(obj.getLocalLocation())) {
+            Rs2Camera.turnTo(tileObject);
+        }
+
+        int param0;
+        int param1;
+        if (obj.getTileObjectType() == TileObjectType.GAME) {
+            GameObject gameObj = (GameObject) tileObject;
+            param0 = gameObj.getLocalLocation().getSceneX()
+                    - (gameObj.sizeX() > 1 ? gameObj.sizeX() / 2 : 0);
+            param1 = gameObj.getLocalLocation().getSceneY()
+                    - (gameObj.sizeY() > 1 ? gameObj.sizeY() / 2 : 0);
+        } else {
+            param0 = obj.getLocalLocation().getSceneX();
+            param1 = obj.getLocalLocation().getSceneY();
+        }
+
+        MenuAction menuAction;
+        switch (actionMatch.optionIndex) {
+            case 0:
+                menuAction = MenuAction.GAME_OBJECT_FIRST_OPTION;
+                break;
+            case 1:
+                menuAction = MenuAction.GAME_OBJECT_SECOND_OPTION;
+                break;
+            case 2:
+                menuAction = MenuAction.GAME_OBJECT_THIRD_OPTION;
+                break;
+            case 3:
+                menuAction = MenuAction.GAME_OBJECT_FOURTH_OPTION;
+                break;
+            case 4:
+                menuAction = MenuAction.GAME_OBJECT_FIFTH_OPTION;
+                break;
+            default:
+                return false;
+        }
+
+        String objectName = getActiveObjectName(obj);
+        NewMenuEntry entry = new NewMenuEntry()
+                .param0(param0)
+                .param1(param1)
+                .opcode(menuAction.getId())
+                .identifier(obj.getId())
+                .itemId(-1)
+                .option(actionMatch.action)
+                .target(objectName)
+                .setWorldViewId(obj.getWorldView().getId())
+                .gameObject(tileObject);
+
+        Microbot.status = actionMatch.action + " " + objectName;
+        Microbot.doInvoke(entry, Rs2UiHelper.getObjectClickbox(tileObject));
+        if (!Microbot.getClient().isClientThread()) {
+            sleep(Rs2Random.logNormalBounded(50, 100));
+        }
+        return true;
+    }
+
+    private String getActiveObjectName(Rs2TileObjectModel object) {
+        return clientThread.invoke(() -> {
+            ObjectComposition composition = getActiveObjectComposition(object.getId());
+            return composition == null ? "" : Rs2UiHelper.stripColTags(composition.getName());
+        });
+    }
+
+    private ObjectComposition getActiveObjectComposition(int objectId) {
+        ObjectComposition composition = client.getObjectDefinition(objectId);
+        if (composition != null && composition.getImpostorIds() != null) {
+            composition = composition.getImpostor();
+        }
+        return composition;
+    }
+
+    private static final class ObjectActionMatch {
+        private final String action;
+        private final int optionIndex;
+
+        private ObjectActionMatch(String action, int optionIndex) {
+            this.action = action;
+            this.optionIndex = optionIndex;
+        }
+    }
+
+    private Rs2TileObjectModel findPohFairyRing() {
+        return clientThread.invoke(() -> {
+            Player player = client.getLocalPlayer();
+            if (player == null || player.getWorldView() == null) {
+                return null;
+            }
+
+            WorldPoint playerLocation = player.getWorldLocation();
+            int worldViewId = player.getWorldView().getId();
+            Rs2TileObjectModel nearest = null;
+            int nearestDistance = Integer.MAX_VALUE;
+
+            Iterator<Rs2TileObjectModel> objects = Microbot.getRs2TileObjectCache().getStream().iterator();
+            while (objects.hasNext()) {
+                Rs2TileObjectModel object = objects.next();
+                if (object.getWorldView() == null || object.getWorldView().getId() != worldViewId) {
+                    continue;
+                }
+
+                ObjectComposition composition = getActiveObjectComposition(object.getId());
+                if (composition == null) {
+                    continue;
+                }
+
+                String name = Rs2UiHelper.stripColTags(composition.getName());
+                if (!POH_FAIRY_RING_NAME.equalsIgnoreCase(name)
+                        && !POH_SPIRITUAL_FAIRY_TREE_NAME.equalsIgnoreCase(name)) {
+                    continue;
+                }
+
+                int distance = object.getWorldLocation().distanceTo(playerLocation);
+                if (distance < nearestDistance) {
+                    nearest = object;
+                    nearestDistance = distance;
+                }
+            }
+            return nearest;
+        });
+    }
+
+    private ObjectActionMatch findObjectAction(Rs2TileObjectModel object, String... expectedActions) {
+        TileObject tileObject = getUnderlyingTileObject(object);
+        if (tileObject == null) {
+            return null;
+        }
+
+        return clientThread.invoke(() -> {
+            ObjectComposition composition = getActiveObjectComposition(object.getId());
+            String[] compositionActions = composition == null ? null : composition.getActions();
+
+            for (String expectedAction : expectedActions) {
+                for (int optionIndex = 0; optionIndex < 5; optionIndex++) {
+                    String action = tileObject.getOpOverride(optionIndex);
+                    if (action == null
+                            && compositionActions != null
+                            && optionIndex < compositionActions.length) {
+                        action = compositionActions[optionIndex];
+                    }
+
+                    if (action != null
+                            && tileObject.isOpShown(optionIndex)
+                            && expectedAction.equalsIgnoreCase(Rs2UiHelper.stripColTags(action))) {
+                        return new ObjectActionMatch(Rs2UiHelper.stripColTags(action), optionIndex);
+                    }
+                }
+            }
+            return null;
+        });
+    }
+
+    private boolean configureFairyRingForDls(Rs2TileObjectModel fairyRing) {
+        ObjectActionMatch configureAction = findObjectAction(
+                fairyRing,
+                "Ring-configure",
+                "Ring",
+                "Configure");
+        if (configureAction == null) {
+            Microbot.log("No Ring-configure, Ring, or Configure action found on "
+                    + getActiveObjectName(fairyRing) + ".");
+            return false;
+        }
+
+        Microbot.log("DLS is not a context option; opening the fairy ring interface.");
+        if (!interactObject(fairyRing, configureAction)
+                || !sleepUntil(() -> Rs2Widget.isWidgetVisible(InterfaceID.Fairyrings.CONFIRM), 5000)) {
+            return false;
+        }
+
+        if (!setFairyRingDial(VarbitID.FAIRYRING_1, InterfaceID.Fairyrings._1_CLOCKWISE)
+                || !setFairyRingDial(VarbitID.FAIRYRING_2, InterfaceID.Fairyrings._2_CLOCKWISE)
+                || !setFairyRingDial(VarbitID.FAIRYRING_3, InterfaceID.Fairyrings._3_CLOCKWISE)) {
+            return false;
+        }
+
+        Microbot.log("Fairy ring code set to DLS; confirming travel.");
+        return Rs2Widget.clickWidget(InterfaceID.Fairyrings.CONFIRM);
+    }
+
+    private boolean setFairyRingDial(int varbitId, int clockwiseWidgetId) {
+        for (int attempts = 0; attempts < 4; attempts++) {
+            int currentValue = getVarbitValue(varbitId);
+            if (currentValue == FAIRY_RING_DLS_DIAL_VALUE) {
+                return true;
+            }
+
+            if (!Rs2Widget.clickWidget(clockwiseWidgetId)
+                    || !sleepUntil(() -> getVarbitValue(varbitId) != currentValue, 2000)) {
+                return false;
             }
         }
-        setState(State.WALKING_TO);
+        return getVarbitValue(varbitId) == FAIRY_RING_DLS_DIAL_VALUE;
+    }
+
+    private int getVarbitValue(int varbitId) {
+        return clientThread.invoke(() -> client.getVarbitValue(varbitId));
+    }
+
+    private boolean waitForDlsTeleport() {
+        return sleepUntil(() -> {
+            WorldPoint location = Rs2Player.getWorldLocation();
+            return location != null && location.distanceTo(NetoRcConstants.CAVE_FAIRY_RING) <= 10;
+        }, 10000);
     }
 
 
