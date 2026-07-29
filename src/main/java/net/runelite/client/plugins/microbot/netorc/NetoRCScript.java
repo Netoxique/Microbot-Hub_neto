@@ -59,6 +59,8 @@ import java.util.concurrent.TimeUnit;
 public class NetoRCScript extends Script {
     private static final String POH_FAIRY_RING_NAME = "Fairy ring";
     private static final String POH_SPIRITUAL_FAIRY_TREE_NAME = "Spiritual Fairy Tree";
+    private static final String LAST_DESTINATION = "Last-destination";
+    private static final String RING_LAST_DESTINATION = "Ring-last-destination";
     private static final String DLS_LAST_DESTINATION = "Last-destination (DLS)";
     private static final String DLS_RING_LAST_DESTINATION = "Ring-last-destination (DLS)";
     private static final int FAIRY_RING_DLS_DIAL_VALUE = 1;
@@ -71,6 +73,7 @@ public class NetoRCScript extends Script {
 
 	private volatile boolean forceDrinkAtFerox = false;
     private volatile boolean forceBankOnStart = true;
+    private volatile boolean pohFairyRingDlsInitialized = false;
     private volatile int activeRunId = 0;
     private WrathStep wrathStep = WrathStep.MYTH_CAPE;
     private BloodStep bloodStep = BloodStep.CAVE_1;
@@ -847,6 +850,7 @@ public class NetoRCScript extends Script {
         lumbyElite = -1;
         forceDrinkAtFerox = false;
         forceBankOnStart = true;
+        pohFairyRingDlsInitialized = false;
         wrathStep = WrathStep.MYTH_CAPE;
         bloodStep = BloodStep.CAVE_1;
         breakManager.configure(config, "Neto RC");
@@ -1370,27 +1374,41 @@ public class NetoRCScript extends Script {
         }
 
         Rs2TileObjectModel fairyRing = fairyRingHolder[0];
+        boolean configuredManually = !pohFairyRingDlsInitialized;
 
-        ObjectActionMatch lastDestinationAction = findObjectAction(
-                fairyRing,
-                DLS_RING_LAST_DESTINATION,
-                DLS_LAST_DESTINATION);
-
-        if (lastDestinationAction != null) {
-            Microbot.log("Using " + getActiveObjectName(fairyRing)
-                    + " action: " + lastDestinationAction.action);
-            if (!interactObject(fairyRing, lastDestinationAction)) {
-                Microbot.log("Failed to interact with the POH fairy ring's DLS option.");
+        if (configuredManually) {
+            Microbot.log("First POH fairy ring use this activation; manually configuring DLS.");
+            if (!configureFairyRingForDls(fairyRing)) {
+                Microbot.log("Failed to configure the POH fairy ring for DLS.");
                 setState(State.BANKING);
                 return;
             }
-        } else if (!configureFairyRingForDls(fairyRing)) {
-            Microbot.log("Failed to configure the POH fairy ring for DLS.");
-            setState(State.BANKING);
-            return;
+        } else {
+            ObjectActionMatch lastDestinationAction = findLastDestinationAction(fairyRing);
+            if (lastDestinationAction == null) {
+                logObjectActionSlots(fairyRing);
+                Microbot.log("The POH fairy ring's last-destination context option was not found; manually configuring DLS.");
+                if (!configureFairyRingForDls(fairyRing)) {
+                    Microbot.log("Failed to configure the POH fairy ring for DLS.");
+                    setState(State.BANKING);
+                    return;
+                }
+                configuredManually = true;
+            } else {
+                Microbot.log("Using " + getActiveObjectName(fairyRing)
+                        + " action: " + lastDestinationAction.action);
+                if (!interactObject(fairyRing, lastDestinationAction)) {
+                    Microbot.log("Failed to interact with the POH fairy ring's DLS option.");
+                    setState(State.BANKING);
+                    return;
+                }
+            }
         }
 
         if (waitForDlsTeleport()) {
+            if (configuredManually) {
+                pohFairyRingDlsInitialized = true;
+            }
             Microbot.log("Travelled to DLS using " + getActiveObjectName(fairyRing) + ".");
             setState(State.WALKING_TO);
         } else {
@@ -1532,6 +1550,21 @@ public class NetoRCScript extends Script {
         });
     }
 
+    private ObjectActionMatch findLastDestinationAction(Rs2TileObjectModel fairyRing) {
+        String objectName = getActiveObjectName(fairyRing);
+        if (POH_SPIRITUAL_FAIRY_TREE_NAME.equalsIgnoreCase(objectName)) {
+            return findObjectAction(
+                    fairyRing,
+                    RING_LAST_DESTINATION,
+                    DLS_RING_LAST_DESTINATION);
+        }
+
+        return findObjectAction(
+                fairyRing,
+                LAST_DESTINATION,
+                DLS_LAST_DESTINATION);
+    }
+
     private ObjectActionMatch findObjectAction(Rs2TileObjectModel object, String... expectedActions) {
         TileObject tileObject = getUnderlyingTileObject(object);
         if (tileObject == null) {
@@ -1560,6 +1593,50 @@ public class NetoRCScript extends Script {
             }
             return null;
         });
+    }
+
+    private void logObjectActionSlots(Rs2TileObjectModel object) {
+        TileObject tileObject = getUnderlyingTileObject(object);
+        if (tileObject == null) {
+            Microbot.log("POH fairy ring action diagnostics unavailable: underlying tile object was not found.");
+            return;
+        }
+
+        List<String> diagnostics = clientThread.invoke(() -> {
+            ObjectComposition composition = getActiveObjectComposition(object.getId());
+            String objectName = composition == null
+                    ? ""
+                    : Rs2UiHelper.stripColTags(composition.getName());
+            String[] compositionActions = composition == null ? null : composition.getActions();
+            List<String> lines = new ArrayList<>();
+            lines.add("POH fairy ring action diagnostics: objectId=" + object.getId()
+                    + ", name=\"" + objectName + "\".");
+
+            for (int optionIndex = 0; optionIndex < 5; optionIndex++) {
+                String overrideAction = tileObject.getOpOverride(optionIndex);
+                String compositionAction = compositionActions != null
+                        && optionIndex < compositionActions.length
+                        ? compositionActions[optionIndex]
+                        : null;
+                String effectiveAction = overrideAction != null ? overrideAction : compositionAction;
+
+                lines.add("POH fairy ring slot " + (optionIndex + 1)
+                        + ": shown=" + tileObject.isOpShown(optionIndex)
+                        + ", override=" + formatActionForLog(overrideAction)
+                        + ", composition=" + formatActionForLog(compositionAction)
+                        + ", effective=" + formatActionForLog(effectiveAction));
+            }
+            return lines;
+        });
+
+        diagnostics.forEach(Microbot::log);
+    }
+
+    private String formatActionForLog(String action) {
+        if (action == null) {
+            return "<null>";
+        }
+        return "\"" + Rs2UiHelper.stripColTags(action) + "\"";
     }
 
     private boolean configureFairyRingForDls(Rs2TileObjectModel fairyRing) {
