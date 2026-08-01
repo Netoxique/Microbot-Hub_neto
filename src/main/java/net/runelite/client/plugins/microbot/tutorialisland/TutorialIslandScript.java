@@ -364,21 +364,27 @@ public class TutorialIslandScript extends Script {
     }
 
     private boolean walkAndAttackRat() {
-        // The rat pit gate (id 9719) blocks both Rs2Walker and native pathfinder.
-        // Explicitly open it if we're standing adjacent; after passing through, attack directly.
-        WorldPoint playerLoc = Rs2Player.getWorldLocation();
-        if (playerLoc != null && playerLoc.getX() == 3111 && playerLoc.getY() >= 9516 && playerLoc.getY() <= 9519) {
-            if (Microbot.getRs2TileObjectCache().query().withId(9719).interact("Open")) {
-                sleepUntil(() -> {
-                    WorldPoint p = Rs2Player.getWorldLocation();
-                    return p != null && p.getY() < 9516;
-                }, 3000);
-                return false;
-            }
-        }
         Rs2NpcModel rat = Microbot.getRs2NpcCache().query().withName("Giant rat").nearest();
         if (rat == null || rat.getWorldLocation() == null) return false;
-        if (!Rs2Walker.canReach(rat.getWorldLocation())) return false;
+
+        if (!Rs2Walker.canReach(rat.getWorldLocation())) {
+            var gate = Microbot.getRs2TileObjectCache().query().withId(9719).nearest();
+            if (gate == null || gate.getWorldLocation() == null) return false;
+
+            WorldPoint playerLoc = Rs2Player.getWorldLocation();
+            if (playerLoc == null) return false;
+            if (playerLoc.distanceTo(gate.getWorldLocation()) > 1) {
+                Rs2Walker.walkTo(gate.getWorldLocation(), 1);
+                Rs2Player.waitForWalking();
+                return false;
+            }
+
+            if (gate.click("Open")) {
+                sleepUntil(() -> Rs2Walker.canReach(rat.getWorldLocation()), 3000);
+            }
+            return false;
+        }
+
         return rat.click("Attack");
     }
 
