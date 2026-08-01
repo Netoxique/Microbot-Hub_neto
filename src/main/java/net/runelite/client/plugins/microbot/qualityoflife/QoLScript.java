@@ -1,20 +1,28 @@
 package net.runelite.client.plugins.microbot.qualityoflife;
 
 import lombok.extern.slf4j.Slf4j;
+import net.runelite.api.MenuAction;
 import net.runelite.api.Player;
+import net.runelite.api.widgets.Widget;
+import net.runelite.api.widgets.ComponentID;
 import net.runelite.client.plugins.microbot.Microbot;
 import net.runelite.client.plugins.microbot.Script;
+import net.runelite.client.plugins.microbot.questhelper.QuestHelperConfig;
 import net.runelite.client.plugins.microbot.util.Rs2InventorySetup;
 import net.runelite.client.plugins.microbot.util.bank.Rs2Bank;
 import net.runelite.client.plugins.microbot.util.dialogues.Rs2Dialogue;
 import net.runelite.client.plugins.microbot.util.inventory.Rs2Inventory;
+import net.runelite.client.plugins.microbot.util.keyboard.Rs2Keyboard;
 import net.runelite.client.plugins.microbot.util.math.Rs2Random;
 import net.runelite.client.plugins.microbot.util.menu.NewMenuEntry;
+import net.runelite.client.plugins.microbot.util.misc.Rs2UiHelper;
 import net.runelite.client.plugins.microbot.util.npc.Rs2NpcManager;
 import net.runelite.client.plugins.microbot.util.player.Rs2Player;
 import net.runelite.client.plugins.microbot.util.widget.Rs2Widget;
 
 import java.awt.*;
+import java.awt.event.KeyEvent;
+import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.TimeUnit;
 
@@ -23,7 +31,7 @@ public class QoLScript extends Script {
 
     /**
      * When anti-PK prayer is on and we are fighting another player, space out eat attempts so they do not
-     * contend with prayer switching on every script tick (300ms). Eating still happens; it is not disabled.
+     * contend with prayer switching on every script tick (100ms). Eating still happens; it is not disabled.
      */
     private static final long ANTI_PK_PLAYER_COMBAT_EAT_ATTEMPT_GAP_MS = 800L;
 
@@ -69,23 +77,31 @@ public class QoLScript extends Script {
                     handleInventorySetup();
                 }
 
-                if (config.useDialogueAutoContinue() && Rs2Dialogue.isInDialogue()) {
-                    handleDialogueContinue();
-                }
+                boolean inDialogue = Rs2Dialogue.isInDialogue();
+                boolean questOptionHandled = inDialogue
+                        && config.useQuestDialogueOptions()
+                        && Rs2Dialogue.hasSelectAnOption()
+                        && handleQuestDialogueOptionSelection();
 
-                if (config.useQuestDialogueOptions() && Rs2Dialogue.isInDialogue()) {
-                    Rs2Dialogue.handleQuestOptionDialogueSelection();
-                }
+                if (!questOptionHandled
+                        && config.dialogueAutoAccept()
+                        && (inDialogue || Rs2Widget.isProductionWidgetOpen())) {
+                    handleDialogueAutoAccept();
+                } else if (!questOptionHandled && inDialogue) {
+                    if (config.useDialogueAutoContinue()) {
+                        handleDialogueContinue();
+                    }
 
-                if (config.autoPayTreeRemoval() && Rs2Dialogue.isInDialogue()) {
-                    handleTreeRemovalPayment();
+                    if (config.autoPayTreeRemoval()) {
+                        handleTreeRemovalPayment();
+                    }
                 }
 
 
             } catch (Exception ex) {
                 log.error("Error in QoLScript execution: {}", ex.getMessage(), ex);
             }
-        }, 0, 300, TimeUnit.MILLISECONDS);
+        }, 0, 100, TimeUnit.MILLISECONDS);
         return true;
     }
 
@@ -172,6 +188,45 @@ public class QoLScript extends Script {
     // handle dialogue continue
     private void handleDialogueContinue() {
         Rs2Dialogue.clickContinue();
+    }
+
+    // Space continues ordinary dialogue and accepts the currently selected dialogue or skill-multi option.
+    private void handleDialogueAutoAccept() {
+        Rs2Keyboard.keyPress(KeyEvent.VK_SPACE);
+    }
+
+    // Quest Helper prefixes and highlights the recommended option.
+    // Invoke the same WIDGET_CONTINUE entry produced by a real click so this does not depend on number hotkeys.
+    private boolean handleQuestDialogueOptionSelection() {
+        List<Widget> options = Rs2Dialogue.getDialogueOptions();
+        QuestHelperConfig questHelperConfig = Microbot.getConfigManager().getConfig(QuestHelperConfig.class);
+        int highlightColor = questHelperConfig.textHighlightColor().getRGB() & 0xFFFFFF;
+
+        for (Widget option : options) {
+            if (option == null || option.getText() == null) {
+                continue;
+            }
+            String text = Rs2UiHelper.stripTagsToSpace(option.getText()).trim();
+            boolean hasQuestHelperPrefix = text.startsWith("[") || text.startsWith("(");
+            boolean hasQuestHelperColor = (option.getTextColor() & 0xFFFFFF) == highlightColor;
+            if (hasQuestHelperPrefix || hasQuestHelperColor) {
+                invokeDialogueOption(option);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void invokeDialogueOption(Widget option) {
+        NewMenuEntry menuEntry = new NewMenuEntry(
+                "Continue",
+                "",
+                0,
+                MenuAction.WIDGET_CONTINUE,
+                option.getIndex(),
+                ComponentID.DIALOG_OPTION_OPTIONS,
+                false);
+        Microbot.doInvoke(menuEntry, option.getBounds());
     }
 
     private void handleWorkbenchActions() {

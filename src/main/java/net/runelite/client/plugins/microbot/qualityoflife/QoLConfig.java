@@ -297,6 +297,18 @@ public interface QoLConfig extends Config {
         return true;
     }
 
+    // boolean to accept the currently selected option on any dialogue widget
+    @ConfigItem(
+            keyName = "dialogueAutoAccept",
+            name = "Dialogue Auto Accept",
+            description = "Presses Space when a dialogue prompt, option list, or production button interface is displayed, accepting the currently selected option",
+            position = 3,
+            section = dialogueSection
+    )
+    default boolean dialogueAutoAccept() {
+        return false;
+    }
+
     // boolean to enable Potion Manager
     @ConfigItem(
             keyName = "enablePotionManager",
